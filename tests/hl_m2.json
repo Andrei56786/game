@@ -1,0 +1,8 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.speed=0; 'x'", "out": false},
+ {"evalFile": "tests/hl2.js"},
+ {"eval": "(() => { const L = []; for (const a of ['harch','horse']) for (const b of UT) if (b !== a) { const r = HL.series(HL.withX(a, 200), HL.withX(b, 200), 10); L.push(a + '-' + b + ' ' + r.wa + ' t' + r.t + ' la' + r.la + ' lb' + r.lb); } return L.join(' | '); })()"},
+ {"eval": "'men  ' + JSON.stringify(HL.matrix('men', 10).S)"},
+ {"eval": "'gold ' + JSON.stringify(HL.matrix('gold', 10).S)"}
+]

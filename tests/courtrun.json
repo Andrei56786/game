@@ -1,0 +1,7 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "UI.win=null; window.__errs=[]; window.addEventListener('error', e=>window.__errs.push(String(e.message))); G.frac=0.93; G.speed=3; 'day '+G.day"},
+ {"wait": 14000},
+ {"print": "['day', G.day, 'h', hourAbs().toFixed(2), 'speed', G.speed, 'paused', UI.paused(), 'dlg', DLG.open(), 'errs', window.__errs.slice(0,3), 'npcs', COURT.npcs.length, 'orders', Object.values(G.court.orders).filter(Boolean).map(o=>(o.self?'s:':'')+o.k)]"},
+ {"shot": "court-run.png"}
+]
