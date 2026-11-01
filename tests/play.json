@@ -1,0 +1,10 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "leaveCourt(); UI.win=null; UI.modals=[]; if (typeof TUT!=='undefined' && TUT.off) TUT.off(); const pa=playerArmy(); const S=WD.setts.filter(s=>s.type==='castle' && G.setts[s.id].ctrl===0).sort((a,b)=>Math.hypot(b.x-pa.x,b.y-pa.y)-Math.hypot(a.x-pa.x,a.y-pa.y))[0]; const p=planPath(pa,S.i); setPath(pa,p); G.speed=3; JSON.stringify({to:S.name, km:Math.round(pathKm(p)), days: Math.round(pathDays(pa,p)*10)/10, day:G.day})"},
+ {"wait": 6000},
+ {"print": "({day: G.day, fps: FPS.v, fms: Math.round(FPS.ms*10)/10, chunks: MAPR.chunks.size, nch: MAPR.nch, cms: Math.round(MAPR.cms), path: PATHST, pos: [Math.round(playerArmy().x), Math.round(playerArmy().y)], modals: UI.modals.length, win: UI.win && UI.win.k, speed: G.speed})", "label": "after6s"},
+ {"shot": "play1.png"},
+ {"wait": 6000},
+ {"print": "({day: G.day, fps: FPS.v, fms: Math.round(FPS.ms*10)/10, chunks: MAPR.chunks.size, nch: MAPR.nch, path: PATHST, modals: UI.modals.length, speed: G.speed})", "label": "after12s"},
+ {"shot": "play2.png"}
+]

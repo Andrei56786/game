@@ -1,0 +1,8 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "UI.win=null; G.frac=0.14; COURT.npcs.forEach(n=>{if(n.petition) n.petition.done=1}); COURT.loc='keep'; sitAt(LOCS.keep.spots.throne); snapCam(); G.speed=1; window.__log=[]; setInterval(()=>{ const ps=COURT.npcs.filter(n=>n.petition&&!n.petition.done); window.__log.push(hourAbs().toFixed(2)+' aud='+(COURT.audience?COURT.audience.q.length:'-')+' dlg='+(+DLG.open())+' '+ps.map(n=>n.loc+':'+(n.path?n.path.length-n.pi:0)).join(',')); }, 3000); 'h='+hourAbs().toFixed(2)"},
+ {"waitFor": "DLG.open() || hourAbs()>12.6", "timeout": 150000},
+ {"print": "window.__log.join('\\n')"},
+ {"print": "[hourAbs().toFixed(2), DLG.cur && DLG.cur.name, DLG.cur && DLG.cur.choices && DLG.cur.choices.map(c=>c.t)]"},
+ {"shot": "aud-auto.png"}
+]

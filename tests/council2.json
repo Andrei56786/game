@@ -1,0 +1,13 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.atCourt=0; G.realms[0].gold=2000; const errs=[]; for(let i=0;i<24;i++){ try{ G.day++; dailyTick(); }catch(e){ errs.push(String(e).slice(0,160)); } } G.atCourt=1; JSON.stringify({errs:errs.slice(0,3), orders:Object.fromEntries(Object.entries(G.court.orders).map(([k,o])=>[k,o?(o.self?'self:':'')+o.k+':'+(o.eff||0).toFixed(2):null])), verdicts:(G.court.verdicts||[]).length, v0:(G.court.verdicts||[])[0], reports:G.court.reports.slice(-3).map(r=>r.text.slice(0,90))})"},
+ {"eval": "UI.win=null; UI.open({k:'council'}); UI.tab=0; 'x'", "out": false},
+ {"wait": 400},
+ {"shot": "council-self.png"},
+ {"eval": "UI.tab=2; 'x'", "out": false},
+ {"wait": 400},
+ {"shot": "council-court.png"},
+ {"eval": "const w=UI.win; w.seat='marshal'; UI.tab=0; 'x'", "out": false},
+ {"wait": 300},
+ {"shot": "council-marshal.png"}
+]

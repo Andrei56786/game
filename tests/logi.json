@@ -1,0 +1,8 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"evalFile": "tests/logi.js"},
+ {"print": "LOGI({days: 12, season: 1, weather: 'clear', grass: false, step: 1})", "label": "A: лето, ясно, сухо, без выпаса"},
+ {"print": "LOGI({days: 12, season: 1, weather: d => d % 3 === 0 ? 'rain' : 'clear', grass: false, step: 2})", "label": "B: лето, дождь раз в 3 дня"},
+ {"print": "LOGI({days: 40, season: 3, weather: 'snow', grass: true, units: {horse: 60, harch: 40, knight: 30, spear: 50}, fodder: 100, food: 3000, step: 5})", "label": "C: зима, конница, мало фуража"},
+ {"print": "LOGI({days: 40, season: 0, weather: 'cloud', grass: false, food: 400, step: 5})", "label": "D: весна, мало еды"}
+]

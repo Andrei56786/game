@@ -1,0 +1,6 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "const t0=performance.now(); const W2=genWorld(4242); const t1=performance.now(); JSON.stringify({gen: Math.round(t1-t0), render: MAPR.ms, setts: WD.setts.length, provs: WD.provs.length, types: WD.setts.reduce((o,s)=>(o[s.type]=(o[s.type]||0)+1,o),{}), lairs: WD.lairs.length, roads: WD.roadList.length})"},
+ {"eval": "const L=[]; for (const P of WD.provs) { let best=1e9; for (const Q of WD.provs) if (Q!==P) best=Math.min(best, Math.hypot(P.x-Q.x,P.y-Q.y)); L.push(best);} L.sort((a,b)=>a-b); 'nearest seat dist: min '+L[0].toFixed(1)+' med '+L[L.length>>1].toFixed(1)+' max '+L[L.length-1].toFixed(1)"},
+ {"eval": "let land=0; for (let i=0;i<NT;i++) if(!TINFO[WD.ter[i]].water) land++; 'land '+land+' of '+NT"}
+]
