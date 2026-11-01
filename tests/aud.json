@@ -1,0 +1,9 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "UI.win=null; G.frac=0.13; COURT.npcs.forEach(n=>{if(n.petition) n.petition.done=1}); COURT.loc='keep'; sitAt(LOCS.keep.spots.throne); snapCam(); G.speed=3; 'h='+hourAbs().toFixed(2)"},
+ {"waitFor": "COURT.npcs.some(n=>n.petition && !n.petition.done)", "timeout": 30000},
+ {"print": "['spawned', hourAbs().toFixed(2), COURT.npcs.filter(n=>n.petition&&!n.petition.done).map(n=>n.loc+':'+(n.path?n.path.length:0))]"},
+ {"waitFor": "DLG.open()", "timeout": 60000},
+ {"print": "['dialog', hourAbs().toFixed(2), DLG.cur && DLG.cur.name, !!COURT.audience, COURT.p.sit===LOCS.keep.spots.throne]"},
+ {"shot": "aud-auto.png"}
+]
