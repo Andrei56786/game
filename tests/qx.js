@@ -1,0 +1,1 @@
+(() => { const L = []; for (const D of [0, 60, 120]) { const r = HL.mixRR(3000, D, 10); L.push('D' + D + ' sizes ' + Object.keys(HL.MIX).map(k => k + ':' + menOf(HL.armyFor(HL.MIX[k], 3000, D))).join(' ') + '\n  ' + JSON.stringify(r.S) + '\n  ' + JSON.stringify(r.P)); } return L.join('\n'); })()
