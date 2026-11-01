@@ -1,0 +1,1 @@
+(() => { const out = []; for (const sd of [4242, 4242 + 7919 * 2, 4242 + 7919 * 4]) out.push(window.TRC(HL.withX('horse', 200), HL.withX('xbow', 200), u => u.side === 0 && u.type === 'horse', 0, 120, 4, sd)); return out.join('\n=====\n'); })()
