@@ -1,0 +1,7 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.speed=0; 'x'", "out": false},
+ {"evalFile": "tests/hl2.js", "out": false},
+ {"evalFile": "tests/trace.js", "out": false},
+ {"evalFile": "tests/q.js"}
+]
