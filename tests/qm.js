@@ -1,0 +1,1 @@
+(() => { const m = HL.matrix('men', 16), g = HL.matrix('gold', 16); return 'men  ' + JSON.stringify(m.S) + '\ngold ' + JSON.stringify(g.S) + '\npairs men ' + JSON.stringify(m.pairs) + '\npairs gold ' + JSON.stringify(g.pairs); })()
