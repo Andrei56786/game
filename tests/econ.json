@@ -1,0 +1,5 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "window.ECON_DAYS=360; 'ok'"},
+ {"evalFile": "tests/econ.js"}
+]

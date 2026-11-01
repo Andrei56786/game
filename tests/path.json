@@ -1,0 +1,5 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "const pa = playerArmy() || G.armies.find(a=>a.alive && a.realm===0 && a.kind!=='caravan') || G.armies.find(a=>a.alive && a.kind==='lord'); const res=[]; const t00=performance.now(); costTable(seasonOf(G.day), false); const tt=performance.now()-t00; const S = WD.setts.filter(s=>s.type!=='village'); S.sort((a,b)=>Math.hypot(b.x-pa.x,b.y-pa.y)-Math.hypot(a.x-pa.x,a.y-pa.y)); for (const s of [S[0],S[3],S[10],S[30],S[60]]) { const t0=performance.now(); const p=planPath(pa, s.i); const ms=performance.now()-t0; res.push({to:s.name, straight: Math.round(Math.hypot(s.x-pa.x,s.y-pa.y)*KM_PER_TILE), km: p?Math.round(pathKm(p)):null, days: p?Math.round(pathDays(pa,p)*10)/10:null, ms: Math.round(ms), nodes: AST.last}); } JSON.stringify({table_ms: Math.round(tt), res})"},
+ {"eval": "const t0=performance.now(); for (let r=0;r<5;r++) borderDist(r); const t1=performance.now(); revealWater.ne=-1; revealWater(); const t2=performance.now(); computeVision(); const t3=performance.now(); JSON.stringify({border5: Math.round(t1-t0), water: Math.round(t2-t1), vision: Math.round(t3-t2)})"}
+]

@@ -1,0 +1,8 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.speed=0; 'x'", "out": false},
+ {"evalFile": "tests/hl2.js"},
+ {"eval": "'men  ' + JSON.stringify(HL.matrix('men', 10).S)"},
+ {"eval": "'gold ' + JSON.stringify(HL.matrix('gold', 10).S)"},
+ {"eval": "'camp ' + JSON.stringify(HL.matrix('camp', 10).S)"}
+]

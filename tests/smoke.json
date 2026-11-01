@@ -1,0 +1,4 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.atCourt=0; const errs=[]; const t0=performance.now(); for(let i=0;i<150;i++){ try{ G.day++; dailyTick(); }catch(e){ errs.push(G.day+': '+String(e.stack||e).slice(0,220)); if(errs.length>4) break; } } G.atCourt=1; JSON.stringify({ms: Math.round(performance.now()-t0), errs, day: G.day, armies: G.armies.filter(a=>a.alive).length, frac: G.armies.filter(a=>a.alive && UT.some(u=>a.u[u]%1)).length, gold: Math.round(G.realms[0].gold), orders: Object.values(G.court.orders).filter(Boolean).map(o=>(o.self?'s:':'')+o.k), verdicts: (G.court.verdicts||[]).length, reports: G.court.reports.length})"}
+]

@@ -1,0 +1,13 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.speed=1; COURT.loc='yard'; COURT.p.x=24*CT+8; COURT.p.y=13*CT+11; COURT.p.sit=null; snapCam(); COURT.path=[[24,12],[24,11],[24,10],[24,9]]; 'start '+COURT.loc"},
+ {"wait": 2500},
+ {"eval": "'after walk: loc='+COURT.loc+' x='+(COURT.p.x/CT).toFixed(1)+' y='+(COURT.p.y/CT).toFixed(1)"},
+ {"shot": "door-keep.png"},
+ {"eval": "const d=LOCS.keep.doors.find(d=>d.to==='yard'); COURT.p.x=(d.x0)*CT+8; COURT.p.y=(d.y0-1)*CT+11; COURT.path=[[d.x0,d.y0],[d.x0,d.y0+1]]; 'keep door to yard: '+JSON.stringify(d)"},
+ {"wait": 2500},
+ {"eval": "'after back: loc='+COURT.loc+' x='+(COURT.p.x/CT).toFixed(1)+' y='+(COURT.p.y/CT).toFixed(1)"},
+ {"wait": 1500},
+ {"eval": "'stable: loc='+COURT.loc+' y='+(COURT.p.y/CT).toFixed(1)"},
+ {"shot": "door-back.png"}
+]

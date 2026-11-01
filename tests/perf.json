@@ -1,0 +1,5 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"evalFile": "tests/hl2.js"},
+ {"eval": "const R0=[]; for (const n of [300, 1000, 2500]) { const u={levy:n*0.3|0, spear:n*0.25|0, sword:n*0.1|0, archer:n*0.15|0, xbow:n*0.08|0, horse:n*0.06|0, harch:n*0.03|0, knight:n*0.03|0}; const t0=performance.now(); const r=HL.fight(u,u); R0.push(n+'v'+n+': '+Math.round(performance.now()-t0)+' ms, t='+(r&&r.t!==undefined?Math.round(r.t):'?')); } R0.join(' | ')"}
+]

@@ -1,0 +1,7 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.speed=0; 'x'", "out": false},
+ {"evalFile": "tests/hl2.js"},
+ {"eval": "(() => { const L = []; for (const a of ['harch','horse','knight']) for (const b of UT) if (b !== a) { const r = HL.series(HL.withX(a, 200), HL.withX(b, 200), 10); L.push(a + '-' + b + ' ' + r.wa + ' t' + r.t + ' la' + r.la + ' lb' + r.lb); } return L.join('\\n'); })()"},
+ {"eval": "(() => { const r = HL.fight(HL.withX('harch',200), HL.withX('spear',200)); return 'harch-spear stat ' + JSON.stringify(r.stat, (k,v) => typeof v === 'number' ? Math.round(v) : v) + ' win ' + r.win; })()"}
+]

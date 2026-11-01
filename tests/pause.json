@@ -1,0 +1,18 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.speed=1; UI.win=null; 'ok'", "out": false},
+ {"print": "[G.day, +G.frac.toFixed(4), G.speed, UI.paused()]", "label": "start"},
+ {"wait": 1500},
+ {"print": "[G.day, +G.frac.toFixed(4)]", "label": "after 1.5s running"},
+ {"eval": "UI.open({k:'council'}); 'opened'", "out": false},
+ {"print": "[UI.win && UI.win.k, UI.paused()]", "label": "council open"},
+ {"wait": 1500},
+ {"print": "[G.day, +G.frac.toFixed(4)]", "label": "after 1.5s council win"},
+ {"shot": "pause-council.png"},
+ {"eval": "UI.shut(); UI.open({k:'tech'}); 'x'", "out": false},
+ {"wait": 1000},
+ {"print": "[G.day, +G.frac.toFixed(4), UI.win && UI.win.k]", "label": "tech win"},
+ {"eval": "UI.shut(); UI.open({k:'diplo', t: firstForeign()}); 'x'", "out": false},
+ {"wait": 1000},
+ {"print": "[G.day, +G.frac.toFixed(4), UI.win && UI.win.k]", "label": "diplo win"}
+]

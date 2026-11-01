@@ -1,0 +1,8 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "G.speed=1; const d=LOCS.keep.doors[0]; COURT.loc='yard'; COURT.p.x=d.ax; COURT.p.y=d.ay; snapCam(); JSON.stringify({ax:d.ax, ay:d.ay, yardDoor: LOCS.yard.doors, solid9: [23,24,25,26].map(x=>solidAt(LOCS.yard,x,9)), solid10:[23,24,25,26].map(x=>solidAt(LOCS.yard,x,10)), ter9:[24,25].map(x=>LOCS.yard.ter[9*LOCS.yard.w+x])})"},
+ {"wait": 300},
+ {"eval": "COURT.p.dir", "out": false},
+ {"shot": "door-yard.png"},
+ {"eval": "window.__hold = 1; 'x'", "out": false}
+]

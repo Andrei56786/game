@@ -1,0 +1,5 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p"},
+ {"eval": "const NEW=['goodwill','reconcile','charters','sell_grain','supply','patrol','sabotage','incite','tourney','alms','herbs','school','laws','inquiry']; const out=[]; G.court.grain=900; for (const s of SEATS) for (const d of ORD[s.k]) { if (!NEW.includes(d.k)) continue; const c = seatChar(s.k) || G.chars.find(c=>c.alive && c.age>20); const o={k:d.k, t: d.tgt==='realm'?1:null, day0:G.day, dur:d.dur}; try { if (d.day) d.day(o,c,1); const r = d.done(o,c,1); out.push(d.k+': '+String(r).slice(0,80)); } catch(e) { out.push(d.k+' ERR '+String(e).slice(0,140)); } } out.join('\\n')"},
+ {"eval": "G.rel[0][1].war=1; const out=[]; for (const k of ['sabotage','incite']) { const d=ordDef('eye',k); try { const r=d.done({t:1},seatChar('eye'),1.2); out.push(k+': '+r); } catch(e){ out.push(k+' ERR '+e); } } out.join('\\n')"}
+]
