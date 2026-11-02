@@ -31,7 +31,7 @@ function courtRender() {
   for (const a of COURT.ani) if (a.loc === L.id && vis(a.x - 18, a.y - 60, 36, 64)) list.push([a.y, 3, a]);
   for (const f of SPR_EXT) f(L, list);
   list.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
-  for (const [, t, e] of list) { if (t === 0) { const f = e.anim ? Math.floor(NOW * e.fps + e.x * 0.11) % e.anim : 0; g.drawImage(objSprite(e.k, e.o, f), e.x, e.y); } else if (t === 3) drawAni(g, e); else if (t === 4) e(g); else drawWalker(g, e); }
+  for (const [, t, e] of list) { if (t === 0) { const f = e.fr ? e.fr(e) : e.anim ? Math.floor(NOW * e.fps + e.x * 0.11) % e.anim : 0; g.drawImage(objSprite(e.k, e.o, f), e.x, e.y); } else if (t === 3) drawAni(g, e); else if (t === 4) e(g); else drawWalker(g, e); }
   for (const f of CRENDER2) f(g, L, cx, cy, vw, vh);
   if (COURT.dest && NOW - COURT.dest[2] < 0.6 && COURT.path) { const a = 1 - (NOW - COURT.dest[2]) / 0.6; g.globalAlpha = a; g.strokeStyle = '#f7d35c'; g.lineWidth = 1; g.strokeRect(COURT.dest[0] * CT + 3.5, COURT.dest[1] * CT + 7.5, 9, 5); g.globalAlpha = 1; }
   g.restore();
@@ -107,13 +107,13 @@ function drawCourtTop() {
   const gr = Math.round(G.court.grain || 0); spr('i_food', x, 7); txt(fmt(gr), x + 8, 6, gr < 300 ? UIC.warn : PAL.w); hit(x, 2, 40, 14, { id: 'tb_grain', tip: ['Амбары столицы: ' + gr + ' мер зерна (со слов сенешаля)', 'Запас на голодный год и для войска.'] }); x += 44;
   // date, clock, weather
   const Wt = weatherOf(), ds = dateStr(G.day), clk = clockStr(), night = isNight();
-  const endX = W - 234; let wn = Wt.n; let totW = tw(ds) + 6 + 8 + tw(clk) + 12 + 9 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = ''; totW -= tw(Wt.n, { f: 's' }); }
+  const endX = W - 250; let wn = Wt.n; let totW = tw(ds) + 6 + 8 + tw(clk) + 12 + 9 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = ''; totW -= tw(Wt.n, { f: 's' }); }
   const cx0 = Math.max(x + 6, endX - totW); txt(ds, cx0, 6, '#fff2c8'); let x3 = cx0 + tw(ds) + 6; spr(night ? 'i_moon' : 'i_sun', x3, 7); txt(clk, x3 + 8, 6, night ? '#a8c8ff' : '#ffe8a0'); x3 += 12 + tw(clk); spr('i_' + Wt.ic, x3, 7); if (wn) txt(wn, x3 + 9, 6, '#c8d8e8', { f: 's' });
   hit(cx0, 2, x3 + 30 - cx0, 14, { id: 'tb_date', tip: () => [ds + ', ' + clk, 'Погода: ' + Wt.n, 'При дворе день длится ' + Math.round(COURT_SPD[Math.max(1, G.speed)] / 60 * 10) / 10 + ' мин. Ночью можно лечь спать в покоях.'].concat(calendarTip()) });
-  let bx = W - 230;
+  let bx = W - 246;
   speedBtns(bx);
   bx += 62; const unread = (G.court.letters || []).filter(l => !l.read && l.arr <= G.day + G.frac).length;
-  const B = [['i_seal', 'Малый совет (K)', () => UI.open({ k: 'council' }), 'council'], ['i_flag', 'Войска и командиры (V)', () => UI.open({ k: 'cmd' }), 'cmd'], ['i_family', 'Семья и знатные дома (F)', () => UI.open({ k: 'dyn' }), 'dyn'], ['i_flask', 'Знания (J)', () => UI.open({ k: 'tech' }), 'tech'], ['i_wood', 'Замыслы и стройки (P)' + (projCur() ? ' — идёт: «' + PROJK[projCur().k].n + '»' : ''), () => UI.open({ k: 'proj' }), 'proj'],
+  const B = [['i_seal', 'Малый совет (K)', () => UI.open({ k: 'council' }), 'council'], ['i_flag', 'Войска и командиры (V)', () => UI.open({ k: 'cmd' }), 'cmd'], ['i_family', 'Семья и знатные дома (F)', () => UI.open({ k: 'dyn' }), 'dyn'], ['i_flask', 'Знания (J)', () => UI.open({ k: 'tech' }), 'tech'], ['i_wood', 'Замыслы и стройки (P)' + (projCur() ? ' — идёт: «' + PROJK[projCur().k].n + '»' : ''), () => UI.open({ k: 'proj' }), 'proj'], ['i_food', 'Снабжение и обоз (O)' + (typeof supStatus === 'function' && supStatus() ? ' — ' + supStatus() : ''), () => UI.open({ k: 'supply' }), 'supply'],
     ['i_raven', 'Письма (L)' + (unread ? ' — непрочитанных: ' + unread : ''), () => UI.open({ k: 'letters' }), 'letters'], G.visit ? ['i_map', 'Уехать отсюда (Tab)', () => visitLeave(), ''] : ['i_map', 'Карта королевства (Tab)', () => openMapFromCourt(), ''], ['i_book', 'Трактат «Искусство войны» (B)', () => UI.open({ k: 'book', ch: TUT.lastCh() }), 'book'], [Snd.muted() ? 'i_mute' : 'i_snd', 'Звук и музыка (M)', () => Snd.toggle(), ''], ['i_scroll', 'Меню (Esc)', () => UI.open({ k: 'menu' }), 'menu']];
   B.forEach(([ic, tip, f, k], i) => { btn('ctb' + i, bx + i * 16, 2, 15, 14, { ic, style: 'dark', tip, onClick: f, active: !!(k && UI.win && UI.win.k === k) }); if (k === 'letters' && unread) { rect(bx + i * 16 + 10, 1, 6, 6, PAL.o); rect(bx + i * 16 + 11, 2, 4, 4, '#e04030'); } });
 }
@@ -149,10 +149,11 @@ function courtKeys() {
     if (DLG.open() && !UI.modalOpen()) { DLG.key(k); continue; }
     if (c === 'Escape') { if (UI.win) UI.shut(); else if (!blocked) UI.open({ k: 'menu' }); continue; }
     if (blocked) continue;
-    const winK = { KeyK: 'council', KeyV: 'cmd', KeyF: 'dyn', KeyJ: 'tech', KeyL: 'letters', KeyR: 'realm', KeyN: 'diplo', KeyP: 'proj' }[c];
+    const winK = { KeyK: 'council', KeyV: 'cmd', KeyF: 'dyn', KeyJ: 'tech', KeyL: 'letters', KeyR: 'realm', KeyN: 'diplo', KeyP: 'proj', KeyO: 'supply' }[c];
     if (winK) { if (UI.win && UI.win.k === winK) UI.shut(); else if (winK === 'diplo') UI.open({ k: 'diplo', t: firstForeign() }); else UI.open({ k: winK }); continue; }
     if (c === 'KeyB') { if (UI.win && UI.win.k === 'book') UI.shut(); else UI.open({ k: 'book', ch: TUT.lastCh() }); continue; }
     if (UI.win) continue;
+    if (CKEY_EXT.some(f => f(c))) continue;
     if (c === 'KeyE' || c === 'Enter' || c === 'NumpadEnter') { const t = nearestTarget(); if (t) interact(t); else if (COURT.p.sit) standUp(); }
     else if (c === 'Space') setSpeed(G.speed > 0 ? 0 : (UI.lastSpeed || 1));
     else if (c === 'Digit1' || c === 'Numpad1') setSpeed(1); else if (c === 'Digit2' || c === 'Numpad2') setSpeed(2); else if (c === 'Digit3' || c === 'Numpad3') setSpeed(3); else if (c === 'Digit0' || c === 'Numpad0') setSpeed(0);
@@ -242,7 +243,7 @@ const STAFF_LINES = {
   merchant: ['Шелка с юга, пряности, книги! Для вас — особая цена.', 'Дороги нынче опасны, государь. Разбойники.'],
   page: ['Бегу, государь! Письма, письма…', 'Я быстрее любого гонца по замку!'],
 };
-function talkStaff(n) { const k = n.staff || 'guard'; let line = gossipLine(n) || R.pick(STAFF_LINES[k] || STAFF_LINES.guard); say(n, line, 4); DLG.say(n, line); }
+function talkStaff(n) { const k = n.staff || 'guard'; let line = n.post === 'dun_guard' ? dunGuardLine() : gossipLine(n) || R.pick(STAFF_LINES[k] || STAFF_LINES.guard); say(n, line, 4); DLG.say(n, line); }
 function bedDialog() { const h = hourAbs();
   const ch = [];
   if (h >= 18.5 || h < 6) ch.push({ t: 'Лечь спать до утра', fx: () => sleepUntil(6.5 + 24 * (h >= 6 ? 1 : 0)) });
