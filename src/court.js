@@ -55,7 +55,7 @@ function npcUpdate(n, dt) {
 }
 // schedule: list of [hour, spot] ; spot 'wander:x0,y0,x1,y1@loc' supported
 function schedTarget(n) { const S = n.sched; if (!S) return null; const h = hourAbs(); let cur = S[0]; for (const e of S) if (e[0] <= h) cur = e; if (n.override && n.override.until > h && n.override.day === G.day) return n.override.spot; return cur[1] === 'stairs' && n.bed && spotOf(n.bed) ? n.bed : cur[1]; }
-function schedTick(n) { if (n.hold) return; const t = schedTarget(n); if (!t || t === n.curT) return; n.curT = t; n.wander = null;
+function schedTick(n) { if (n.hold || n.errand) return; const t = schedTarget(n); if (!t || t === n.curT) return; n.curT = t; n.wander = null;
   if (t.startsWith('wander:')) { const [rc, loc] = t.slice(7).split('@'); const r = rc.split(',').map(Number); const sp = { loc, x: Math.round((r[0] + r[2]) / 2) * CT + 8, y: Math.round((r[1] + r[3]) / 2) * CT + 12, dir: 'down' }; npcGoToSp(n, sp, m => { m.wander = r; m.idleT = 20; }); return; }
   npcGoTo(n, t); }
 function say(n, s, dur) { n.bub = s; n.bubT = NOW + (dur || 3.5); }
@@ -185,6 +185,7 @@ function aniUpdate(dt) {
   }
 }
 function drawAni(g, a) {
+  if (FAUNA[a.kind]) { faDraw(g, a); return; }
   if (a.st === 'dead') { const s = animalSprite(a.kind, 0, a.flip, a.col || null), oy = Math.round(s.height * 0.55) - 3; if (!a.h) { g.fillStyle = 'rgba(90,16,16,0.55)'; g.fillRect(Math.round(a.x - 4), Math.round(a.y - 1), 8, 2); } g.save(); g.translate(Math.round(a.x), Math.round(a.y - (a.h || 0) + oy)); g.scale(1, -1); g.drawImage(s, -Math.round(s.width / 2), 0); g.restore(); return; }
   const fr = (a.moving || a.fly > 0 || a.h > 0) ? (Math.floor(a.f / (a.kind === 'pigeon' ? 3 : 5)) % 2) : (a.peck ? 1 : 0);
   const s = animalSprite(a.kind, fr, a.flip, a.col || null), x = Math.round(a.x - s.width / 2), y = Math.round(a.y - s.height - (a.h || 0));

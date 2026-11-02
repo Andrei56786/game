@@ -38,7 +38,7 @@ function kBuild(sid) { const s = WD.setts[sid], S = G.setts[sid], rl = S.ctrl, c
   const st = r.pick(sty), wl = st[0] === 'stone' ? 'timber' : st[0];
   place(L, 'bld', { w: 7, fh: 42, rh: 38, wall: wl, roof: st[1], kind: 'stable', stalls: 3, seed: 4 + sid % 9, ck: 'kb' + sid + '_st' }, 2, 19, { dx: -2, solid: [2, 17, 8, 19] });
   place(L, 'hay', {}, 9, 19, { solid: [9, 19, 9, 19], dx: 2 }); place(L, 'hay', {}, 10, 18, { solid: [10, 18, 10, 18] });
-  place(L, 'fence', { n: 5, ck: 5 }, 2, 21, { solid: [2, 21, 6, 21] }); place(L, 'fence', { n: 2, ck: 2 }, 8, 21, { solid: [8, 21, 9, 21] });
+  place(L, 'fence', { n: 5, ck: 5 }, 2, 21, { solid: [2, 21, 6, 21] }); place(L, 'fence', { n: 2, ck: 2 }, 8, 21, { solid: [8, 21, 9, 21] }); place(L, 'gate', { ck: 'g1' }, 7, 21, { dy: 2, fr: gateFr });
   place(L, 'fence', { n: 8, ck: 8 }, 2, 26, { solid: [2, 26, 9, 26] }); place(L, 'fence', { n: 5, v: 1, ck: 'v5' }, 10, 26, { dx: 5, solid: [10, 21, 10, 26] });
   place(L, 'trough', {}, 3, 22, { solid: [3, 22, 4, 22] }); M.paddock = [3, 23, 9, 25];
   act(L, 'k_stable', 5, 20, 'Конюшня', { r: 30 }); spot(L, 'k_stable', 6, 20, 'up');

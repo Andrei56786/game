@@ -81,7 +81,7 @@ function addLetter(o) { const C = G.court; o.id = C.nextL = (C.nextL || 0) + 1; 
 function letterFromSeat(k, subj, text, o) { const c = seatChar(k); const ws = WD.setts[G.realms[0].capital]; return addLetter(Object.assign({ from: seatName(k) + (c ? ' ' + c.name : ''), fc: c ? c.id : -1, subj, text, x: ws.x, y: ws.y, pigeon: 1 }, o || {})); }
 function lettersDaily() { const C = G.court; for (const l of C.letters) if (!l.read && l.arr <= G.day && !l.noted) { l.noted = 1; if (!G.atCourt) { log('Гонец: «' + l.subj + '» — ' + l.from, 'info'); Snd.sfx('raven'); } } }
 function openLetter(l) { if (l.dyn === 'welcome' && typeof welcomeText === 'function') l.text = welcomeText(); l.read = 1; Snd.sfx('paper'); DLG.say(null, [l.text], { name: '✉ ' + l.subj + ' — ' + l.from, choices: l.ch && !l.answered ? l.ch.map(ch => Object.assign({}, ch, { fx: () => { l.answered = 1; ch.fx(); } })) : null }); }
-function pageUpdate(dt) { const C = G.court; const pg = npcByKey('srv_page'); if (!pg) return; const P = COURT.p;
+function pageUpdate(dt) { const C = G.court; const pg = npcByKey('srv_page'); if (!pg || pg.errand) return; const P = COURT.p;
   if (!pg.msgr) { const l = C.letters.find(l => !l.read && !l.paged && l.arr <= G.day + G.frac); if (l && !pg.away) { l.paged = 1; pg.msgr = l; pg.hold = 1; pg.msgT = NOW; pg.path = null; say(pg, 'Государь! Письмо!', 3); } return; }
   if (NOW - pg.msgT > 60 || pg.msgr.read) { pg.msgr = null; pg.hold = 0; pg.curT = null; return; }
   if (pg.loc !== COURT.loc || pg.away) { pg.msgr = null; pg.hold = 0; pg.curT = null; return; }

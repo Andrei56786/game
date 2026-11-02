@@ -112,6 +112,12 @@ const Snd = (() => {
     else if (k === 'tak') { nz(t, 0.06, 'bandpass', 3200, 1.1, vel * 0.6, dest); tone('triangle', 430, 380, t, 0.05, vel * 0.25, dest); }
     else if (k === 'jingle') { for (let i = 0; i < 3; i++) nz(t + i * 0.024, 0.07, 'highpass', 6800, 0.7, vel * (1 - i * 0.25), dest); }
   }
+  function voice(m, t, dur, vel, dest) { // a monk's voice: two detuned saws through 'ah' formants, a slow swell and vibrato
+    const f = mtof(m), g = G_(0, dest), f1 = filt('bandpass', 650, 3.2, g), f2 = filt('bandpass', 1080, 4.5, g), A = Math.min(0.22, dur * 0.35), s1 = Math.max(t + A + 0.02, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + A); g.gain.setValueAtTime(vel, s1); g.gain.linearRampToValueAtTime(0, s1 + 0.3);
+    const lfo = ac.createOscillator(); lfo.frequency.value = 4.8 + rnd() * 0.6; const lg = G_(0); lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f * 0.005, t + 0.4); lfo.connect(lg);
+    const os = [-7, 6].map(dt => { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = dt; lg.connect(o.frequency); o.connect(f1); o.connect(f2); return o; });
+    const e = s1 + 0.35; os.concat([lfo]).forEach(o => { o.start(t); o.stop(e); }); }
   function bellV(f, t, vel, dur, dest) {
     [[0.5, 0.3, 1.3], [1, 1, 1], [1.19, 0.45, 0.7], [1.5, 0.35, 0.6], [2, 0.4, 0.5], [2.52, 0.22, 0.4], [2.66, 0.2, 0.35], [3.01, 0.15, 0.3], [4.1, 0.08, 0.2]]
       .forEach(([r, a, d]) => tone('sine', f * r, 0, t, dur * d, vel * a, dest, 0.002));
@@ -130,6 +136,12 @@ const Snd = (() => {
     peace: { g: 1.65, root: 55, sc: 'mix', st: 0.28, meter: 6, prog: [[0, 6, 3, 0], [0, 3, 6, 0], [0, 4, 6, 0], [3, 0, 6, 0]], lute: 'arp', mel: 'flute', mb: 67, lo: 0, hi: 9, drum: 'dance', dr: 43, dv: 0.018, lv: 0.28, mv: 0.09, rest: 0.06, pause: [2, 5] },
     tension: { g: 1.75, root: 45, sc: 'aeo', st: 0.42, meter: 8, prog: [[0, 5, 6, 0], [0, 3, 4, 0], [0, 5, 3, 4], [0, 6, 5, 4]], lute: 'sparse', mel: 'shawm', mb: 57, lo: 0, hi: 7, drum: 'heart', dr: 45, dv: 0.036, lv: 0.32, mv: 0.06, rest: 0.3, pause: [2, 3] },
     feast: { g: 1.5, root: 57, sc: 'mix', st: 0.2, meter: 6, prog: [[0, 4, 0, 4], [0, 3, 4, 0], [3, 4, 0, 0], [0, 6, 4, 0]], lute: 'arp', mel: 'shawm', mb: 69, lo: 0, hi: 9, drum: 'dance', dr: 46, dv: 0.028, lv: 0.3, mv: 0.065, rest: 0.04, pause: [1, 2] },
+    // v3.4: more music — a stately pavane indoors, a night piece, a village estampie with pipes, plainchant in the chapel, a fife-and-tabor march
+    pavane: { g: 2.1, root: 50, sc: 'dor', st: 0.36, meter: 8, prog: [[0, 3, 4, 0], [0, 6, 3, 4], [5, 3, 4, 0], [0, 4, 5, 0]], lute: 'pav', mel: 'flute', mb: 62, lo: 0, hi: 8, drum: 'tabor', dr: 38, dv: 0.02, lv: 0.3, mv: 0.085, rest: 0.1, pause: [1, 3] },
+    nocturne: { g: 2.4, root: 45, sc: 'aeo', st: 0.42, meter: 6, prog: [[0, 5, 3, 4], [0, 3, 6, 0], [0, 5, 6, 0], [5, 3, 4, 0]], lute: 'harp', mel: 'flute', mb: 64, lo: 0, hi: 7, drum: 'none', dr: 33, dv: 0.016, lv: 0.26, mv: 0.06, rest: 0.3, pause: [2, 4] },
+    estampie: { g: 1.65, root: 52, sc: 'mix', st: 0.17, meter: 6, prog: [[0, 6, 0, 4], [0, 3, 0, 4], [0, 6, 3, 4], [3, 0, 4, 0]], lute: 'arp', mel: 'shawm', mb: 64, lo: 0, hi: 8, drum: 'jig', dr: 40, dv: 0.03, lv: 0.24, mv: 0.055, rest: 0.03, pause: [1, 2] },
+    chant: { g: 2.4, root: 50, sc: 'dor', st: 0.55, meter: 8, prog: [[0, 3, 0, 4], [0, 6, 3, 0], [0, 4, 3, 0], [0, 3, 6, 0]], lute: 'none', mel: 'chant', mb: 57, lo: -1, hi: 6, drum: 'none', dr: 38, dv: 0.03, lv: 0, mv: 0.15, rest: 0.08, pause: [2, 3] },
+    march: { g: 2.0, root: 48, sc: 'mix', st: 0.25, meter: 8, prog: [[0, 4, 0, 4], [0, 3, 4, 0], [0, 6, 4, 0], [3, 4, 0, 0]], lute: 'ost', mel: 'fife', mb: 72, lo: 0, hi: 8, drum: 'march', dr: 36, dv: 0.02, lv: 0.18, mv: 0.07, rest: 0.05, pause: [1, 2] },
     battle: { g: 0.85, root: 40, sc: 'phr', st: 0.24, meter: 8, prog: [[0, 1, 0, 6], [0, 5, 6, 0], [0, 1, 6, 0], [5, 6, 0, 0]], lute: 'ost', mel: 'horn', mb: 52, lo: 0, hi: 7, drum: 'war', dr: 40, dv: 0.026, lv: 0.24, mv: 0.075, rest: 0.08 },
   };
   const STEPW = [[0, 6], [1, 30], [-1, 30], [2, 11], [-2, 11], [3, 4], [-3, 4], [4, 2], [-4, 2]];
@@ -168,6 +180,8 @@ const Snd = (() => {
       F.push({ p: T1.p, ly: L(1, 0, 0, 1) }, { p: T1.p, m: T1.m, ly: L(1, 1, 0, 1) }, { p: T2.p, m: T2.m, ly: L(1, 1, 1, 1) }, { p: pb, m: B, ly: L(1, 1, 1, 0) }, { p: pa, m: A, ly: L(1, 1, 1, 1) }, { p: T1.p, m: T1.m, ly: L(1, 1, 1, 1) }, { p: T2.p, m: T2.m, ly: L(1, 1, 0, 1) });
     } else if (mood === 'battle') {
       F.push({ p: pa, ly: L(1, 0, 1, 1) }, { p: pa, m: A, ly: L(1, 1, 1, 1) }, { p: pb, m: B, ly: L(1, 1, 1, 1) }, { p: pa, m: A2, ly: L(1, 1, 1, 1) }, { p: pb, ly: L(1, 0, 1, 1) });
+    } else if (mood === 'chant') {
+      F.push({ p: pa, ly: L(0, 0, 0, 1) }, { p: pa, m: A, ly: L(0, 1, 0, 1) }, { p: pb, m: B, ly: L(0, 1, 0, 1) }, { p: pa, m: A2, ly: L(0, 1, 0, 1) }, { rest: M.pause[0] + Math.floor(rnd() * (M.pause[1] - M.pause[0] + 1)), ly: L(0, 0, 0, 1), p: [0, 0, 0, 0] });
     } else if (mood === 'tension') {
       F.push({ p: pa, ly: L(0, 0, 1, 1) }, { p: pa, m: A, ly: L(1, 1, 1, 1) }, { p: pb, m: B, ly: L(1, 1, 0, 1) }, { p: pa, m: A2, ly: L(1, 1, 1, 1) }, { rest: M.pause[0] + Math.floor(rnd() * (M.pause[1] - M.pause[0] + 1)), ly: L(0, 0, 0, 1), p: [0, 0, 0, 0] });
     } else {
@@ -176,6 +190,10 @@ const Snd = (() => {
     return { F, si: 0, bi: 0, k: 0.96 + rnd() * 0.08 };
   }
   const LUTE = {
+    none() { },
+    harp(S, c, t, st, v, bus) { const M = S.M, b = c > 3 ? c - 7 : c; [0, 2, 4, 7, 9, 11].forEach((x, i) => lute(d2m(M.root, M.sc, b + x), t + i * st + (rnd() - 0.5) * 0.01, v * (0.9 - i * 0.08), bus)); },
+    pav(S, c, t, st, v, bus) { const M = S.M, b = c > 3 ? c - 7 : c; strum([0, 4, 7, 9].map(x => d2m(M.root, M.sc, b + x)), t, v * 0.7, bus, 0.03);
+      lute(d2m(M.root, M.sc, b - 7), t + 2 * st, v * 0.5, bus); lute(d2m(M.root, M.sc, b + 4), t + 4 * st, v * 0.45, bus); lute(d2m(M.root, M.sc, b + 2), t + 6 * st, v * 0.4, bus); },
     arp(S, c, t, st, v, bus) { const M = S.M, b = c > 3 ? c - 7 : c, h = () => (rnd() - 0.5) * 0.012;
       if (rnd() < 0.22) { strum([0, 4, 7, 9].map(x => d2m(M.root, M.sc, b + x)), t, v * 0.75, bus); [[3, 7, 0.5], [4, 9, 0.45], [5, 4, 0.4]].forEach(([s, x, vv]) => lute(d2m(M.root, M.sc, b + x), t + s * st + h(), v * vv, bus)); }
       else [0, 4, 7, 9, 7, 4].forEach((x, i) => lute(d2m(M.root, M.sc, b + x), t + i * st + h(), v * [0.95, 0.5, 0.62, 0.55, 0.5, 0.45][i] * (0.9 + rnd() * 0.2), bus)); },
@@ -186,9 +204,15 @@ const Snd = (() => {
   const MEL = {
     flute(m, t, d, v, bus, n) { if (n.l >= 2 && rnd() < 0.13) flute(m + (SC.dor.includes((m + 1) % 12) ? 2 : 1), t - 0.055, 0.05, v * 0.7, bus); flute(m, t, d, v, bus); },
     shawm(m, t, d, v, bus) { shawm(m, t, d, v, bus); },
+    fife(m, t, d, v, bus) { flute(m, t, d * 0.82, v, bus); },
+    chant(m, t, d, v, bus) { voice(m, t, d, v, bus); voice(m - 7, t + 0.02, d, v * 0.5, bus); }, // organum: the line doubled a fifth below
     horn(m, t, d, v, bus) { horn(m, t, d, v, bus); horn(m - 7, t + 0.01, d, v * 0.6, bus, 0.8); },
   };
   const DRUM = {
+    none() { },
+    tabor(t, st, bi, bus) { drum('low', t, 0.28, bus); drum('tak', t + 2 * st, 0.09, bus); drum('tak', t + 4 * st, 0.13, bus); drum('tak', t + 6 * st, 0.09, bus); },
+    jig(t, st, bi, bus) { drum('low', t, 0.34, bus); drum('tak', t + st, 0.07, bus); drum('tak', t + 2 * st, 0.1, bus); drum('low', t + 3 * st, 0.24, bus); drum('tak', t + 5 * st, 0.12, bus); if (bi % 2) drum('jingle', t, 0.08, bus); },
+    march(t, st, bi, bus) { drum('low', t, 0.4, bus); drum('tak', t + 2 * st, 0.2, bus); drum('low', t + 4 * st, 0.32, bus); drum('tak', t + 6 * st, 0.16, bus); drum('tak', t + 7 * st, 0.12, bus); if (bi === 3) for (let i = 0; i < 4; i++) drum('tak', t + (6 + i * 0.5) * st, 0.1 + i * 0.03, bus); },
     soft(t, st, bi, bus) { drum('low', t, 0.32, bus); drum('low', t + 3 * st, 0.16, bus); },
     dance(t, st, bi, bus) { drum('low', t, 0.36, bus); drum('tak', t + 2 * st, 0.12, bus); drum('low', t + 3 * st, 0.22, bus); drum('tak', t + 5 * st, 0.14, bus); if (bi % 2) drum('jingle', t + 3 * st, 0.1, bus); },
     heart(t, st, bi, bus) { drum('low', t, 0.36, bus); drum('low', t + 0.24, 0.22, bus); if (bi === 3) drum('big', t + 6 * st, 0.22, bus); },
@@ -204,7 +228,7 @@ const Snd = (() => {
       if (ly.mel && sec.m) for (const n of sec.m[pc.bi]) if (!n.r) MEL[M.mel](d2m(M.mb, M.sc, n.d), t + n.s * st + (rnd() - 0.5) * 0.01, n.l * st * 0.94, M.mv * n.acc * (0.92 + rnd() * 0.16), S.b.me, n);
       if (ly.drum) DRUM[M.drum](t, st, pc.bi, S.b.dm);
     }
-    pc.bi++; if (pc.bi >= (sec.rest || 4)) { pc.bi = 0; pc.si++; if (pc.si >= pc.F.length) S.pc = compose(S.mood); }
+    pc.bi++; if (pc.bi >= (sec.rest || 4)) { pc.bi = 0; pc.si++; if (pc.si >= pc.F.length) nextPiece(S, t + barD); }
     return barD;
   }
   function startSeq(mood, t) {
@@ -213,11 +237,19 @@ const Snd = (() => {
     return { mood, M: MOODS[mood], pc: compose(mood), t: t + 0.1, pg, b: { lu: body, me: pan(pg, 0.2), dm: pan(pg, 0.05), dr: pg } };
   }
   function fadeOut(S) { const t = ac.currentTime, g = S.pg.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + 1.6); setTimeout(() => { try { S.pg.disconnect(); } catch (_) { } }, 2600); }
+  // playlists: the place and hour pick a family of pieces; a family plays its pieces in turn, so the music changes from piece to piece
+  const FAM = { war: ['tension', 'march'], night: ['nocturne'], chapel: ['chant'], indoor: ['pavane', 'peace'], outdoor: ['peace', 'estampie'], village: ['estampie', 'peace'], map: ['peace', 'march', 'estampie'], feast: ['feast', 'estampie'] };
+  const famList = f => FAM[f] || [f];
+  function nextPiece(S, t) { const L0 = famList(S.fam || S.mood); let nm = S.mood; if (L0.length > 1) { const i = L0.indexOf(S.mood); nm = i < 0 ? L0[0] : L0[(i + 1 + Math.floor(rnd() * (L0.length - 1))) % L0.length]; }
+    if (nm !== S.mood && MOODS[nm]) { S.mood = nm; S.M = MOODS[nm]; const g = S.pg.gain; g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(S.M.g || 1, t + 1); } S.pc = compose(S.mood); }
   let cur = null, want = 'title';
   function resolve() {
     if (want !== 'auto') return want;
-    try { if (typeof G !== 'undefined' && G && G.player && warsOf(G.player.realm).length) return 'tension'; } catch (_) { }
-    return 'peace';
+    try { if (typeof G !== 'undefined' && G && G.player && warsOf(G.player.realm).length) return 'war'; } catch (_) { }
+    try { const h = hourAbs(), night = h >= 21.5 || h < 4.5;
+      if (SCREEN === 'court' && COURT.loc) { const id = COURT.loc, L = LOCS[id]; if (/chap/.test(id)) return 'chapel'; if (night) return 'night'; if (L && !L.out) return 'indoor'; return G.visit && (G.visit.kind === 'village' || G.visit.kind === 'town') ? 'village' : 'outdoor'; }
+      return night ? 'night' : 'map'; } catch (_) { }
+    return 'outdoor';
   }
 
   // ---------- ambience (weather) & battle roar ----------
@@ -287,8 +319,10 @@ const Snd = (() => {
   const lastPlay = {};
   function tick() {
     if (!ac || ac.state !== 'running') return;
-    const now = ac.currentTime, m = P.mus && P.on ? resolve() : null;
-    if ((cur ? cur.mood : null) !== m) { if (cur) fadeOut(cur); cur = m ? startSeq(m, now + (cur ? 0.6 : 0.05)) : null; }
+    const now = ac.currentTime, fam = P.mus && P.on ? resolve() : null;
+    if (!fam) { if (cur) { fadeOut(cur); cur = null; } }
+    else if (!cur || (cur.fam !== fam && !famList(fam).includes(cur.mood))) { if (cur) fadeOut(cur); const L0 = famList(fam).filter(k => MOODS[k]); cur = startSeq(L0[Math.floor(rnd() * L0.length)] || 'peace', now + (cur ? 0.6 : 0.05)); cur.fam = fam; }
+    else cur.fam = fam;
     const ahead = document.hidden ? 1.6 : 0.45;
     if (cur) { if (cur.t < now - 1) cur.t = now + 0.05; let g = 0; while (cur.t < now + ahead && g++ < 8) cur.t += schedBar(cur, cur.t); }
     ambTick(now);
@@ -309,7 +343,7 @@ const Snd = (() => {
       roar.g.gain.setTargetAtTime(Math.min(0.1, 0.018 + n * 0.011), now, 0.3);
     },
     music(m) { want = m; if (ac) tick(); },
-    mood: () => cur ? cur.mood : null,
+    mood: () => cur ? cur.mood : null, family: () => cur ? cur.fam : null,
     muted: () => !P.on, toggle() { P.on = P.on ? 0 : 1; save(); unlock(); if (ac) setBus(master, P.on ? 1 : 0); },
     musOn: () => !!P.mus, toggleMusic() { P.mus = P.mus ? 0 : 1; save(); if (ac) setBus(musBus, P.mus ? P.mv : 0); },
     sfxOn: () => !!P.sfx, toggleSfx() { P.sfx = P.sfx ? 0 : 1; save(); if (ac) setBus(sfxBus, P.sfx ? P.sv : 0); },

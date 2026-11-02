@@ -15,6 +15,13 @@ function costTable(season, cav) {
 }
 function settAtTile(t) { let m = WD._sAt; if (!m) { m = WD._sAt = new Int16Array(NT).fill(-1); for (const s of WD.setts) m[s.y * MW + s.x] = s.id; } return t >= 0 && t < NT ? m[t] : -1; }
 function settNear(x, y, r) { let best = -1, bd = r * r; for (const s of WD.setts) { const d = (s.x + 0.5 - x) ** 2 + (s.y + 0.5 - y) ** 2; if (d <= bd) { bd = d; best = s.id; } } return best; }
+// v3.4: the share of a day's water an army finds on the spot (brooks, springs, farm wells) — big hosts drain small streams, summer dries them
+function springCover(a, t) { const k = { [TR.GRASS]: 0.6, [TR.FARM]: 0.8, [TR.FOREST]: 0.8, [TR.DFOREST]: 0.9, [TR.HILLS]: 0.6, [TR.MOUNT]: 0.5, [TR.PEAK]: 0.3, [TR.MARSH]: 1, [TR.STEPPE]: 0.15, [TR.SNOW]: 1, [TR.BEACH]: 0.2 }[WD.ter[t]] || 0;
+  const men = armyMen(a) + (a.wounded || 0) + (a.sick || 0), big = clamp(700 / Math.max(1, men), 0.35, 1); return k * big * [1, 0.75, 0.9, 1][seasonOf(G.day)] + (WD.road[t] ? 0.15 : 0); }
+// expected change of the water stock today: { full: barrels filled to the brim, d: days of water gained (+) or lost (−), s: why }
+function waterDay(a, t, Wt) { if (t === undefined) t = armyTile(a); Wt = Wt || weatherOf(); if (nearWater(t)) return { full: 1, d: 0, s: 'река, озеро или колодцы поселения рядом — бочки полны' };
+  if (Wt.wet || Wt.cold) return { d: (Wt.wet ? 1 : 0) + (Wt.sick ? 1 : 0), s: Wt.wet ? 'дождь: воду ловят в плащи и бочки' : 'топят снег' };
+  const need = Wt.heat ? 1.5 : 1, cov = Math.min(need, springCover(a, t)); return { d: -(need - cov), s: cov >= need - 0.01 ? 'ручьи и родники дают всю воду' : cov > 0.05 ? 'ручьи и родники дают ' + Math.round(cov / need * 100) + '% нужды' + (Wt.heat ? ' (жара)' : '') : 'вокруг сухо' + (Wt.heat ? ', жара' : '') }; }
 function nearWater(t) { if (WD.fwd[t] <= 2) return true; const x = t % MW, y = (t / MW) | 0; return settNear(x + 0.5, y + 0.5, 2.2) >= 0; }
 function isCav(a) { const m = armyMen(a); return m > 0 && mountedN(a.u) >= m * 0.9 && a.wagons === 0; }
 function armySpeed(a) {
@@ -129,10 +136,10 @@ function dailyArmy(a) {
   const sid = settNear(a.x, a.y, 1.2); const inOwn = sid >= 0 && G.setts[sid].ctrl === a.realm;
   const isP = a.kind === 'player', moved = (a.moved || 0) > 0.3; a.moved = 0;
   const gr = (isP || a.kind === 'lord') ? groundOf(a) : 'open'; a.ground = gr;
-  // water
-  if (nearWater(t) || a.kind === 'caravan') { a.water = waterCap(a); a.thirst = 0; } // merchants know every well on their roads
-  else if (Wt.wet || Wt.cold) { a.water = Math.min(waterCap(a), a.water + (Wt.wet ? 1 : 0) + (Wt.sick ? 1 : 0)); a.thirst = 0; } // rain is caught in cloaks and barrels, snow is melted
-  else { a.water -= Wt.heat ? 1.5 : 1; if (a.water < 0) { a.water = 0; a.thirst++; } else a.thirst = 0; }
+  // water: rivers, lakes and settlements fill the barrels; brooks, springs and farm wells cover part of the day's need elsewhere
+  const wd = waterDay(a, t, Wt);
+  if (wd.full || a.kind === 'caravan') { a.water = waterCap(a); a.thirst = 0; } // merchants know every well on their roads
+  else { a.water = Math.min(waterCap(a), a.water + wd.d); if (a.water < 0) { a.water = 0; a.thirst++; } else a.thirst = 0; }
   // AI resupply in own settlements
   if (a.kind === 'caravan') { if (sid >= 0) caravanSupply(a, G.setts[sid]); }
   else if (!isP && inOwn && a.kind !== 'bandit') aiResupply(a, G.setts[sid]);

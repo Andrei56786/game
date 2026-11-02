@@ -9,6 +9,7 @@ const TIMEK_EXT = [];                // court-clock slow-downs for spectacles: (
 const TARGET_EXT = [];               // extra E-targets: P => { e: 1, d, label, sub, x, y, go } | null (smaller d wins)
 const PICK_EXT = [];                 // extra click targets under the cursor: (wx, wy) => target | null (checked first)
 const DOOR_EXT = [];                 // door interceptors: d => true stops the king at the door
+const CKEY_EXT = [];                // extra court keys: code => true when handled (after the windows, before E / Space)
 const HUD_EXT = [];                  // extra HUD painters (screen space)
 const POP_EXT = [];                  // after the court at home has been populated
 const ENTER_EXT = [];                // when the king (re)enters the court at home

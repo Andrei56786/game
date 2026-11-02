@@ -8,7 +8,7 @@ function sfill(L, x0, y0, x1, y1, v) { for (let y = y0; y <= y1; y++) for (let x
 function place(L, k, o, tx, ty, op) {
   op = op || {}; const s = objSprite(k, o, 0), w = s.width, h = s.height;
   const x = op.cx !== undefined ? Math.round(op.cx - w / 2) : tx * CT + (op.dx || 0), y = (ty + 1) * CT + (op.dy || 0) - h;
-  const ob = { k, o, x, y, w, h, sy: (ty + 1) * CT + (op.dy || 0) + (op.so || 0), anim: op.anim || 0, fps: op.fps || 6, bake: !!op.bake, id: op.id, show: op.show, shadow: op.shadow };
+  const ob = { k, o, x, y, w, h, sy: (ty + 1) * CT + (op.dy || 0) + (op.so || 0), fr: op.fr, anim: op.anim || 0, fps: op.fps || 6, bake: !!op.bake, id: op.id, show: op.show, shadow: op.shadow };
   if (op.solid) sfill(L, op.solid[0], op.solid[1], op.solid[2], op.solid[3]);
   if (op.light) L.lights.push(Object.assign({ x: x + w / 2, y: y + h / 2 }, op.light));
   if (s.pb && s.pb.meta) { for (const p of s.pb.meta.lights || []) if (op.winLight !== false) L.wins.push({ x: x + p[0], y: y + p[1] }); for (const p of s.pb.meta.smoke || []) L.smoke.push({ x: x + p[0], y: y + p[1], k: op.smokeK || 1 }); }
@@ -71,7 +71,7 @@ function buildKeep() {
   act(L, 'research', 9, 10, 'Книги и исследования', { r: 24 }); spot(L, 'lib_shelf', 8, 4, 'up'); spot(L, 'lib_globe', 3, 10, 'left'); spot(L, 'lib_read', 9, 10, 'up');
   // --- royal chambers ---
   place(L, 'bed', { ramp: 'blue' }, 2, 19, { dy: 2, solid: [2, 17, 3, 19], id: 'bed' }); place(L, 'wardrobe', {}, 7, 16, { dy: 2, solid: [7, 16, 8, 16] });
-  place(L, 'fireplace', {}, 9, 15, { wall: 1, dy: 4, anim: 4, fps: 8, light: { r: 60, col: '#ff9a40', a: 0.85, fl: 0.15, dy: 10 } }); place(L, 'window', {}, 5, 15, { wall: 1, dy: -2 }); L.beams.push([5 * CT + 8, 16 * CT]);
+  place(L, 'fireplace', {}, 9, 15, { wall: 1, dy: 4, anim: 4, fps: 8, light: { r: 60, col: '#ff9a40', a: 0.85, fl: 0.15, dy: 10 } }); place(L, 'wallpic', { kind: 'hunt', ck: 'wp_hunt' }, 5, 15, { wall: 1, dy: -8, dx: -4 }); // behind this wall is the library, so a painting rather than a window
   place(L, 'chest', {}, 2, 21, { solid: [2, 21, 2, 21], dx: 7 }); place(L, 'crib', {}, 10, 20, { solid: [10, 20, 10, 20], dx: -2, id: 'crib', show: () => COURT.hasBaby }); place(L, 'toys', {}, 7, 26, { id: 'toys', show: () => COURT.hasKids });
   place(L, 'candelabra', {}, 1, 25, { anim: 2, fps: 4, solid: [1, 25, 1, 25], light: { r: 36, col: '#ffc060', a: 0.65, fl: 0.1, dy: -8 } }); place(L, 'plant', {}, 11, 26, { solid: [11, 26, 11, 26] });
   act(L, 'bed', 4, 18, 'Лечь спать', { r: 30 }); act(L, 'crib', 10, 21, 'Колыбель', { r: 22, show: () => COURT.hasBaby });
@@ -119,7 +119,9 @@ function buildYard() {
   // stable & paddock
   place(L, 'bld', { w: 7, fh: 42, rh: 38, wall: 'plank', roof: 'shake', kind: 'stable', stalls: 3, seed: 4, ck: 'stable' }, 2, 19, { dx: -2, solid: [2, 17, 8, 19] });
   place(L, 'hay', {}, 9, 19, { solid: [9, 19, 9, 19], dx: 2 }); place(L, 'hay', {}, 10, 18, { solid: [10, 18, 10, 18] });
-  place(L, 'fence', { n: 5, ck: 5 }, 2, 21, { solid: [2, 21, 6, 21] }); place(L, 'fence', { n: 2, ck: 2 }, 8, 21, { solid: [8, 21, 9, 21] }); // a gap for the groom place(L, 'fence', { n: 5, v: 1, ck: 'v5' }, 10, 26, { dx: 5, solid: [10, 21, 10, 26] }); place(L, 'fence', { n: 8, ck: 8 }, 2, 26, { solid: [2, 26, 9, 26] });
+  place(L, 'fence', { n: 5, ck: 5 }, 2, 21, { solid: [2, 21, 6, 21] }); place(L, 'fence', { n: 2, ck: 2 }, 8, 21, { solid: [8, 21, 9, 21] });
+  place(L, 'gate', { ck: 'g1' }, 7, 21, { dy: 2, fr: gateFr }); // the groom's gate
+  place(L, 'fence', { n: 5, v: 1, ck: 'v5' }, 10, 26, { dx: 5, solid: [10, 21, 10, 26] }); place(L, 'fence', { n: 8, ck: 8 }, 2, 26, { solid: [2, 26, 9, 26] });
   place(L, 'trough', {}, 3, 22, { solid: [3, 22, 4, 22] }); L.paddock = [2, 23, 9, 25];
   act(L, 'stable', 5, 20, 'Конюшня', { r: 30 }); spot(L, 'stable', 6, 20, 'up');
   // dovecote & herb garden

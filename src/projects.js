@@ -2,7 +2,7 @@
 // G.court.proj = { done: { k: { day, king } }, cur: { k, prog, need }, tips: day }
 const PROJ = [
   { k: 'stands', n: 'Трибуны у ристалища', cost: 220, days: 18, loc: 'yard', out: 1, sol: [['yard', 55, 14, 66, 15]], scf: [55, 15, 12, 50], lot: [54, 16],
-    d: 'Деревянные трибуны с навесом вдоль турнирного поля. Без них знать не съедется на турнир.', fx: 'Можно устраивать турниры на ристалище.', crew: [['villager', 0, 40, 'Плотник Свен', 'Плотник'], ['villager', 0, 24, 'Подмастерье Ян', 'Подмастерье']], w: [['yard', 58, 16, 'up'], ['yard', 63, 16, 'up']] },
+    d: 'Деревянные трибуны с навесом вдоль турнирного поля. Без них турнир проходит в поле у стен замка — без поединков на ристалище.', fx: 'Турниры с поединками на ристалище замка: можно смотреть с трибун и сразиться самому.', crew: [['villager', 0, 40, 'Плотник Свен', 'Плотник'], ['villager', 0, 24, 'Подмастерье Ян', 'Подмастерье']], w: [['yard', 58, 16, 'up'], ['yard', 63, 16, 'up']] },
   { k: 'falconry', n: 'Соколятня', cost: 150, days: 12, loc: 'yard', out: 1, sol: [['yard', 64, 28, 67, 30], ['yard', 64, 31, 64, 31], ['yard', 67, 31, 67, 31]], scf: [64, 30, 4, 44], lot: [66, 31],
     d: 'Клетки и присады для ловчих птиц, сокольничий из южных земель.', fx: 'Соколиная охота: больше дичи и славы с каждой охоты.', crew: [['villager', 0, 46, 'Плотник Свен', 'Плотник']], w: [['yard', 65, 32, 'up']] },
   { k: 'libwing', n: 'Крыло библиотеки', cost: 260, days: 24, loc: 'keep', sol: [['keep', 1, 6, 4, 6]], box: [[1, 6], [3, 6], [4, 6]], lot: [2, 7],
@@ -34,7 +34,7 @@ function projCur(k) { const P = G && G.court && G.court.proj; return P && P.cur 
 function projRate() { const s = seatChar('seneschal'); return s ? clamp(0.8 + (s.stew || 8) / 25, 0.9, 1.7) : 0.75; }
 // objects: what stands at each site — built, under scaffolding, or not at all
 function projSetup() { const Y = LOCS.yard, K = LOCS.keep, U = LOCS.upper; if (!Y || !K || !U) return;
-  const on = k => () => projDone(k), mk = k => () => !!projCur(k);
+  const on = k => { const f = () => projDone(k); f.pj = k; return f; }, mk = k => () => !!projCur(k);
   place(Y, 'stands', { n: 12, ramp: 'red', ck: 'st12' }, 55, 15, { show: on('stands') }); spot(Y, 'stand0', 57, 14, 'down', { sit: 1, sy: 14 * CT + 4 }); spot(Y, 'stand1', 61, 14, 'down', { sit: 1, sy: 14 * CT + 4 }); spot(Y, 'stand2', 64, 14, 'down', { sit: 1, sy: 14 * CT + 4 });
   place(Y, 'bld', { w: 4, fh: 34, rh: 30, wall: 'plank', roof: 'shake', doors: [[22, 12, 18, 1]], wins: [[5, 9]], seed: 21, ck: 'mews' }, 64, 30, { dx: -2, show: on('falconry') });
   for (const px of [64, 67]) place(Y, 'perch', {}, px, 31, { dx: 1, show: on('falconry') });
@@ -45,7 +45,7 @@ function projSetup() { const Y = LOCS.yard, K = LOCS.keep, U = LOCS.upper; if (!
   place(Y, 'bld', { w: 5, fh: 38, rh: 40, wall: 'plank', roof: 'thatch', doors: [[30, 16, 24, 0]], wins: [[8, 10]], seed: 27, sign: [58, 'grain'], ck: 'gran2' }, 2, 6, { dx: -2, show: on('granary') });
   place(Y, 'kstatue', {}, 28, 25, { cx: 29 * CT, show: on('statue') });
   for (const d of PROJ) { const L = LOCS[d.loc]; if (!L) continue;
-    if (d.scf) { const o = { w: d.scf[2], h: d.scf[3], p: 0, ck: 'scf' + d.k + '0' }; place(L, 'scaffold', o, d.scf[0], d.scf[1], { dx: -2, show: () => { const c = projCur(d.k); if (c) { const st = Math.min(9, Math.floor(c.prog / c.need * 10)); o.p = st / 10; o.ck = 'scf' + d.k + st; } return !!c; } }); }
+    if (d.scf) for (const ob of L.objs.slice()) if (ob.show && ob.show.pj === d.k) siteTwin(L, ob, d.k);
     for (const [x, y] of d.box || []) place(L, 'crate', {}, x, y, { show: mk(d.k) });
     if (d.lot) place(L, 'lotsign', {}, d.lot[0], d.lot[1], { show: mk(d.k) });
     if (d.easel) place(L, 'easel', {}, d.easel[0], d.easel[1], { show: mk(d.k) });
@@ -54,6 +54,31 @@ function projSetup() { const Y = LOCS.yard, K = LOCS.keep, U = LOCS.upper; if (!
   place(Y, 'desk', { ck: 'dk0' }, 31, 12, { solid: [31, 12, 32, 12] }); act(Y, 'works', 32, 13, 'Стол зодчего: замыслы и стройки', { r: 26 }); spot(Y, 'architect', 31, 13, 'up');
   COURT.projWarn = []; for (const d of PROJ) for (const [loc, x0, y0, x1, y1] of d.sol || []) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (solidAt(LOCS[loc], x, y)) COURT.projWarn.push(d.k + '@' + x + ',' + y);
   projApply(); }
+// a building site: the finished object rises from the ground under scaffolding, a little every working day
+function siteTwin(L, ob, k) { const so = { bk: ob.k, bo: ob.o, t: -1, ck: 'site' };
+  L.objs.push(Object.assign({}, ob, { k: 'site', o: so, fr: null, anim: 0, show: () => { const c = projCur(k); if (!c) return false; const t = Math.round(clamp(c.prog / c.need, 0, 0.99) * 100) / 100;
+    if (so.t !== t) { so.t = t; so.ck = 'site|' + ob.k + '|' + (ob.o.ck || '') + '|' + t; } return true; } })); }
+OBJP.site = function (o) { const base = objSprite(o.bk, o.bo, 0).pb, w = base.w, h = base.h, b = new PB(w, h), t = clamp(o.t || 0, 0, 1), W0 = RPK.wood;
+  let top = h, bot = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if ((base.d[y * w + x] >>> 24) > 100) { if (y < top) top = y; if (y > bot) bot = y; }
+  const ln = Math.round(bot + 1 - (bot + 1 - top) * Math.max(0.06, t)), edge = x => ln + Math.floor(hsh(x >> 2, 1, 5) * 3);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const c = base.d[y * w + x]; if (!c || y < edge(x)) continue; b.put(x, y, y < edge(x) + 2 ? cmix(c, W0[5], 0.35) : c); }
+  for (let x = 0; x < w; x++) { const e = edge(x); if (b.get(x, e) && !b.get(x, e - 1)) b.put(x, e - 1, OUTL); }
+  const s = new PB(w, h), st = Math.max(0, ln - 9);
+  for (let x = 1; x < w - 2; x += 20) { s.rect(x, st, 2, bot - st + 1, W0[2]); s.vl(x, st, bot - st + 1, W0[3]); }
+  for (let y = st; y < bot - 2; y += 12) { s.rect(0, y, w, 2, W0[y === st ? 4 : 3]); s.hl(0, y, w, W0[5]); }
+  for (let x = 1; x + 20 < w; x += 40) s.line(x + 2, bot - 2, x + 20, Math.max(st + 2, bot - 18), W0[2]);
+  const lx = w - 10; for (let y = st; y <= bot; y++) { s.set(lx, y, W0[3]); s.set(lx + 4, y, W0[3]); if ((y - st) % 3 === 1) s.hl(lx + 1, y, 3, W0[4]); }
+  s.outline(OUTL); b.blit(s, 0, 0); return b; };
+// what the crew is doing now: five stages per work, one step of the picture every working day
+const PJPH = { _: ['кладут основание', 'возводят стены', 'ставят перекрытия', 'кроют крышу', 'отделывают'],
+  stands: ['вкапывают столбы', 'кладут настил', 'ставят ярусы скамей', 'натягивают навес', 'убирают королевскую ложу'], falconry: ['закладывают сруб', 'рубят стены', 'ставят присады', 'кроют крышу', 'ладят клетки'],
+  libwing: ['разбирают простенок', 'кладут перекрытия', 'ставят шкафы', 'стелют пол', 'расставляют книги'], observatory: ['укрепляют площадку', 'ставят опоры', 'отливают трубу', 'шлифуют стёкла', 'выверяют трубу'],
+  stainglass: ['снимают старые окна', 'режут стекло', 'паяют свинцом', 'вставляют витражи', 'чистят и освящают'], roses: ['копают ямы', 'носят землю', 'сажают кусты', 'подвязывают', 'ждут первых бутонов'],
+  tapestries: ['ткут основу', 'ткут фон', 'ткут фигуры', 'шьют кайму', 'вешают на стены'], mint: ['кладут фундамент', 'возводят стены', 'ставят горн', 'кроют крышу', 'режут штемпели'],
+  granary: ['кладут фундамент', 'ставят сруб', 'стелют полы', 'кроют крышу', 'конопатят щели'], statue: ['кладут постамент', 'везут глыбу', 'грубо обтёсывают', 'режут лицо', 'полируют'],
+  portrait: ['грунтуют холст', 'пишут подмалёвок', 'пишут лицо', 'пишут одеяния', 'кроют лаком'], chronicle: ['собирают предания', 'пишут черновик', 'переписывают набело', 'рисуют буквицы', 'переплетают'] };
+function projPhase(c) { const ph = PJPH[c.k] || PJPH._; return ph[Math.min(ph.length - 1, Math.floor(c.prog / c.need * ph.length))]; }
+function projDayN(c) { return Math.max(1, G.day - c.day + 1); }
 // solid tiles follow the state of the works; the king is nudged off a site that has just been fenced
 function projApply() { if (!LOCS.yard || !G || !G.court) return;
   for (const d of PROJ) { const on = projDone(d.k) || !!projCur(d.k); for (const [loc, x0, y0, x1, y1] of d.sol || []) if (LOCS[loc]) sfill(LOCS[loc], x0, y0, x1, y1, on ? 1 : 0); for (const [loc, x0, y0, x1, y1] of d.un || []) if (LOCS[loc]) sfill(LOCS[loc], x0, y0, x1, y1, projDone(d.k) ? 0 : 1); }
@@ -65,7 +90,7 @@ function projNpcs() { const c = projCur(); if (!c) return; const d = PROJK[c.k];
 function projCrewTalk(n, d) { const c = projCur(d.k); if (!c) { talkStaff(n); return; } const left = Math.max(1, Math.ceil((c.need - c.prog) / projRate())), P = projState();
   const ch = [{ t: 'Дать мастерам на пиво (10 зол.)', tip: 'Работа пойдёт веселее: день-другой выиграете.', fx: () => { if (G.realms[0].gold < 10) { UI.toast('В казне пусто.'); return; } G.realms[0].gold -= 10; c.prog += 1.5; P.beer = G.day; Snd.sfx('coin'); say(n, 'Спасибо, государь! Мигом управимся!', 3); } }, { t: 'Не мешать', fx: () => { } }];
   if (P.beer === G.day) ch.shift();
-  DLG.say(n, R.pick(['Работаем, государь! ', 'Камень к камню, доска к доске. ', 'Не извольте беспокоиться, государь. ']) + 'Осталось дней ' + left + ', если погода не подведёт.', { choices: ch, esc: ch.length - 1 }); }
+  DLG.say(n, R.pick(['Работаем, государь! ', 'Камень к камню, доска к доске. ', 'Не извольте беспокоиться, государь. ']) + 'Сейчас ' + projPhase(c) + '. Осталось дней ' + left + ', если погода не подведёт.', { choices: ch, esc: ch.length - 1 }); }
 // daily progress and completion
 function projDaily() { const P = projState(); if (!P) return; const c = P.cur;
   if (c) { const bad = G.weather && (G.weather.k === 'storm' || G.weather.k === 'blizzard') && PROJK[c.k].out; c.prog += projRate() * (bad ? 0.3 : 1); if (c.prog >= c.need) projFinish(c.k); }
@@ -105,7 +130,7 @@ WIN_EXT.proj = function (w) { const X = 14, Y = 21, WW = 612, HH = 326, P = proj
   txt(d.n, X + 16, by + 5, PAL.y); para(d.d, X + 16, by + 17, 380, '#e8dcc0', { f: 's', lh: 9 }); para('Даст: ' + d.fx, X + 16, by + 37, 380, UIC.good, { f: 's', lh: 9 });
   const bx = X + WW - 196;
   if (done) txt(d.per ? 'Сделано для нынешнего государя.' : 'Уже построено.', bx, by + 26, UIC.good, { f: 's' });
-  else if (cur) { const left = Math.max(1, Math.ceil((cur.need - cur.prog) / rate)); txt('Идёт работа: осталось ≈' + left + ' ' + plural(left, 'день', 'дня', 'дней'), bx, by + 8, PAL.w, { f: 's' }); bar(bx, by + 19, 180, 7, cur.prog / cur.need, '#e0a630');
+  else if (cur) { const left = Math.max(1, Math.ceil((cur.need - cur.prog) / rate)); txt('День ' + projDayN(cur) + ' · осталось ≈' + left + ' ' + plural(left, 'день', 'дня', 'дней'), bx, by + 2, PAL.w, { f: 's' }); txt('Сейчас ' + projPhase(cur), bx, by + 11, P3.lab, { f: 's' }); bar(bx, by + 21, 180, 7, cur.prog / cur.need, '#e0a630');
     btn('pj_stop', bx, by + 34, 180, 15, { label: 'Свернуть (вернуть часть золота)', style: 'dark', tip: 'Вернётся половина от неизрасходованного.', onClick: () => projStop() }); }
   else { const busy = P.cur && PROJK[P.cur.k], can = !busy && r.gold >= d.cost;
     txt('Стоимость ' + d.cost + ' зол. · ≈' + Math.ceil(d.days / rate) + ' ' + plural(Math.ceil(d.days / rate), 'день', 'дня', 'дней'), bx, by + 8, PAL.w, { f: 's' });

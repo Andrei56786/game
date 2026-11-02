@@ -46,7 +46,7 @@ OBJP.bld = function (o, f) {
   wallTex(b, 2, fy, W0, o.fh, o.wall || 'stone', o.seed || 1);
   for (let x = 2; x < W0 + 2; x++) for (let y = fy + o.fh - 3; y < fy + o.fh; y++) b.put(x, y, RPK.stone[y === fy + o.fh - 3 ? 4 : y === fy + o.fh - 1 ? 1 : 2]); // plinth
   if (o.kind === 'stable') { const n = o.stalls || 3, sw = Math.floor((W0 - 8) / n); for (let k = 0; k < n; k++) { const sx = 6 + k * sw, sy = fy + 8; b.rect(sx, sy, sw - 6, o.fh - 11, hx('#1c1216')); b.rect(sx, sy + o.fh - 22, sw - 6, 8, RPK.wood[3]); b.hl(sx, sy + o.fh - 22, sw - 6, RPK.wood[4]); b.line(sx, sy + o.fh - 21, sx + sw - 7, sy + o.fh - 15, RPK.wood[2]);
-      if (k !== 1) { const hc = RPK[['brown', 'dwood', 'white'][k % 3]]; const hxm = sx + (sw - 6) / 2; b.ell(hxm, sy + o.fh - 26, 4, 5, 0, () => hc[3]); b.rect(hxm - 3, sy + o.fh - 32, 6, 5, hc[3]); b.set(hxm - 2, sy + o.fh - 31, hx('#120a0a')); b.set(hxm + 1, sy + o.fh - 31, hx('#120a0a')); b.rect(hxm - 2, sy + o.fh - 28, 4, 3, hc[2]); b.set(hxm - 3, sy + o.fh - 34, hc[2]); b.set(hxm + 2, sy + o.fh - 34, hc[2]); } } }
+      if (k !== 1) stallHead(b, Math.round(sx + (sw - 6) / 2), sy + o.fh - 22, ['brown', 'dwood', 'white'][k % 3], k === 0); } }
   if (o.kind === 'forge') { const fx = 8, fw = W0 - 20; b.rect(fx, fy + 6, fw, o.fh - 9, hx('#1a1014')); for (let px = fx; px < fx + fw; px += 22) b.rect(px, fy + 4, 3, o.fh - 7, RPK.dwood[3]); const hx0 = fx + 6, hy = fy + o.fh - 20; b.rect(hx0, hy, 22, 17, RPK.stone[3]); b.hl(hx0, hy, 22, RPK.stone[5]); b.rect(hx0 + 4, hy + 4, 14, 8, hx('#2a0c08')); for (let k = 0; k < 12; k++) b.set(hx0 + 5 + (k * 7) % 12, hy + 6 + (k * 5 + f) % 5, RPK.fire[2 + ((k + f) % 4)]); b.rect(hx0 + 8, hy - 10, 6, 10, RPK.stone[2]);
     b.rect(hx0 + 32, fy + o.fh - 10, 10, 3, RPK.steel[3]); b.hl(hx0 + 32, fy + o.fh - 10, 10, RPK.steel[5]); b.rect(hx0 + 35, fy + o.fh - 7, 4, 4, RPK.steel[1]); for (let k = 0; k < 4; k++) b.vl(hx0 + 50 + k * 4, fy + 12, 9, RPK.steel[2 + (k & 1)]); }
   for (const d of o.doors || []) doorArt(b, 2 + d[0], fy + o.fh - 3 - d[2], d[1], d[2], { open: d[3] });
@@ -178,5 +178,28 @@ OBJP.cauldron = function (o, f) { const b = new PB(20, 20), M = RPK.black; b.ell
 OBJP.anvil = function (o) { const b = new PB(18, 12), M = RPK.steel; b.rect(1, 1, 16, 3, M[4]); b.hl(1, 1, 16, M[5]); b.rect(5, 4, 8, 3, M[2]); b.rect(3, 7, 12, 4, RPK.wood[2]); b.outline(OUTL); return b; };
 OBJP.fence = function (o) { const n = o.n || 1, b = new PB(n * 16 + 2, 16), W0 = RPK.wood; if (o.v) { const bb = new PB(6, n * 16 + 4); for (let k = 0; k <= n; k++) { bb.rect(1, k * 16, 4, 5, W0[3]); bb.hl(1, k * 16, 4, W0[4]); } bb.rect(2, 2, 2, n * 16, W0[2]); bb.outline(OUTL); return bb; }
   for (let k = 0; k <= n; k++) { b.rect(k * 16, 2, 3, 13, W0[3]); b.vl(k * 16, 2, 13, W0[4]); } b.rect(0, 5, n * 16 + 2, 2, W0[4]); b.rect(0, 10, n * 16 + 2, 2, W0[3]); b.outline(OUTL); return b; };
+// a horse looking out over a stall door, front view: ears, forelock, eyes at the sides, a long face and a soft muzzle
+function stallHead(b, cx, by, col, blaze) { const C = RPK[col], wh = col === 'white', MN = wh ? RPK.gray : col === 'dwood' ? RPK.black : RPK.dwood, E = hx('#120a0a');
+  b.rect(cx - 4, by - 8, 9, 8, C[1]); b.rect(cx - 3, by - 8, 7, 3, C[2]); // the neck in the dark of the stall
+  for (let y = by - 15; y <= by + 1; y++) { const t = y - (by - 15), hw = t < 6 ? 3 : t < 12 ? 2 : 3; for (let x = cx - hw; x <= cx + hw; x++) b.set(x, y, C[x < cx ? 4 : x > cx ? 2 : 3]); }
+  b.set(cx - 3, by - 17, C[3]); b.set(cx - 3, by - 16, C[3]); b.set(cx + 3, by - 17, C[2]); b.set(cx + 3, by - 16, C[2]); // ears
+  b.vl(cx, by - 15, 3, MN[2]); b.set(cx - 1, by - 15, MN[2]); b.set(cx - 3, by - 11, E); b.set(cx + 3, by - 11, E);
+  if (blaze) b.vl(cx, by - 11, 9, RPK.ivory[4]);
+  b.rect(cx - 2, by - 2, 5, 3, wh ? RPK.pink[4] : C[2]); b.set(cx - 2, by, E); b.set(cx + 2, by, E); b.hl(cx - 1, by + 1, 3, wh ? RPK.pink[3] : C[1]); }
+// a wooden gate in a fence line (o.n tiles: 1 = wicket, 2 = double gate); frame 1 = swung open toward the viewer
+OBJP.gate = function (o, f) { const n = o.n || 1, w = n * 16 + 3, b = new PB(w, 20), W0 = RPK.wood, I = RPK.steel;
+  const closed = (x0, x1, hl) => { for (let x = x0; x <= x1; x++) { const m = (x - x0) % 4; b.vl(x, 6, 11, m === 3 ? W0[2] : m === 0 ? W0[5] : W0[4]); b.set(x, 6 + (m === 1 || m === 2 ? 0 : 1), W0[5]); }
+    b.rect(x0, 8, x1 - x0 + 1, 2, W0[3]); b.rect(x0, 13, x1 - x0 + 1, 2, W0[3]); b.hl(x0, 10, x1 - x0 + 1, W0[2]); b.hl(x0, 15, x1 - x0 + 1, W0[2]);
+    b.line(hl ? x0 + 1 : x1 - 1, 13, hl ? x1 - 1 : x0 + 1, 10, W0[3]); const hx0 = hl ? x0 : x1; b.hl(hl ? hx0 : hx0 - 2, 8, 3, I[2]); b.hl(hl ? hx0 : hx0 - 2, 13, 3, I[2]); if (!o.n || o.n < 2) b.set(hl ? x1 - 1 : x0 + 1, 11, I[4]); };
+  const open = (xh, dir) => { for (let k = 0; k < 4; k++) { const x = xh + dir * k; b.vl(x, 6 + k, 11, k === 3 ? W0[2] : k ? W0[3] : W0[4]); b.set(x, 8 + k, W0[2]); b.set(x, 13 + k, W0[2]); }
+    b.set(xh, 8, I[2]); b.set(xh, 13, I[2]); };
+  if (f) { open(3, 1); if (n > 1) open(w - 4, -1); }
+  else if (n > 1) { const m = w >> 1; closed(3, m - 1, 1); closed(m, w - 4, 0); b.vl(m - 1, 9, 4, I[2]); }
+  else closed(3, w - 4, 1);
+  for (const px of [0, w - 3]) { b.rect(px, 2, 3, 17, W0[3]); b.vl(px, 2, 17, W0[4]); b.vl(px + 2, 3, 16, W0[2]); b.rect(px, 1, 3, 2, W0[5]); }
+  b.outline(OUTL); return b; };
+// gates swing open while somebody stands next to them
+function gateFr(e) { const cx = e.x + e.w / 2, cy = e.sy - 4, r = e.w / 2 + 12, near = w => w && Math.abs(w.x - cx) < r && Math.abs(w.y - cy) < 20;
+  if (near(COURT.p)) return 1; const L = curLoc(); for (const n of COURT.npcs) if (n.loc === L.id && !n.away && near(n)) return 1; return 0; }
 OBJP.dovecote = function (o) { const b = new PB(36, 60); towerBody(b, 18, 26, 14, 32, 4); for (let k = 0; k < 6; k++) { const x = 10 + (k % 3) * 7, y = 32 + Math.floor(k / 3) * 10; b.rect(x, y, 4, 4, hx('#140c10')); b.hl(x - 1, y + 4, 6, RPK.wood[3]); } coneRoof(b, 18, 2, 17, 26, 'thatch'); b.outline(OUTL); return b; };
 OBJP.stall = function (o) { const b = new PB(36, 34), R0 = RPK[o.ramp || 'red']; for (let x = 0; x < 36; x++) for (let y = 0; y < 8; y++) b.set(x, y + (x % 6 < 3 ? 0 : 0), ((x / 6) | 0) % 2 ? R0[3] : RPK.ivory[4]); for (let x = 0; x < 36; x += 6) b.ell(x + 3, 8, 3, 2, 0, () => (((x / 6) | 0) % 2 ? R0[2] : RPK.ivory[3])); b.vl(2, 8, 25, RPK.wood[2]); b.vl(33, 8, 25, RPK.wood[2]); b.rect(1, 20, 34, 8, RPK.wood[3]); b.hl(1, 20, 34, RPK.wood[4]); for (let k = 0; k < 5; k++) b.ell(6 + k * 6, 18, 2.5, 2, 0, () => RPK[['red', 'gold', 'green', 'orange', 'purple'][k]][3]); b.outline(OUTL); return b; };

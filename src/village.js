@@ -40,11 +40,12 @@ function vPlace(L, M, b, tx, y, row) { const T = GT;
   if (b.kind === 'smith') lightAt(L, tx * CT + 40, (y - 1) * CT, 46, '#ff8a3a', 0.75, { fl: 0.25 });
   const d = tx + b.dt, H = { i: M.houses.length, kind: b.kind, tx, w: b.w, y, door: d, dw: b.dw, row }; M.houses.push(H); if (!M[b.kind]) M[b.kind] = H;
   // the front strip: a wattle fence (village) or flowerbeds (town), a gap at the door
-  const segs = [[tx, d - 1], [d + b.dw, tx + b.w - 1]];
+  const segs = [[tx, d - 1], [d + b.dw, tx + b.w - 1]]; let fenced = 0;
   for (const [a, z] of segs) { if (z < a) continue; sfill(L, a, y + 1, z, y + 1);
     if (b.kind === 'tav' || b.kind === 'hall' || b.kind === 'chap' || b.kind === 'church' || M.town) { for (let x = a; x <= z; x++) { const p = M.r.f(); if (p < 0.12 && b.kind !== 'chap' && b.kind !== 'church') place(L, 'barrel', {}, x, y + 1, { dx: 1 }); else place(L, M.r.f() < 0.5 ? 'flowers' : 'herbs', { n: 1, seed: x * 7 + y, ck: 'vfl' + (x % 4) }, x, y + 1, { bake: 1 }); } }
     else if (b.kind === 'smith') { place(L, 'anvil', {}, a + 1 <= z ? a + 1 : a, y + 1, { dx: -1 }); for (let x = a; x <= z; x++) if (x !== a + 1) place(L, 'crate', {}, x, y + 1, {}); }
-    else place(L, 'fence', { n: z - a + 1, ck: 'vf' + (z - a + 1) }, a, y + 1, {}); }
+    else { place(L, 'fence', { n: z - a + 1, ck: 'vf' + (z - a + 1) }, a, y + 1, {}); fenced = 1; } }
+  if (fenced) place(L, 'gate', { n: b.dw, ck: 'g' + b.dw }, d, y + 1, { dy: 2, fr: gateFr });
   const kind = b.kind; spot(L, 'vh' + H.i, d, y + 1, 'up', { away: 1 }); spot(L, 'vf' + H.i, d, y + 2, 'down');
   if (b.dw === 2) spot(L, 'vf' + H.i + 'b', d + 1, y + 2, 'down');
   if (kind === 'smith') spot(L, 'v_smith', d + 1, y + 2, 'up');
@@ -113,7 +114,7 @@ function vBuild(sid) { const s = WD.setts[sid], town = s.type !== 'village', g =
     spot(L, 'v_fish0', cx - 1, H0 - 2, 'down'); spot(L, 'v_fish1', cx + 13, H0 - 2, 'down'); spot(L, 'v_fish2', cx - 7, wy0 - 1, 'down'); M.shore = [2, wy0 - 2, W0 - 3, wy0 - 1]; M.rooms.push([0, wy0 - 2, W0 - 1, H0 - 1, town ? 'Гавань' : 'Берег']); }
   if (!town) { // pasture
     const px0 = 3, px1 = 18, py0 = sb + 1, py1 = Math.min(sy1, sb + 9);
-    place(L, 'fence', { n: 7, ck: 'vf7' }, px0, py0, { solid: [px0, py0, px0 + 6, py0] }); place(L, 'fence', { n: px1 - px0 - 8, ck: 'vf' + (px1 - px0 - 8) }, px0 + 9, py0, { solid: [px0 + 9, py0, px1 - 1, py0] });
+    place(L, 'fence', { n: 7, ck: 'vf7' }, px0, py0, { solid: [px0, py0, px0 + 6, py0] }); place(L, 'fence', { n: px1 - px0 - 8, ck: 'vf' + (px1 - px0 - 8) }, px0 + 9, py0, { solid: [px0 + 9, py0, px1 - 1, py0] }); place(L, 'gate', { n: 2, ck: 'g2' }, px0 + 7, py0, { dy: 2, fr: gateFr });
     place(L, 'fence', { n: px1 - px0, ck: 'vf' + (px1 - px0) }, px0, py1, { solid: [px0, py1, px1 - 1, py1] });
     place(L, 'fence', { n: py1 - py0, v: 1, ck: 'vv' + (py1 - py0) }, px0, py1, { solid: [px0, py0, px0, py1] }); place(L, 'fence', { n: py1 - py0, v: 1, ck: 'vv' + (py1 - py0) }, px1, py1, { dx: 12, solid: [px1, py0, px1, py1] });
     place(L, 'trough', {}, px0 + 2, py0 + 2, { solid: [px0 + 2, py0 + 2, px0 + 3, py0 + 2] }); M.pasture = [px0 + 1, py0 + 1, px1 - 1, py1 - 1]; M.rooms.push([px0, py0, px1, py1, 'Выгон']); spot(L, 'v_shep', px0 + 8, py0 + 2, 'down');
