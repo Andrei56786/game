@@ -1,5 +1,12 @@
 'use strict';
 // ===== ARMY: movement, logistics, grounds, sieges =====
+// arrival orders are plain data ({ k, s }) so that they survive a save; an in-session closure still works
+const ARRIVE = {
+  sett: (a, o) => arriveSett(o.s),
+  siege: (a, o) => { const r = o.r !== undefined ? o.r : a.realm, c = G.setts[o.s].ctrl; if (c !== r && (hostile(r, c) || c === 5)) aiArriveSett(a, o.s); },
+  loot: (a, o) => banditLoot(a, G.setts[o.s]),
+};
+function runArrive(a, f) { if (typeof f === 'function') f(a); else if (f && ARRIVE[f.k]) ARRIVE[f.k](a, f); }
 // movement cost tables by season and cavalry (terrain, roads, rivers): built once per world, so a long A* costs little
 const MCT = { wd: null, t: [] };
 function costTable(season, cav) {
@@ -58,7 +65,7 @@ function advanceArmy(a, dd) {
     else { a.x += (tx - a.x) / d * can; a.y += (ty - a.y) / d * can; moved += can; budget = 0; }
   }
   a.moved = (a.moved || 0) + moved;
-  if (a.pi >= a.path.length - 1) { a.path = null; const f = a.onArrive; a.onArrive = null; if (isKingArmy(a) && G.player.follow < 0) autoPause(f ? '' : 'Войско прибыло'); if (f) f(a); }
+  if (a.pi >= a.path.length - 1) { a.path = null; const f = a.onArrive; a.onArrive = null; if (isKingArmy(a) && G.player.follow < 0) autoPause(f ? '' : 'Войско прибыло'); if (f) runArrive(a, f); }
 }
 const isKingArmy = a => !!G && a.id === G.player.army && a.kind === 'player' && typeof autoPause === 'function';
 // ---------- grounds (Sun Tzu ch.11) ----------
