@@ -1,0 +1,11 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "UI.win=null; G.speed=0; G.frac=0.3; const go=(loc,x,y)=>{COURT.loc=loc; COURT.p.x=x*CT+8; COURT.p.y=y*CT+12; snapCam();}; window.__go=go; go('yard',60,24); 'ok'"},
+ {"wait": 600}, {"shot": "w_lists.png"},
+ {"eval": "__go('forest',8,30); G.frac=0.35; 'ok'"},
+ {"wait": 600}, {"shot": "w_forest.png"},
+ {"eval": "__go('dungeon',12,10); 'ok'"},
+ {"wait": 600}, {"shot": "w_dungeon.png"},
+ {"eval": "__go('upper',24,10); 'ok'"},
+ {"wait": 600}, {"shot": "w_upper.png"}
+]
