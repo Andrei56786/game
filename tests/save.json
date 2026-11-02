@@ -1,0 +1,12 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "UI.win=null; window.__runN=n=>{ G.atCourt=0; for(let i=0;i<n;i++) for(let k=0;k<4;k++) worldAdvance(0.25); G.atCourt=1; }; window.__dig=()=>JSON.stringify([G.day, G.realms.map(r=>Math.round(r.gold*100)), G.armies.filter(a=>a.alive).map(a=>[a.id, Math.round(a.x*100), Math.round(a.y*100), a.onArrive ? a.onArrive.k || 'fn' : 0]), G.setts.map(S=>S.ctrl).join('')]); window.__arr=()=>G.armies.filter(a=>a.alive && a.onArrive && typeof a.onArrive==='object').length; 'ok'", "out": false},
+ {"eval": "__runN(90); window.__a0=__arr(); window.__fn=G.armies.filter(a=>typeof a.onArrive==='function').length; window.__r0=R.get(); window.__ok=saveGame('test'); JSON.stringify({day:G.day, arrivalOrders:__a0, closures:__fn, saved:__ok, kb:Math.round(localStorage.getItem('sk3_savetest').length/1024)})"},
+ {"expect": "__ok", "label": "сохранение записано"},
+ {"expect": "__fn===0", "label": "в состоянии нет функций (они теряются при сохранении)"},
+ {"eval": "window.__x=R.f(); loadGame('test'); window.__y=R.f(); window.__a1=__arr(); JSON.stringify({rngSame:__x===__y, arrivalOrders:__a1})"},
+ {"expect": "__x===__y", "label": "состояние генератора случайностей восстановлено"},
+ {"expect": "__a1===__a0", "label": "приказы «по прибытии» пережили загрузку"},
+ {"eval": "loadGame('test'); __runN(30); window.__d1=__dig(); loadGame('test'); __runN(30); window.__d2=__dig(); __d1===__d2 ? 'одинаково после двух загрузок' : 'РАЗНОЕ: ' + __d1.slice(0,200) + ' | ' + __d2.slice(0,200)"},
+ {"expect": "__d1===__d2", "label": "из одного сохранения игра идёт одинаково"}
+]

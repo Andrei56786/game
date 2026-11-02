@@ -140,7 +140,7 @@ function aiArmy(a) {
       if (sc > bs) { bs = sc; best = S; }
     }
     if (best && Math.hypot(WD.setts[best.id].x + 0.5 - a.x, WD.setts[best.id].y + 0.5 - a.y) < 1.5) { a.ai.target = best.id; aiArriveSett(a, best.id); a.ai.t = 3; return; }
-    if (best) { const ws = WD.setts[best.id]; const ok = goTo(a, ws.i, 'siege'); if (ok) { a.ai.target = best.id; a.onArrive = (x) => { const c = G.setts[best.id].ctrl; if (c !== x.realm && (hostile(x.realm, c) || c === 5)) aiArriveSett(x, best.id); }; a.ai.t = 3; return; } }
+    if (best) { const ws = WD.setts[best.id]; const ok = goTo(a, ws.i, 'siege'); if (ok) { a.ai.target = best.id; a.onArrive = { k: 'siege', s: best.id }; a.ai.t = 3; return; } }
     a.ai.t = 3;
   }
   // patrol at peace
@@ -171,7 +171,7 @@ function aiBandit(a) {
   if (a.path) return;
   if (R.f() < 0.18) {
     const vs = G.setts.filter(S => WD.setts[S.id].type === 'village' && Math.hypot(WD.setts[S.id].x - L.x, WD.setts[S.id].y - L.y) < 16 * SEAT_K && G.day - S.lootDay > 25);
-    if (vs.length) { const S = R.pick(vs); goTo(a, WD.setts[S.id].i, 'raid'); a.onArrive = x => banditLoot(x, S); return; }
+    if (vs.length) { const S = R.pick(vs); goTo(a, WD.setts[S.id].i, 'raid'); a.onArrive = { k: 'loot', s: S.id }; return; }
   }
   if (Math.hypot(a.x - L.x - 0.5, a.y - L.y - 0.5) > 3 && R.f() < 0.3) goTo(a, L.y * MW + L.x, 'home');
 }

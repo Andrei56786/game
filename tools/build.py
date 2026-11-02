@@ -2,8 +2,9 @@
 """Сборка «Слово короля» v3: склеивает src/*.js в фиксированном порядке в один HTML.
 Восстановлено по выжимке (оригинальный build.py утерян вместе со старой папкой).
 Использование: python3 tools/build.py [выходной.html]   (по умолчанию dist/index.html)"""
-import os, sys, re, subprocess, tempfile, collections
+import os, sys, re, subprocess, tempfile, collections, json
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VERSION = json.load(open(os.path.join(ROOT, 'package.json'), encoding='utf8'))['version']  # версия — в package.json
 ORDER = ['engine', 'audio', 'pix', 'art', 'bfig', 'portrait', 'chars', 'courtart', 'yardart', 'art2', 'worldgen',
          'render', 'state', 'econ', 'army', 'intel', 'ai', 'battle', 'battlesim', 'captains', 'diplo', 'events', 'ui',
          'screens', 'screens2', 'bscreen', 'bdraw', 'tutorial', 'devsheet', 'courtmap', 'court', 'courtui', 'dialog',
@@ -25,5 +26,5 @@ dups = [k for k, v in decl.items() if v > 1]
 if dups: print('Внимание, повторные объявления:', ', '.join(sorted(dups)))
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'dist', 'index.html')
 os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-open(out, 'w', encoding='utf8').write(rd('tools/head.html') + '<script>\n(function(){\n' + js + '\n})();\n</script>' + rd('tools/tail.html'))
-print('Собрано:', out, '·', len(mods), 'модулей ·', sum(c.count('\n') for _, c in mods), 'строк')
+open(out, 'w', encoding='utf8').write(rd('tools/head.html').replace('{VERSION}', VERSION) + '<script>\n(function(){\n' + js + '\n})();\n</script>' + rd('tools/tail.html'))
+print('Собрано:', out, '· v' + VERSION, '·', len(mods), 'модулей ·', sum(c.count('\n') for _, c in mods), 'строк')

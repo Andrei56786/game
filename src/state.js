@@ -123,7 +123,7 @@ const weatherOf = () => WEATHER[G.weather.k];
 // ---------- new game ----------
 function newGame(seed, opt) {
   opt = opt || {};
-  WD = genWorld(seed);
+  WD = genWorld(seed); R.seed((seed ^ 0x2545f491) >>> 0); // the same seed gives the same game, not only the same world
   const rng = mkRng(seed ^ 0x9e3779b9);
   G = { v: 2, seed, day: 0, frac: 0, speed: 0, mode: 'ter', realms: [], chars: [], setts: [], provs: [], armies: [], log: [], msgs: [], spies: [], rel: [], weather: { k: 'clear', days: 3 }, stats: { battles: 0, won: 0, sieges: 0 }, flags: {}, diff: opt.diff || 1, tut: { on: opt.tut !== false, cur: 0, done: [], seen: {} }, nextId: 1, mapOpen: !!opt.mapOpen };
   // realms
@@ -264,7 +264,7 @@ function hostile(a, b) { return atWar(a, b); }
 function rle(arr) { let s = [], cur = arr[0], n = 0; for (let i = 0; i < arr.length; i++) { if (arr[i] === cur) n++; else { s.push(cur + ':' + n); cur = arr[i]; n = 1; } } s.push(cur + ':' + n); return s.join(','); }
 function unrle(str, len) { const a = new Uint8Array(len); let i = 0; for (const p of str.split(',')) { const [v, n] = p.split(':').map(Number); a.fill(v, i, i + n); i += n; } return a; }
 function saveGame(slot) {
-  const o = Object.assign({ wv: WORLD_V }, G); SAVEOK.t = -9; o.explored = rle(G.explored); delete o.vis;
+  const o = Object.assign({ wv: WORLD_V }, G, { rngS: R.get() }); SAVEOK.t = -9; o.explored = rle(G.explored); delete o.vis;
   // markets: what can be worked out again from the land is not written down; stocks and books are rounded
   const r1 = v => Math.round(v * 10) / 10, rd = (src, f) => { const c = {}; for (const k in src) { const v = src[k]; if (v) c[k] = f(v); } return c; };
   o.setts = G.setts.map(S => { const c = Object.assign({}, S); delete c.res; delete c.wk; delete c.mkT; delete c.mkCap; c.mk = rd(S.mk, r1);
@@ -283,7 +283,7 @@ function migrateUnits(o, d) { if (!o || typeof o !== 'object' || (d || 0) > 6) r
   for (const k in o) { const v = o[k]; if (v && typeof v === 'object' && !(v instanceof Uint8Array)) migrateUnits(v, (d || 0) + 1); } }
 function loadGame(slot) {
   const s = localStorage.getItem('sk3_save' + (slot || '')); if (!s) return false;
-  const o = JSON.parse(s); if ((o.wv || 1) !== WORLD_V) throw new Error(OLDSAVE_TIP); WD = genWorld(o.seed); o.explored = unrle(o.explored, NT); o.vis = new Uint8Array(NT); G = o;
+  const o = JSON.parse(s); if ((o.wv || 1) !== WORLD_V) throw new Error(OLDSAVE_TIP); WD = genWorld(o.seed); o.explored = unrle(o.explored, NT); o.vis = new Uint8Array(NT); if (typeof o.rngS === 'number') R.set(o.rngS); delete o.rngS; G = o;
   if (G.court && G.court.letters) for (const l of G.court.letters) if (l.ch && l.ch.some(c => typeof c.fx !== 'function')) { delete l.ch; l.answered = 1; }
   econReset(); migrateUnits(G); for (const S of G.setts) { if (S.cul === undefined) S.cul = S.owner; initEcon(S, false); }
   return true;
