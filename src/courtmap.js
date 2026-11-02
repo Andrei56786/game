@@ -90,13 +90,14 @@ function buildKeep() {
   place(L, 'crate', {}, 48, 26, { solid: [48, 26, 48, 26] }); place(L, 'candelabra', {}, 48, 23, { anim: 2, fps: 4, solid: [48, 23, 48, 23], dx: -2, light: { r: 30, col: '#ffc060', a: 0.55, fl: 0.1, dy: -8 } });
   act(L, 'eyeboard', 45, 16, 'Доска Ока: донесения', { r: 30 }); spot(L, 'eye_board', 45, 17, 'up');
   spot(L, 'hall_door', 23, 27, 'down'); spot(L, 'lib_mid', 6, 6, 'down'); spot(L, 'council_door', 37, 10, 'right');
+  keepUp(L); // v3.3: the stairs lead to the upper floor
   return L;
 }
 // ---------- castle yard ----------
 function buildYard() {
-  const L = mkLoc('yard', 'Двор замка', 50, 44, 31, true), T = GT;
-  tfill(L, 0, 0, 49, 43, T.GRASS);
-  tfill(L, 0, 0, 11, 3, T.CWALL); tfill(L, 38, 0, 49, 3, T.CWALL); tfill(L, 0, 0, 1, 39, T.CWALL); tfill(L, 48, 0, 49, 39, T.CWALL); tfill(L, 0, 36, 49, 39, T.CWALL);
+  const L = mkLoc('yard', 'Двор замка', 74, 44, 31, true), T = GT;
+  tfill(L, 0, 0, 73, 43, T.GRASS);
+  tfill(L, 0, 0, 11, 3, T.CWALL); tfill(L, 38, 0, 73, 3, T.CWALL); tfill(L, 0, 0, 1, 39, T.CWALL); tfill(L, 72, 0, 73, 39, T.CWALL); tfill(L, 0, 36, 73, 39, T.CWALL);
   tfill(L, 12, 0, 37, 9, T.VOID);
   // roads & grounds
   tfill(L, 23, 10, 26, 35, T.COBBLE); tfill(L, 19, 17, 30, 24, T.COBBLE); tfill(L, 24, 36, 25, 39, T.COBBLE); tfill(L, 23, 40, 26, 43, T.DIRT); tfill(L, 22, 41, 27, 43, T.DIRT);
@@ -118,7 +119,7 @@ function buildYard() {
   // stable & paddock
   place(L, 'bld', { w: 7, fh: 42, rh: 38, wall: 'plank', roof: 'shake', kind: 'stable', stalls: 3, seed: 4, ck: 'stable' }, 2, 19, { dx: -2, solid: [2, 17, 8, 19] });
   place(L, 'hay', {}, 9, 19, { solid: [9, 19, 9, 19], dx: 2 }); place(L, 'hay', {}, 10, 18, { solid: [10, 18, 10, 18] });
-  place(L, 'fence', { n: 8, ck: 8 }, 2, 21, { solid: [2, 21, 9, 21] }); place(L, 'fence', { n: 5, v: 1, ck: 'v5' }, 10, 26, { dx: 5, solid: [10, 21, 10, 26] }); place(L, 'fence', { n: 8, ck: 8 }, 2, 26, { solid: [2, 26, 9, 26] });
+  place(L, 'fence', { n: 5, ck: 5 }, 2, 21, { solid: [2, 21, 6, 21] }); place(L, 'fence', { n: 2, ck: 2 }, 8, 21, { solid: [8, 21, 9, 21] }); // a gap for the groom place(L, 'fence', { n: 5, v: 1, ck: 'v5' }, 10, 26, { dx: 5, solid: [10, 21, 10, 26] }); place(L, 'fence', { n: 8, ck: 8 }, 2, 26, { solid: [2, 26, 9, 26] });
   place(L, 'trough', {}, 3, 22, { solid: [3, 22, 4, 22] }); L.paddock = [2, 23, 9, 25];
   act(L, 'stable', 5, 20, 'Конюшня', { r: 30 }); spot(L, 'stable', 6, 20, 'up');
   // dovecote & herb garden
@@ -157,21 +158,24 @@ function buildYard() {
   place(L, 'stall', {}, 18, 27, { solid: [18, 27, 19, 27] }); spot(L, 'stall', 18, 28, 'up'); act(L, 'stall', 19, 28, 'Лоток торговца', { r: 26 });
   for (const [bx, by] of [[20, 14], [29, 14]]) place(L, 'bench', {}, bx, by, { solid: [bx, by, bx + 1, by] });
   spot(L, 'plaza_w', 21, 21, 'right'); spot(L, 'plaza_e', 28, 21, 'left'); spot(L, 'plaza_n', 25, 18, 'down'); spot(L, 'keep_door', 25, 10, 'down'); spot(L, 'road', 24, 29, 'up'); spot(L, 'lane_w', 9, 35, 'right'); spot(L, 'lane_e', 37, 35, 'left');
+  yardEast(L); // v3.3: the chapel, the feast hall, the lists, the kennels and the forest gate
   return L;
 }
 // ---------- prerender static layers ----------
 function bakeLoc(L) {
   const b = new PB(L.w * CT, L.h * CT); paintGround(b, L.ter, L.w, L.h, L.seed);
-  if (L.out) { paintCurtain(b, L.ter, L.w, L.h, L.seed); L.keepMeta = paintKeepFacade(b, L.keep.x, L.keep.y, L.keep.w, L.seed); }
+  if (L.out) { paintCurtain(b, L.ter, L.w, L.h, L.seed); if (L.keep) L.keepMeta = paintKeepFacade(b, L.keep.x, L.keep.y, L.keep.w, L.seed); }
   else paintWalls(b, L.ter, L.w, L.h, L.seed, { wains: L.wains });
   for (const c of L.carpets || []) paintCarpet(b, c[0] * CT, c[1] * CT, c[2] * CT, c[3] * CT, c[4], c[5]);
   for (const r of L.rugs || []) paintRug(b, r[0] * CT, r[1] * CT, r[2] * CT, r[3] * CT, r[4]);
   for (const o of L.objs) if (o.shadow) shadowEll(b, o.x + o.w / 2, o.sy - 2, o.shadow[0], o.shadow[1]);
   for (const o of L.objs.filter(o => o.bake).sort((p, q) => p.sy - q.sy)) b.blit(objSprite(o.k, o.o, 0).pb, o.x, o.y);
   L.objs = L.objs.filter(o => !o.bake);
-  if (L.keepMeta) { for (const p of L.keepMeta.wins) L.wins.push({ x: p[0], y: p[1], big: 1 }); for (const p of L.keepMeta.banners) L.deco.push({ k: 'banner', o: { realm: 0 }, x: p[0] - 8, y: p[1], w: 16, h: 32, anim: 4, fps: 3 }); for (const p of L.keepMeta.sconces) { L.deco.push({ k: 'sconce', o: {}, x: p[0] - 5, y: p[1] - 7, w: 10, h: 14, anim: 3, fps: 7 }); lightAt(L, p[0], p[1] - 6, 40, '#ffb050', 0.8, { fl: 0.15, night: 1 }); } }
+  if (L.keepMeta) { for (const p of L.keepMeta.wins) L.wins.push({ x: p[0], y: p[1], big: 1 }); for (const p of L.keepMeta.banners) L.deco.push(L.keepHB ? { k: 'housebanner', o: L.keepHB, x: p[0] - 7, y: p[1] + 3, w: 14, h: 26, anim: 4, fps: 3 } : { k: 'banner', o: L.keepRealm ? { realm: L.keepRealm, ck: 'r' + L.keepRealm } : { realm: 0 }, x: p[0] - 8, y: p[1], w: 16, h: 32, anim: 4, fps: 3 }); for (const p of L.keepMeta.sconces) { L.deco.push({ k: 'sconce', o: {}, x: p[0] - 5, y: p[1] - 7, w: 10, h: 14, anim: 3, fps: 7 }); lightAt(L, p[0], p[1] - 6, 40, '#ffb050', 0.8, { fl: 0.15, night: 1 }); } }
   L.cv = b.canvas(); L.pb = b;
 }
-function buildCourt() { if (LOCS.keep && LOCS.yard) return; const t0 = performance.now(); bakeLoc(buildKeep()); bakeLoc(buildYard()); COURT.bakeMs = performance.now() - t0; }
+function buildCourt() { const sd = G ? G.seed : 0; if (LOCS.keep && LOCS.yard && LOCS.upper && COURT.bSeed === sd) return; for (const k in LOCS) delete LOCS[k]; COURT.npcs = []; COURT.ani = []; const t0 = performance.now();
+  for (const f of [buildKeep, buildYard, buildUpper, buildDungeon, buildHall, buildChapel, buildForest]) { const L = f(); L.site = 'home'; bakeLoc(L); }
+  COURT.bSeed = sd; projSetup(); for (const f of BUILD_EXT) f(); COURT.bakeMs = performance.now() - t0; }
 const solidAt = (L, tx, ty) => tx < 0 || ty < 0 || tx >= L.w || ty >= L.h || L.solid[ty * L.w + tx] === 1;
 function roomName(L, tx, ty) { for (const r of L.rooms) if (tx >= r[0] && tx <= r[2] && ty >= r[1] && ty <= r[3]) return r[4]; return L.name; }

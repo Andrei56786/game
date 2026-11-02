@@ -1,0 +1,15 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "UI.win=null; G.speed=0; 'locs: ' + Object.keys(LOCS).map(k => k + ' ' + LOCS[k].w + 'x' + LOCS[k].h + ' ' + LOCS[k].site).join(', ') + ' · bake ' + Math.round(COURT.bakeMs) + ' ms · npcs ' + COURT.npcs.length + ' · ani ' + COURT.ani.length"},
+ {"evalFile": "tests/locshot.js"},
+ {"png": "loc_yard.png", "expr": "__locShot('yard', 1, 1)"},
+ {"png": "loc_keep.png", "expr": "__locShot('keep', 1, 1)"},
+ {"png": "loc_upper.png", "expr": "__locShot('upper', 1, 1)"},
+ {"png": "loc_dungeon.png", "expr": "__locShot('dungeon', 2, 1)"},
+ {"png": "loc_hall.png", "expr": "__locShot('hall', 1, 1)"},
+ {"png": "loc_chapel.png", "expr": "__locShot('chapel', 2, 1)"},
+ {"png": "loc_forest.png", "expr": "__locShot('forest', 1, 1)"},
+ {"png": "loc_yard_clean.png", "expr": "__locShot('yard', 1, 0)"},
+ {"png": "loc_upper_clean.png", "expr": "__locShot('upper', 1, 0)"},
+ {"png": "loc_forest_clean.png", "expr": "__locShot('forest', 1, 0)"}
+]

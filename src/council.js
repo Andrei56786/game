@@ -96,7 +96,7 @@ const ORD = {
   ],
   seneschal: [
     { k: 'feast', n: 'Устроить пир', d: 'Пир в тронном зале: знать довольна, слава короля растёт. Дорого.', cost: 60, dur: 2,
-      done: (o, c, e) => { for (const H0 of G.houses) houseLoy(H0, Math.round(5 * e)); prestige(4); G.court.feastDay = G.day; return 'Пир удался на славу (' + effWord(e) + ')! Знать пьёт за здоровье короля.'; } },
+      done: (o, c, e) => { for (const H0 of G.houses) houseLoy(H0, Math.round(5 * e * (projDone('tapestries') ? 1.35 : 1))); prestige(4); G.court.feastDay = G.day; return 'Пир удался на славу (' + effWord(e) + ')! Знать пьёт за здоровье короля.'; } },
     { k: 'stock', n: 'Пополнять амбары', d: 'Сенешаль скупает зерно понемногу всё поручение: амбары растут, казна тает медленно.', cost: 0, dur: 21,
       day: (o, c, e) => { if (G.realms[0].gold > 30) { G.realms[0].gold -= 2; G.court.grain += Math.round(18 * e); } }, done: () => 'Амбары пополнены.' },
     { k: 'guard', n: 'Усилить стражу', d: 'Больше караулов в замке и у ворот: заговорщикам труднее, шпионам тоже.', cost: 20, dur: 21, go: () => { G.court.guard = 1; }, done: () => { G.court.guard = 0; return 'Усиленные караулы сняты.'; } },
@@ -208,7 +208,7 @@ function treasuryAct() { const r = G.realms[0], C = G.court, real = r.gold, book
 function confrontChoices() { const t = seatChar('treasurer'), C = G.court; if (!t) return [{ t: 'Записать недостачу', fx: () => { C.hidden = 0; } }];
   const H0 = G.houses[t.house]; const rec = k => { const g = Math.round(C.hidden * k); G.realms[0].gold += g; C.hidden = 0; return g; };
   return [{ t: 'Вызвать казначея: отставка и конфискация', tip: 'Вернётся ~60% украденного. Дом казначея обидится.', fx: () => { const g = rec(0.6); dismissSeat('treasurer', 'вор'); if (H0) houseLoy(H0, -8); C.secrets = C.secrets.filter(s => s.k !== 'theft'); log('Казначей ' + t.name + ' изгнан за воровство. Возвращено ' + g + ' зол.', 'good'); } },
-    { t: 'В темницу его!', tip: 'Вернётся ~80% украденного. Дом казначея оскорблён.', fx: () => { const g = rec(0.8); dismissSeat('treasurer', 'вор'); t.prison = G.realms[0].capital; if (H0) houseLoy(H0, -18); C.secrets = C.secrets.filter(s => s.k !== 'theft'); log('Казначей ' + t.name + ' брошен в темницу. Возвращено ' + g + ' зол.', 'good'); } },
+    { t: 'В темницу его!', tip: 'Вернётся ~80% украденного. Дом казначея оскорблён.', fx: () => { const g = rec(0.8); dismissSeat('treasurer', 'вор'); t.prison = 0; if (H0) houseLoy(H0, -18); C.secrets = C.secrets.filter(s => s.k !== 'theft'); log('Казначей ' + t.name + ' брошен в темницу. Возвращено ' + g + ' зол.', 'good'); } },
     { t: 'Простить, но пусть вернёт всё', tip: 'Вернётся ~50%. Казначей останется, станет честнее — на время.', fx: () => { const g = rec(0.5); t.hon = clamp((t.hon || 30) + 20, 0, 100); t.loy = clamp((t.loy || 50) + 8, 0, 100); C.thiefScared = G.day + 60; C.secrets = C.secrets.filter(s => s.k !== 'theft'); log('Казначей ' + t.name + ' прощён и вернул ' + g + ' зол.', 'info'); } },
     { t: 'Пока промолчать', tip: 'Казначей не знает, что раскрыт. Можно вывести его на чистую воду позже.', fx: () => { C.pendingConfront = 1; } }]; }
 function dismissSeat(k, why) { const C = G.court, id = C.seats[k]; if (id < 0) return; const c = charOf(id); C.seats[k] = -1; if (C.orders[k] && C.orders[k].k === 'research') G.tech.cur = null; C.orders[k] = null;

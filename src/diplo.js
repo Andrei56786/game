@@ -152,6 +152,7 @@ function acceptance(kind, t, o) {
     if (tr('proud')) add('Гордый', -30); if (tr('craven')) add('Трусливый', 20); if (G.rel[p][t].war) add('Мы воюем с ними', -100);
   }
   if (G.court && p === 0) { const ch = seatChar('chancellor'); if (ch) add('Канцлер ' + ch.name + ' (Речь ' + ch.dip + ')', (ch.dip - 10) * 1.5); else add('Нет канцлера — говорить некому', -8); if (G.court.prestige) add('Слава короля', clamp(G.court.prestige * 0.15, -10, 12)); }
+  if (typeof visitBonus === 'function') for (const l of visitBonus(t) || []) add(l[0], l[1]);
   const sum = L.reduce((s, l) => s + l.v, 0);
   return { ok: sum > 0, lines: L, sum };
 }

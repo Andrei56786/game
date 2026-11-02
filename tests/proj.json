@@ -1,0 +1,16 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "UI.win=null; G.speed=0; G.frac=0.25; G.realms[0].gold = 5000; 'warn: ' + JSON.stringify(COURT.projWarn)"},
+ {"eval": "UI.open({k:'proj'}); 'ok'"}, {"wait": 400}, {"shot": "proj_win.png"},
+ {"eval": "projStart('stands'); G.court.proj.cur.prog = 9; UI.win = null; COURT.loc='yard'; COURT.p.x = 60*CT+8; COURT.p.y = 18*CT+12; snapCam(); courtPopulate(); npcSnap(false); 'npcs ' + COURT.npcs.filter(n=>n.key.startsWith('pjw')).map(n=>n.key+'@'+n.loc+(n.away?'(away)':'')).join(',')"},
+ {"wait": 500}, {"shot": "proj_build.png"},
+ {"eval": "for (const d of PROJ) { G.court.proj.cur = null; projStart(d.k); projFinish(d.k); } 'done: ' + Object.keys(G.court.proj.done).join(',') + ' prestige ' + G.court.prestige"},
+ {"evalFile": "tests/locshot.js"},
+ {"png": "proj_yard.png", "expr": "__locShot('yard', 1, 0)"},
+ {"png": "proj_keep.png", "expr": "__locShot('keep', 1, 0)"},
+ {"png": "proj_upper.png", "expr": "__locShot('upper', 1, 0)"},
+ {"png": "proj_chapel.png", "expr": "__locShot('chapel', 1, 0)"},
+ {"png": "proj_hall.png", "expr": "__locShot('hall', 1, 0)"},
+ {"evalFile": "tests/reach.js"},
+ {"eval": "UI.open({k:'proj'}); 'ok'"}, {"wait": 300}, {"shot": "proj_win2.png"}
+]

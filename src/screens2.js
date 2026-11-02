@@ -167,7 +167,7 @@ function drawModals() {
   const f = MODALS[m.k] || (typeof TUT !== 'undefined' && TUT.modal(m.k)); if (!f) { UI.modals.shift(); return; } f(m);
 }
 function drawWindow() {
-  if (!UI.win) return; const w = UI.win;
+  if (!UI.win) return; const w = UI.win; if (WIN_EXT[w.k]) { WIN_EXT[w.k](w); return; }
   const v3 = { council: drawCouncilWin3, cmd: drawCmdWin, dyn: drawDynWin, tech: drawTechWin, letters: drawLettersWin, eye: drawEyeWin, settinfo: drawSettInfoWin }[w.k];
   if (v3 && G.court) { v3(w); return; }
   if (G.court && !playerArmy() && (w.k === 'army' || w.k === 'sett')) { if (w.k === 'army') drawCmdWin(w); else drawSettInfoWin(w); return; }
@@ -231,7 +231,7 @@ function worldSteps(first) {
   return [first, ['Рисуем карту: леса, горы, реки…', () => { if (!MSPR.oak) initMapSprites(); renderBase(WD); }], ['Проводим границы держав…', () => refreshPolitics()], ['Туман войны…', () => { if (!FOG.tex) initFog(); computeVision(); updateSigns(); rebuildFog(); MINI.dirty = 1; rebuildMini(); }]];
 }
 function afterLoad() { SCREEN = 'map'; cam.z = 1; centerArmy(); UI.win = null; UI.modals = []; UI.feed = [];
-  if (G.court && G.atCourt) { G.court.view = 0; courtEnter(G.day === 0 ? 'throne_front' : 'throne_front'); } if (typeof TUT !== 'undefined') TUT.start(); if (typeof Snd !== 'undefined') Snd.music('auto'); }
+  if (G.court && G.atCourt) { G.visit = null; G.court.view = 0; courtEnter('throne_front'); } else if (G.visit) visitResume(); if (typeof TUT !== 'undefined') TUT.start(); if (typeof Snd !== 'undefined') Snd.music('auto'); }
 function startNew() { runSteps(worldSteps(['Сотворение мира: горы, реки, озёра…', () => { newGame3(NEWG.seed, { diff: NEWG.diff, tut: NEWG.tut, mapOpen: NEWG.open }); }]).concat([['Возводим замок: зал, покои, двор…', () => buildCourt()]]), afterLoad); }
 function startLoad() { runSteps(worldSteps(['Читаем летопись…', () => { if (!loadGame()) throw new Error('Нет сохранения'); }]).concat([['Возводим замок: зал, покои, двор…', () => buildCourt()]]), afterLoad); }
 function drawLoading() {

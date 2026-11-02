@@ -1,0 +1,12 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "window.__errs=[]; const L=TUT.pages(); const i0=L.findIndex(p=>p.title==='Замыслы и стройки'); window.__i0=i0; 'pages ' + L.length + ' i0 ' + i0 + ' || ' + L.slice(i0).map(p=>{ const b=p.body(); return p.short + ' ' + b.length + (/undefined|NaN|null/.test(b)?' BAD':''); }).join(' | ')"},
+ {"eval": "UI.open({k:'book', ch: __i0}); UI.scroll=0; 'ok'"},
+ {"wait": 600}, {"shot": "help_proj.png"},
+ {"eval": "UI.win.ch=__i0+1; UI.scroll=0; 'ok'"}, {"wait": 400}, {"shot": "help_hunt.png"},
+ {"eval": "UI.win.ch=__i0+2; UI.scroll=0; 'ok'"}, {"wait": 400}, {"shot": "help_feast.png"},
+ {"eval": "UI.win.ch=__i0+3; UI.scroll=0; 'ok'"}, {"wait": 400}, {"shot": "help_chapel.png"},
+ {"eval": "UI.win.ch=__i0+4; UI.scroll=0; 'ok'"}, {"wait": 400}, {"shot": "help_visit.png"},
+ {"eval": "UI.scroll=99; 'ok'"}, {"wait": 400}, {"shot": "help_visit2.png"},
+ {"eval": "'errs ' + JSON.stringify(window.__errs)"}
+]

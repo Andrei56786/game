@@ -92,7 +92,7 @@ function dynastyDaily() { if (!G.houses || G.over) return; const C = G.court, ki
   if (G.day % 7 === 5) housesWeekly();
   for (const m of (C.musters || []).slice()) if (m.day <= G.day) { C.musters.splice(C.musters.indexOf(m), 1); try { spawnMuster(m); } catch (e) { console.warn(e); } }
 }
-function deathChance(c) { const a = c.age; let p = a < 5 ? 0.02 : a < 40 ? 0.004 : a < 55 ? 0.012 : a < 65 ? 0.045 : a < 75 ? 0.12 : 0.26; if (c.blood || c.role === 'ruler' || c.role === 'consort') p *= hasTech('antidotes') ? 0.5 : 0.8; return p; }
+function deathChance(c) { const a = c.age; let p = a < 5 ? 0.02 : a < 40 ? 0.004 : a < 55 ? 0.012 : a < 65 ? 0.045 : a < 75 ? 0.12 : 0.26; if (c.blood || c.role === 'ruler' || c.role === 'consort') p *= hasTech('antidotes') ? 0.5 : 0.8; if ((c.blood || c.role === 'ruler' || c.role === 'consort') && G.court && G.court.hpray >= G.day - DAYS_SEASON) p *= 0.8; return p; }
 function yearTick() { const C = G.court, king = kingC();
   for (const c of G.chars) if (c.alive && !c.pseudo) c.age++;
   log('Новый год ' + yearOf(G.day) + '. Королю ' + king.name + ' — ' + king.age + ' ' + plural(king.age, 'год', 'года', 'лет') + '.', 'season');
@@ -123,7 +123,7 @@ function pickRegent() { const C = G.court, king = kingC(); const mom = (king.par
   const ch = seatChar('chancellor'); const r = mom || ch || G.houses.filter(h => h.alive).map(h => charOf(h.head)).filter(Boolean).sort((a, b) => b.loy - a.loy)[0];
   if (r) { C.regent = r.id; log('Регентом до совершеннолетия короля стал' + (r.fem ? 'а ' : ' ') + charName(r) + '.', 'title'); } }
 function regentName() { const C = G.court; const r = C && C.regent >= 0 ? charOf(C.regent) : null; return r ? charName(r) : ''; }
-function kingDied(k) { const C = G.court; const heir = heirOf(k);
+function kingDied(k) { const C = G.court; const heir = heirOf(k); C.ancestors = (C.ancestors || []).concat([k.id]);
   if (!heir) { G.over = { win: false, why: 'Король ' + k.name + ' умер, не оставив наследника. Династия пресеклась, и знатные дома делят корону между собой.' }; return; }
   C.royals = [...new Set((C.royals || []).concat(k.kids || []).concat(k.spouse >= 0 ? [k.spouse] : []))].filter(id => id !== heir.id);
   if (k.spouse >= 0) { const w = charOf(k.spouse); if (w && w.alive) { w.dowager = 1; w.title = w.fem ? 'Королева-мать' : 'Принц'; w.spouse = -1; } }
@@ -173,7 +173,7 @@ function pregnancyTick(king) { const C = G.court; const sp = king.spouse >= 0 ? 
   if (mom.preg) { if (!mom.pregKnown && G.day >= mom.preg - 30) { mom.pregKnown = 1; log((mom === king ? 'Королева' : 'Королева ' + mom.name) + ' ждёт ребёнка! Двор ликует.', 'good'); prestige(2); if (G.atCourt) { if (SCREEN === 'court') { const n = npcByKey('spouse'); if (n) say(n, 'У нас будет ребёнок!', 5); } } else addLetter({ from: 'Королева ' + mom.name, fc: mom.id, subj: 'Добрая весть', text: 'Мой король! Лекари говорят, что к концу сезона у нас будет дитя. Возвращайтесь скорее.', x: WD.setts[G.realms[0].capital].x, y: WD.setts[G.realms[0].capital].y }); }
     if (G.day >= mom.preg) birth(king, sp, mom); return; }
   const kids = (king.kids || []).filter(x => charOf(x) && charOf(x).alive).length;
-  if (mom.age < 44 && kids < 6 && G.day - (mom.lastBirth || -999) > 50) { const p = 0.006 + (C.together === G.day ? 0.05 : 0) - (G.atCourt ? 0 : 0.005); if (R.chance(Math.max(0, p))) { mom.preg = G.day + 40; mom.pregKnown = 0; } } }
+  if (mom.age < 44 && kids < 6 && G.day - (mom.lastBirth || -999) > 50) { const p = 0.006 + (projDone('roses') ? 0.002 : 0) + (C.together === G.day ? 0.05 : 0) + (C.bless && C.bless.k === 'heir' && C.bless.until >= G.day ? 0.006 * (C.bless.m || 1) : 0) - (G.atCourt ? 0 : 0.005); if (R.chance(Math.max(0, p))) { mom.preg = G.day + 40; mom.pregKnown = 0; } } }
 function birth(king, sp, mom) { mom.preg = 0; mom.lastBirth = G.day; const fem = R.chance(0.5) ? 1 : 0;
   const opts = []; for (let k = 0; k < 6 && opts.length < 3; k++) { const n = pickName('K', fem); if (!opts.includes(n)) opts.push(n); }
   const mk = name => { const c = mkChar(0, 'K', 'child', R, { name, fem, age: 0, title: fem ? 'Принцесса' : 'Принц' }); c.house = -1; c.atCourt = 1; c.blood = 1; c.parents = [king.id, sp.id]; c.aff = 70; for (const k of ['mar', 'dip', 'intr', 'stew', 'lrn']) c[k] = R.i(2, 8);

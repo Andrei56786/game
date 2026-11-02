@@ -24,7 +24,7 @@ function dailyTick() {
   G.msgs = G.msgs.filter(m => !m.done || G.day - m.day < 2);
   G.armies = G.armies.filter(a => a.alive);
   // v3: the court, the dynasty and the magister's studies live on day by day
-  if (G.court) { for (const f of [councilDaily, dynastyDaily, researchDaily, courtExileCheck]) { try { f(); } catch (e) { console.error(e); } } }
+  if (G.court) { for (const f of [councilDaily, dynastyDaily, researchDaily, courtExileCheck].concat(DAILY_EXT)) { try { f(); } catch (e) { console.error(e); } } }
   checkRealms(); checkVictory();
   if (dayOfYear(G.day) === DAYS_SEASON * 3 && G.day > 0) holdCouncil();
   if (G.day > 6 && R.f() < 0.055 && !G.over) randomEvent();

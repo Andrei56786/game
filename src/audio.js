@@ -129,6 +129,7 @@ const Snd = (() => {
       { p: [0, 6, 4, 0], m: [[[4, 3], [2, 2], [0, 1]], [[-1, 2], [1, 1], [3, 2], [1, 1]], [[1, 2], [0, 1], [-1, 3]], [[-1, 1], [0, 1], [1, 1], [0, 3]]] }] },
     peace: { g: 1.65, root: 55, sc: 'mix', st: 0.28, meter: 6, prog: [[0, 6, 3, 0], [0, 3, 6, 0], [0, 4, 6, 0], [3, 0, 6, 0]], lute: 'arp', mel: 'flute', mb: 67, lo: 0, hi: 9, drum: 'dance', dr: 43, dv: 0.018, lv: 0.28, mv: 0.09, rest: 0.06, pause: [2, 5] },
     tension: { g: 1.75, root: 45, sc: 'aeo', st: 0.42, meter: 8, prog: [[0, 5, 6, 0], [0, 3, 4, 0], [0, 5, 3, 4], [0, 6, 5, 4]], lute: 'sparse', mel: 'shawm', mb: 57, lo: 0, hi: 7, drum: 'heart', dr: 45, dv: 0.036, lv: 0.32, mv: 0.06, rest: 0.3, pause: [2, 3] },
+    feast: { g: 1.5, root: 57, sc: 'mix', st: 0.2, meter: 6, prog: [[0, 4, 0, 4], [0, 3, 4, 0], [3, 4, 0, 0], [0, 6, 4, 0]], lute: 'arp', mel: 'shawm', mb: 69, lo: 0, hi: 9, drum: 'dance', dr: 46, dv: 0.028, lv: 0.3, mv: 0.065, rest: 0.04, pause: [1, 2] },
     battle: { g: 0.85, root: 40, sc: 'phr', st: 0.24, meter: 8, prog: [[0, 1, 0, 6], [0, 5, 6, 0], [0, 1, 6, 0], [5, 6, 0, 0]], lute: 'ost', mel: 'horn', mb: 52, lo: 0, hi: 7, drum: 'war', dr: 40, dv: 0.026, lv: 0.24, mv: 0.075, rest: 0.08 },
   };
   const STEPW = [[0, 6], [1, 30], [-1, 30], [2, 11], [-2, 11], [3, 4], [-3, 4], [4, 2], [-4, 2]];
@@ -230,7 +231,7 @@ const Snd = (() => {
   function thunder(t) { nz(t, 2.8, 'lowpass', 260, 0.8, 0.22, sfxBus, { a: 0.15, f1: 70 }); nz(t + 0.05, 0.5, 'lowpass', 900, 0.6, 0.12, sfxBus, { a: 0.01, f1: 200 }); }
   function ambTick(now) {
     let k = null;
-    let ins = 0; try { if (typeof SCREEN !== 'undefined' && (SCREEN === 'map' || SCREEN === 'court') && typeof G !== 'undefined' && G && G.weather) { k = G.weather.k; if (SCREEN === 'court' && COURT.loc !== 'yard') ins = 1; } } catch (_) { }
+    let ins = 0; try { if (typeof SCREEN !== 'undefined' && (SCREEN === 'map' || SCREEN === 'court') && typeof G !== 'undefined' && G && G.weather) { k = G.weather.k; if (SCREEN === 'court' && LOCS[COURT.loc] && !LOCS[COURT.loc].out) ins = 1; } } catch (_) { }
     const on = P.sfx && P.on; if (!on) k = null;
     if (k || amb) { ensureAmb();
       const rv = k === 'rain' ? 0.035 : k === 'storm' ? 0.07 : 0, wv = k === 'blizzard' ? 0.09 : k === 'snow' ? 0.03 : k === 'wind' ? 0.05 : k === 'storm' ? 0.03 : k === 'cloud' ? 0.008 : 0;
@@ -269,6 +270,18 @@ const Snd = (() => {
     fanfare(t) { const seq = [[62, 0, 0.11], [62, 0.13, 0.11], [62, 0.26, 0.11], [69, 0.39, 0.42], [66, 0.84, 0.18], [69, 1.04, 0.18], [74, 1.24, 0.9]];
       seq.forEach(([m, d, l]) => { horn(m, t + d, l, 0.12, sfxBus, 1.3); horn(m - (m === 74 ? 5 : m === 69 ? 3 : 3), t + d + 0.005, l, 0.07, sfxBus, 1.1); }); drum('big', t + 1.24, 0.5, sfxBus); drum('low', t + 0.39, 0.3, sfxBus); },
     fanfare_small(t) { [62, 66, 69, 74].forEach((m, i) => lute(m, t + i * 0.07, 0.24, sfxBus)); bellV(587, t + 0.3, 0.05, 2, sfxBus); },
+    bow(t) { tone('triangle', 196, 128, t, 0.16, 0.09, sfxBus, 0.002); tone('sine', 392, 250, t, 0.07, 0.035, sfxBus, 0.002); nz(t + 0.03, 0.22, 'bandpass', 2600, 1.8, 0.07, sfxBus, { a: 0.02, f1: 800 }); },
+    hit(t) { nz(t, 0.05, 'lowpass', 900, 0.8, 0.15, sfxBus); tone('sine', 180, 90, t, 0.07, 0.07, sfxBus); },
+    bark(t) { for (let i = 0; i < 2; i++) { const tt = t + i * 0.2 + rnd() * 0.05, f = 400 + rnd() * 120, p = pan(sfxBus, rnd() * 1.2 - 0.6), o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, tt); o.frequency.exponentialRampToValueAtTime(f * 0.62, tt + 0.1);
+      const b = filt('bandpass', 1100, 1.4), g = G_(0, p); o.connect(b); b.connect(g); envAD(g, tt, 0.008, 0.13, 0.11); o.start(tt); o.stop(tt + 0.17); nz(tt, 0.06, 'bandpass', 1700, 1.2, 0.04, p); } },
+    growl(t) { nz(t, 0.7, 'lowpass', 320, 1.5, 0.2, sfxBus, { a: 0.08, f1: 150 }); tone('sawtooth', 72, 52, t, 0.6, 0.05, sfxBus, 0.06); },
+    clink(t) { for (let k = 0; k < 2; k++) { const tt = t + k * 0.09 + rnd() * 0.02, f = 1500 + rnd() * 400; [[1, 0.07, 0.25], [2.4, 0.03, 0.15], [3.9, 0.012, 0.08]].forEach(([r, v, d]) => tone('sine', f * r, 0, tt, d, v, sfxBus, 0.001)); } },
+    cheer(t) { for (let i = 0; i < 10; i++) { const tt = t + rnd() * 0.45; nz(tt, 0.45 + rnd() * 0.6, 'bandpass', 550 + rnd() * 900, 2.4, 0.03, pan(sfxBus, rnd() * 1.6 - 0.8), { a: 0.07, f1: 380 + rnd() * 300 }); } },
+    crack(t) { nz(t, 0.07, 'highpass', 1800, 0.7, 0.2, sfxBus); nz(t + 0.01, 0.2, 'bandpass', 900, 1.2, 0.12, sfxBus, { a: 0.004, f1: 380 }); tone('triangle', 230, 90, t, 0.12, 0.05, sfxBus, 0.002); },
+    gallop(t) { for (let i = 0; i < 8; i++) { const tt = t + i * 0.15 + (i % 2) * 0.045; nz(tt, 0.05, 'lowpass', 420, 0.9, 0.08, sfxBus); } },
+    strum(t) { strum([55, 59, 62, 67, 71], t, 0.22, sfxBus, 0.035); },
+    choir(t) { [50, 57, 62, 66].forEach((m, i) => { const f = 440 * Math.pow(2, (m - 69) / 12); tone('sine', f, 0, t + i * 0.05, 2.4, 0.022, sfxBus, 0.5); tone('triangle', f * 2, 0, t + i * 0.05, 2.1, 0.006, sfxBus, 0.6); }); },
+    flap(t) { for (let i = 0; i < 5; i++) nz(t + i * 0.075, 0.05, 'bandpass', 650 + rnd() * 350, 1, 0.06, sfxBus); },
     defeat(t) { [[57, 0, 0.55], [55, 0.6, 0.55], [53, 1.2, 0.55], [52, 1.8, 1.5]].forEach(([m, d, l]) => { horn(m, t + d, l, 0.11, sfxBus, 0.6); horn(m - 12, t + d, l, 0.08, sfxBus, 0.5); drum('low', t + d, 0.3, sfxBus); }); },
   };
   const lastPlay = {};

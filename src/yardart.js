@@ -124,8 +124,8 @@ OBJP.gatehouse = function (o, f) { // 12 tiles wide; passage at tiles 5-6 (local
   for (let y = 92; y < base; y++) for (let x = ga; x < ga + gw; x++) { const d = ((x + 0.5 - ga - gw / 2) / (gw / 2)) ** 2 + ((y + 0.5 - 108) / 16) ** 2; if (y < 108 && d > 1) continue; b.put(x, y, 0); }
   for (let a = 0; a < 13; a++) { const ang = Math.PI * a / 12, px = ga + gw / 2 - Math.cos(ang) * (gw / 2 + 2), py = 108 - Math.sin(ang) * 18; b.rect(px - 1, py - 1, 3, 3, a % 2 ? S[6] : S[4]); }
   for (let x = ga + 1; x < ga + gw - 1; x += 4) { b.vl(x, 95 + (Math.abs(x - ga - gw / 2) < 10 ? -2 : 2), 7, RPK.steel[2]); b.set(x, 102, RPK.steel[4]); } b.hl(ga + 2, 97, gw - 4, RPK.steel[1]);
-  for (const cx of [26, 166]) { towerBody(b, cx, 52, 26, base - 52, cx); crenel(b, cx - 28, 44, 56, 12, 7, 5); coneRoof(b, cx, 12, 25, 34, 'slate'); b.vl(cx, 2, 11, RPK.dwood[2]); const R0 = RPK[REALM_RAMP[0]]; const wv = f % 2; b.rect(cx + 1, 3 + wv, 9, 5, R0[3]); b.hl(cx + 1, 3 + wv, 9, R0[4]); slitArt(b, cx - 1, 76, 10); slitArt(b, cx - 1, 110, 10); }
-  for (const bx of [58, 124]) { b.rect(bx, 70, 12, 22, RPK[REALM_RAMP[0]][2]); b.vl(bx, 70, 22, RPK[REALM_RAMP[0]][3]); b.rect(bx + 4, 76, 4, 4, RPK.gmetal[4]); b.hl(bx - 1, 69, 14, RPK.dwood[3]); }
+  for (const cx of [26, 166]) { towerBody(b, cx, 52, 26, base - 52, cx); crenel(b, cx - 28, 44, 56, 12, 7, 5); coneRoof(b, cx, 12, 25, 34, 'slate'); b.vl(cx, 2, 11, RPK.dwood[2]); const R0 = RPK[REALM_RAMP[o.realm || 0]]; const wv = f % 2; b.rect(cx + 1, 3 + wv, 9, 5, R0[3]); b.hl(cx + 1, 3 + wv, 9, R0[4]); slitArt(b, cx - 1, 76, 10); slitArt(b, cx - 1, 110, 10); }
+  for (const bx of [58, 124]) { b.rect(bx, 70, 12, 22, RPK[REALM_RAMP[o.realm || 0]][2]); b.vl(bx, 70, 22, RPK[REALM_RAMP[o.realm || 0]][3]); b.rect(bx + 4, 76, 4, 4, RPK.gmetal[4]); b.hl(bx - 1, 69, 14, RPK.dwood[3]); }
   for (let x = 0; x < b.w; x++) for (let y = base - 4; y < base; y++) if (b.get(x, y)) b.put(x, y, S[y === base - 4 ? 4 : 2]);
   b.outline(OUTL); b.meta = { lights: [[56, 100], [136, 100]] }; return b; };
 // ---------- trees & plants ----------

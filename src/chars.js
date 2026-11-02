@@ -120,6 +120,6 @@ function animalPB(kind, f, dir) {
   if (kind === 'cat') { const b = new PB(12, 10), C0 = RPK.gray; b.ell(6, 6, 4, 2.2, 0, (x, y) => C0[y < 5 ? 3 : 2]); b.ell(2.5, 4, 2, 1.8, 0, () => C0[3]); b.set(1, 2, C0[2]); b.set(3, 2, C0[2]); b.set(2, 4, hx('#e8d040')); b.set(10, 4 - (f % 2), C0[3]); b.set(11, 3, C0[3]); b.set(4, 8, C0[1]); b.set(8, 8, C0[1]); b.outline(OUTL); return b; }
   if (kind === 'hen') { const b = new PB(10, 10), C0 = RPK.white; b.ell(5, 6, 3.4, 2.6, 0, (x, y) => C0[y < 6 ? 4 : 3]); b.ell(2.5, 3.5, 1.6, 1.6, 0, () => C0[4]); b.set(2, 1, hx('#d02838')); b.set(0, 4, hx('#e8a030')); b.set(2, 3, hx('#1a1418')); b.set(4, 9, hx('#e8a030')); b.set(6, 9, hx('#e8a030')); if (f % 2) b.set(1, 5, hx('#e8a030')); b.outline(OUTL); return b; }
   if (kind === 'pigeon') { const b = new PB(8, 6), C0 = RPK.gray; const w = f % 2; b.ell(4, 3, 2.4, 1.4, 0, () => C0[3]); if (w) { b.set(2, 0, C0[4]); b.set(6, 0, C0[4]); b.set(3, 1, C0[4]); b.set(5, 1, C0[4]); } else { b.set(1, 3, C0[2]); b.set(7, 3, C0[2]); } b.set(1, 2, C0[4]); b.outline(OUTL); return b; }
-  return new PB(4, 4);
+  return ANIM_EXT[kind] ? ANIM_EXT[kind](f, dir) : new PB(4, 4);
 }
 const ANIM = {}; function animalSprite(kind, f, flip, col) { const k = kind + f + (flip ? 'f' : '') + (col || ''); if (!ANIM[k]) { let b = animalPB(kind, f, col); if (flip) b = b.flipX(); ANIM[k] = b.canvas(); } return ANIM[k]; }

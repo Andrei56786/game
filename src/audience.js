@@ -216,7 +216,7 @@ function courtHalfHour(h) { const C = G.court;
   if (h === 9.5 && isCouncilDay() && C.meetDone !== G.day && !C.meetCall && G.atCourt) { C.meetDay = G.day; SEATS.forEach((s, i) => { const n = npcByKey('seat_' + s.k); if (n) { n.override = { spot: 'seat' + i, until: 12, day: G.day }; n.curT = null; } }); UI.toast('Четверг, 9:30: малый совет собирается в зале совета.'); Snd.sfx('bell'); }
   if (h === 12 && C.meetDay === G.day && C.meetDone !== G.day && !C.meetCall) { C.meetDone = G.day; if (G.atCourt) { for (const e of councilPresence().come) e.c.loy = clamp((e.c.loy || 50) - 1, 0, 100); log('Король был в замке, но на совет не пришёл. Советники недовольны.', 'bad'); } }
   if (h === 22) stageWhisper();
-  if (h === 20 && C.feastDay === G.day) UI.toast('В тронном зале шумит пир!');
+  if (h === 20 && C.feastDay === G.day) UI.toast('В пиршественном зале шумит пир!');
 }
 function eyeBoardAct() { UI.open({ k: 'eye' }); }
 function barracksAct() { const S = G.setts[G.realms[0].capital]; DLG.say(null, 'В казармах пахнет кожей и потом. Гарнизон столицы: ' + voin(menOf(S.gar)) + '. Королевская стража — ' + menOf(G.court.retinue ? G.court.retinue.u : { levy: 30 }) + '.' + (seatChar('marshal') ? ' Набор рекрутов ведёт маршал.' : ' Маршала нет — набирать войска некому.')); }

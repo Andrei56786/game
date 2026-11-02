@@ -1,0 +1,12 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "UI.win=null; window.__tp=[]; window.__np=[]; window.__errs=[]; window.addEventListener('error', e=>window.__errs.push(String(e.message))); const _r = npcRepath; npcRepath = function (n) { const sp = n.goal && n.goal.sp; if (sp && sp.loc !== n.loc) { const L = LOCS[n.loc]; const d = L.doors.find(d => d.to === sp.loc) || doorToward(n.loc, sp.loc); if (!d) window.__tp.push(n.key + ':' + n.loc + '->' + sp.loc); } const r = _r(n); if (n.path && !n.path.length && n.goal && !n.goal.door && Math.hypot(n.goal.sp.x - n.x, n.goal.sp.y - n.y) > 40) window.__np.push(n.key + '@' + n.loc + ' ' + Math.round(n.x/CT) + ',' + Math.round(n.y/CT) + '->' + Math.round(n.goal.sp.x/CT) + ',' + Math.round(n.goal.sp.y/CT)); return r; }; window.__snap = () => { const o = {}; for (const n of COURT.npcs) { const k = n.away ? 'away' : n.loc; o[k] = (o[k] || 0) + 1; } return clockStr() + ' ' + JSON.stringify(o); }; G.frac = 0.05; G.speed = 3; npcSnap(false); __snap()"},
+ {"wait": 10000}, {"print": "__snap()"},
+ {"wait": 10000}, {"print": "__snap()"},
+ {"wait": 10000}, {"print": "__snap()"},
+ {"wait": 10000}, {"print": "__snap()"},
+ {"wait": 10000}, {"print": "__snap()"},
+ {"wait": 10000}, {"print": "__snap()"},
+ {"print": "['teleports', __tp.slice(0, 20), 'nopath', __np.slice(0, 20), 'errs', __errs.slice(0, 5), 'dlg', DLG.open(), 'day', G.day]"},
+ {"print": "COURT.npcs.filter(n => !n.away).map(n => n.key + '@' + n.loc + (n.lie ? '(лёжа)' : n.sit ? '(сидя)' : '')).join(' ')"}
+]

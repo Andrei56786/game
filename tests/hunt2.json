@@ -1,0 +1,52 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"eval": "UI.win=null; G.speed=1; G.frac=0.125; const go=(loc,x,y)=>{COURT.loc=loc; COURT.p.x=x*CT+8; COURT.p.y=y*CT+12; snapCam();}; window.__go=go; huntStart('deer', npcByKey('seat_marshal')); 'ok'"
+},
+{
+"wait": 900
+},
+{
+"eval": "const L=LOCS.forest, c=L.clearings[1]; const [tx,ty]=nearFree(L,c[0]-8,c[1]); __go('forest',tx,ty); COURT.npcs.filter(n=>n.follow).forEach(n=>{n.x=COURT.p.x-16;n.y=COURT.p.y+8;n.loc='forest';}); COURT.ani.filter(a=>a.game===2).forEach(a=>{a.x=COURT.p.x+10;a.y=COURT.p.y+4;}); window.__tr=[]; window.__iv=setInterval(()=>{ const HU=COURT.hunt; if(!HU) return; const q=HU.quarry, P=COURT.p; __tr.push(clockStr()+' q='+(q?gk(q)+':'+q.st+'@'+Math.round(Math.hypot(q.x-P.x,q.y-P.y)):'-')+' h='+COURT.ani.filter(a=>a.game===2).map(a=>a.st[0]+Math.round(Math.hypot(a.x-P.x,a.y-P.y))).join(',')+' fol='+COURT.npcs.filter(n=>n.follow).map(n=>Math.round(Math.hypot(n.x-P.x,n.y-P.y))).join(',')); }, 1500); 'tracking'"
+},
+{
+"waitFor": "COURT.hunt && COURT.hunt.quarry && COURT.hunt.quarry.st==='bay'",
+"timeout": 45000
+},
+{
+"eval": "const HU=COURT.hunt, q=HU.quarry; if (q && q.st!=='dead') { const L=LOCS.forest; const [tx,ty]=nearFree(L,Math.floor(q.x/CT)-4,Math.floor(q.y/CT)); __go('forest',tx,ty); 'moved near quarry ' + gk(q) + ':' + q.st } else 'no quarry'"
+},
+{
+"wait": 300
+},
+{
+"eval": "const t=nearestTarget(); 'target ' + (t ? t.label + ' / ' + (t.sub||'') : '-')"
+},
+{
+"shot": "hunt2_aim.png"
+},
+{
+"key": "KeyE"
+},
+{
+"wait": 700
+},
+{
+"eval": "const HU=COURT.hunt; 'after E: shots ' + HU.shots + ' hits ' + HU.hits + ' bag ' + bagStr(HU.bag)"
+},
+{
+"wait": 8000
+},
+{
+"eval": "clearInterval(__iv); __tr.join('\\n')"
+},
+{
+"eval": "const HU=COURT.hunt, L=LOCS.forest, P=COURT.p; const t0=performance.now(); for (let i=0;i<200;i++) { for (const f of UPD_EXT) f(1/60); } const t1=performance.now(); 'upd ms/frame ' + ((t1-t0)/200).toFixed(3) + ' ani ' + COURT.ani.filter(a=>a.loc==='forest').length"
+},
+{
+"eval": "const t0=performance.now(); for (let i=0;i<60;i++) courtRender(); 'render ms ' + ((performance.now()-t0)/60).toFixed(2)"
+}
+]

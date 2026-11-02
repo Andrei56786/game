@@ -22,18 +22,21 @@ function courtRender() {
   const vis = (x, y, w, hh) => x < cx + vw && x + w > cx && y < cy + vh && y + hh > cy;
   for (const d of L.deco) { if (d.show && !d.show()) continue; if (!vis(d.x, d.y, d.w || 32, d.h || 48)) continue; const f = d.anim ? Math.floor(NOW * d.fps + d.x * 0.13) % d.anim : 0; g.drawImage(objSprite(d.k, d.k === 'window' && night ? WIN_NIGHT : d.o, f), d.x, d.y); }
   if (L.hbSlots && G.houses) { let i = 0; for (const H0 of G.houses) { if (!H0.alive || i >= L.hbSlots.length) continue; const [tx, ty] = L.hbSlots[i++]; const f = Math.floor(NOW * 3 + tx) % 4; const s = objSprite('housebanner', { house: H0.her, ck: 'hb' + H0.id }, 0); g.drawImage(s, tx * CT + 8 - (s.width >> 1), (ty + 1) * CT - s.height - 2 + (f === 2 ? 1 : 0)); } }
+  for (const f of CRENDER) f(g, L, cx, cy, vw, vh);
   drawParts(g, 0);
   const list = [];
   for (const o of L.objs) { if (o.show && !o.show()) continue; if (!vis(o.x, o.y, o.w, o.h)) continue; list.push([o.sy, 0, o]); }
   for (const n of COURT.npcs) if (n.loc === L.id && !n.away && vis(n.x - 10, n.y - 34, 20, 40)) list.push([sortKey(n), 1, n]);
-  if (COURT.p) list.push([sortKey(COURT.p), 2, COURT.p]);
+  if (COURT.p && !COURT.p.hide) list.push([sortKey(COURT.p), 2, COURT.p]);
   for (const a of COURT.ani) if (a.loc === L.id && vis(a.x - 18, a.y - 60, 36, 64)) list.push([a.y, 3, a]);
+  for (const f of SPR_EXT) f(L, list);
   list.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
-  for (const [, t, e] of list) { if (t === 0) { const f = e.anim ? Math.floor(NOW * e.fps + e.x * 0.11) % e.anim : 0; g.drawImage(objSprite(e.k, e.o, f), e.x, e.y); } else if (t === 3) drawAni(g, e); else drawWalker(g, e); }
+  for (const [, t, e] of list) { if (t === 0) { const f = e.anim ? Math.floor(NOW * e.fps + e.x * 0.11) % e.anim : 0; g.drawImage(objSprite(e.k, e.o, f), e.x, e.y); } else if (t === 3) drawAni(g, e); else if (t === 4) e(g); else drawWalker(g, e); }
+  for (const f of CRENDER2) f(g, L, cx, cy, vw, vh);
   if (COURT.dest && NOW - COURT.dest[2] < 0.6 && COURT.path) { const a = 1 - (NOW - COURT.dest[2]) / 0.6; g.globalAlpha = a; g.strokeStyle = '#f7d35c'; g.lineWidth = 1; g.strokeRect(COURT.dest[0] * CT + 3.5, COURT.dest[1] * CT + 7.5, 9, 5); g.globalAlpha = 1; }
   g.restore();
   // ---- lighting ----
-  const lg = CR.lg, amb = L.out ? ambientOut(h) : ambientIn(h), wd = L.out ? weatherDim() : 1 - (1 - weatherDim()) * 0.5;
+  const lg = CR.lg, amb0 = L.out ? ambientOut(h) : ambientIn(h), amb = L.dark ? amb0.map(v => v * L.dark) : amb0, wd = L.out ? weatherDim() : 1 - (1 - weatherDim()) * 0.5;
   let fl = COURT.flash && NOW - COURT.flash < 0.25 ? 1.8 : 1;
   lg.globalCompositeOperation = 'source-over'; lg.fillStyle = 'rgb(' + amb.map(v => Math.min(255, Math.round(v * wd * fl))).join(',') + ')'; lg.fillRect(0, 0, vw, vh);
   const dark = clamp(1 - Math.min(amb[0], amb[1], amb[2]) * wd / 255, 0, 1);
@@ -75,21 +78,22 @@ function drawCourtWeather(dark) {
 }
 // bubbles, names, hover, eavesdrop meter (screen space)
 function cw2s(x, y) { return [Math.round((x - COURT.cam.x) * COURT.Z), Math.round((y - COURT.cam.y) * COURT.Z)]; }
-function drawBubble(s, sx, sy, col) { const lines = wrap(s, 150, { f: 's' }); const w = Math.max(...lines.map(l => tw(l, { f: 's' }))) + 8, h = lines.length * 8 + 5; const x = clamp(sx - w / 2, 2, W - w - 2), y = sy - h - 6;
+function drawBubble(s, sx, sy, col, occ) { const lines = wrap(s, 150, { f: 's' }); const w = Math.max(...lines.map(l => tw(l, { f: 's' }))) + 8, h = lines.length * 8 + 5; const x = clamp(sx - w / 2, 2, W - w - 2), y = sy - h - 6;
+  if (occ) { if (occ.some(r => x < r[0] + r[2] + 2 && r[0] < x + w + 2 && y < r[1] + r[3] + 2 && r[1] < y + h + 2)) return; occ.push([x, y, w, h]); } // crowded rooms: a bubble that would cover another waits its turn
   rect(x, y, w, h, PAL.o); rect(x + 1, y + 1, w - 2, h - 2, col || '#f4ecd8'); rect(sx - 2, y + h - 1, 5, 2, col || '#f4ecd8'); px(sx - 3, y + h, PAL.o); px(sx + 3, y + h, PAL.o); rect(sx - 1, y + h + 1, 3, 2, col || '#f4ecd8'); px(sx, y + h + 3, PAL.o);
   lines.forEach((l, i) => txt(l, x + 4, y + 3 + i * 8, '#2a1a12', { f: 's' })); }
 function drawCourtOverlays(cx, cy) {
   const L = curLoc(), Z = COURT.Z;
-  for (const n of COURT.npcs) { if (n.loc !== L.id || n.away || !n.bub) continue; const [sx, sy] = cw2s(n.x, n.y - (n.sit ? 30 : 34)); if (sx < -40 || sx > W + 40 || sy < 0 || sy > H + 40) continue; drawBubble(n.bub, sx, sy, n.bubCol); }
-  if (COURT.p && COURT.p.bub && COURT.p.bubT > NOW) { const [sx, sy] = cw2s(COURT.p.x, COURT.p.y - 34); drawBubble(COURT.p.bub, sx, sy, '#fff2c8'); }
+  const occ = []; if (COURT.p && COURT.p.bub && COURT.p.bubT > NOW) { const [sx, sy] = cw2s(COURT.p.x, COURT.p.y - 34); drawBubble(COURT.p.bub, sx, sy, '#fff2c8', occ); }
+  for (const n of COURT.npcs.filter(n => n.loc === L.id && !n.away && n.bub).sort((a, b) => (b.bubT || 0) - (a.bubT || 0))) { const [sx, sy] = cw2s(n.x, n.y - (n.sit ? 30 : 34)); if (sx < -40 || sx > W + 40 || sy < 0 || sy > H + 40) continue; drawBubble(n.bub, sx, sy, n.bubCol, occ); }
   // hover name
   if (!courtBlocked() && HOVER && HOVER.id === 'court') { const wx = COURT.cam.x + input.mx / Z, wy = COURT.cam.y + input.my / Z, t = pickTarget(wx, wy);
-    if (t) { let s, s2 = ''; if (t.n) { s = npcTitle(t.n); s2 = npcSub(t.n); } else s = t.a.label; const [sx, sy] = t.n ? cw2s(t.n.x, t.n.y - 32) : cw2s(t.a.x, t.a.y - 14); const w = Math.max(tw(s), tw(s2, { f: 's' })) + 10, hh = s2 ? 20 : 12;
+    if (t) { let s, s2 = ''; if (t.n) { s = npcTitle(t.n); s2 = npcSub(t.n); } else if (t.e) { s = t.label; s2 = t.sub || ''; } else s = t.a.label; const [sx, sy] = t.n ? cw2s(t.n.x, t.n.y - 32) : t.e ? cw2s(t.x, t.y - 16) : cw2s(t.a.x, t.a.y - 14); const w = Math.max(tw(s), tw(s2, { f: 's' })) + 10, hh = s2 ? 20 : 12;
       rect(sx - w / 2, sy - hh - 2, w, hh, 'rgba(20,14,12,0.88)'); strokeR(sx - w / 2, sy - hh - 2, w, hh, '#8a6a3a'); txt(s, sx, sy - hh + 1, PAL.y, { al: 'c' }); if (s2) txt(s2, sx, sy - hh + 11, '#c8b898', { al: 'c', f: 's' }); cv.style.cursor = 'pointer'; } }
   if (COURT.ear && COURT.ear.prog > 0 && !COURT.ear.done) { const e = COURT.ear; const [sx, sy] = cw2s((e.a.x + e.b.x) / 2, Math.max(e.a.y, e.b.y) + 5); rect(sx - 26, sy, 52, 7, PAL.o); rect(sx - 25, sy + 1, Math.round(50 * e.prog), 5, '#a8c8ff'); txt('подслушиваете', sx, sy + 9, '#a8c8ff', { al: 'c', f: 's', sh: PAL.o }); }
 }
 function npcTitle(n) { if (n.seat) return seatName(n.seat) + ': ' + n.c.name; if (n.c.pseudo) return n.c.name; return (n.c.title ? n.c.title + ' ' : '') + n.c.name; }
-function npcSub(n) { if (n.petition) return 'Проситель'; if (n.envoy) return 'Посол: ' + REALM_DEF[n.envoy.from].name; if (n.msgr) return 'Несёт письмо'; if (n.fam) return famRole(n.c); if (n.key.startsWith('ward')) return 'Воспитанник двора · дом ' + houseName(n.c.house); if (n.seat) { const c = n.c; return c.house >= 0 && G.houses[c.house] ? 'дом ' + G.houses[c.house].name : ''; } if (n.staff === 'guard') return 'Королевская стража'; return ''; }
+function npcSub(n) { if (n.sub) return typeof n.sub === 'function' ? n.sub(n) : n.sub; if (n.petition) return 'Проситель'; if (n.envoy) return 'Посол: ' + REALM_DEF[n.envoy.from].name; if (n.msgr) return 'Несёт письмо'; if (n.fam) return famRole(n.c); if (n.key.startsWith('ward')) return 'Воспитанник двора · дом ' + houseName(n.c.house); if (n.seat) { const c = n.c; return c.house >= 0 && G.houses[c.house] ? 'дом ' + G.houses[c.house].name : ''; } if (n.staff === 'guard') return 'Королевская стража'; return ''; }
 // ---------- HUD ----------
 function drawCourtTop() {
   const r = G.realms[0];
@@ -103,14 +107,14 @@ function drawCourtTop() {
   const gr = Math.round(G.court.grain || 0); spr('i_food', x, 7); txt(fmt(gr), x + 8, 6, gr < 300 ? UIC.warn : PAL.w); hit(x, 2, 40, 14, { id: 'tb_grain', tip: ['Амбары столицы: ' + gr + ' мер зерна (со слов сенешаля)', 'Запас на голодный год и для войска.'] }); x += 44;
   // date, clock, weather
   const Wt = weatherOf(), ds = dateStr(G.day), clk = clockStr(), night = isNight();
-  const endX = W - 218; let wn = Wt.n; let totW = tw(ds) + 6 + 8 + tw(clk) + 12 + 9 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = ''; totW -= tw(Wt.n, { f: 's' }); }
+  const endX = W - 234; let wn = Wt.n; let totW = tw(ds) + 6 + 8 + tw(clk) + 12 + 9 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = ''; totW -= tw(Wt.n, { f: 's' }); }
   const cx0 = Math.max(x + 6, endX - totW); txt(ds, cx0, 6, '#fff2c8'); let x3 = cx0 + tw(ds) + 6; spr(night ? 'i_moon' : 'i_sun', x3, 7); txt(clk, x3 + 8, 6, night ? '#a8c8ff' : '#ffe8a0'); x3 += 12 + tw(clk); spr('i_' + Wt.ic, x3, 7); if (wn) txt(wn, x3 + 9, 6, '#c8d8e8', { f: 's' });
   hit(cx0, 2, x3 + 30 - cx0, 14, { id: 'tb_date', tip: () => [ds + ', ' + clk, 'Погода: ' + Wt.n, 'При дворе день длится ' + Math.round(COURT_SPD[Math.max(1, G.speed)] / 60 * 10) / 10 + ' мин. Ночью можно лечь спать в покоях.'].concat(calendarTip()) });
-  let bx = W - 214;
+  let bx = W - 230;
   speedBtns(bx);
   bx += 62; const unread = (G.court.letters || []).filter(l => !l.read && l.arr <= G.day + G.frac).length;
-  const B = [['i_seal', 'Малый совет (K)', () => UI.open({ k: 'council' }), 'council'], ['i_flag', 'Войска и командиры (V)', () => UI.open({ k: 'cmd' }), 'cmd'], ['i_family', 'Семья и знатные дома (F)', () => UI.open({ k: 'dyn' }), 'dyn'], ['i_flask', 'Знания (J)', () => UI.open({ k: 'tech' }), 'tech'],
-    ['i_raven', 'Письма (L)' + (unread ? ' — непрочитанных: ' + unread : ''), () => UI.open({ k: 'letters' }), 'letters'], ['i_map', 'Карта королевства (Tab)', () => openMapFromCourt(), ''], ['i_book', 'Трактат «Искусство войны» (B)', () => UI.open({ k: 'book', ch: TUT.lastCh() }), 'book'], [Snd.muted() ? 'i_mute' : 'i_snd', 'Звук и музыка (M)', () => Snd.toggle(), ''], ['i_scroll', 'Меню (Esc)', () => UI.open({ k: 'menu' }), 'menu']];
+  const B = [['i_seal', 'Малый совет (K)', () => UI.open({ k: 'council' }), 'council'], ['i_flag', 'Войска и командиры (V)', () => UI.open({ k: 'cmd' }), 'cmd'], ['i_family', 'Семья и знатные дома (F)', () => UI.open({ k: 'dyn' }), 'dyn'], ['i_flask', 'Знания (J)', () => UI.open({ k: 'tech' }), 'tech'], ['i_wood', 'Замыслы и стройки (P)' + (projCur() ? ' — идёт: «' + PROJK[projCur().k].n + '»' : ''), () => UI.open({ k: 'proj' }), 'proj'],
+    ['i_raven', 'Письма (L)' + (unread ? ' — непрочитанных: ' + unread : ''), () => UI.open({ k: 'letters' }), 'letters'], G.visit ? ['i_map', 'Уехать отсюда (Tab)', () => visitLeave(), ''] : ['i_map', 'Карта королевства (Tab)', () => openMapFromCourt(), ''], ['i_book', 'Трактат «Искусство войны» (B)', () => UI.open({ k: 'book', ch: TUT.lastCh() }), 'book'], [Snd.muted() ? 'i_mute' : 'i_snd', 'Звук и музыка (M)', () => Snd.toggle(), ''], ['i_scroll', 'Меню (Esc)', () => UI.open({ k: 'menu' }), 'menu']];
   B.forEach(([ic, tip, f, k], i) => { btn('ctb' + i, bx + i * 16, 2, 15, 14, { ic, style: 'dark', tip, onClick: f, active: !!(k && UI.win && UI.win.k === k) }); if (k === 'letters' && unread) { rect(bx + i * 16 + 10, 1, 6, 6, PAL.o); rect(bx + i * 16 + 11, 2, 4, 4, '#e04030'); } });
 }
 function goldTip3() { const r = G.realms[0], C = G.court, t = C.seats.treasurer >= 0 ? charOf(C.seats.treasurer) : null;
@@ -125,13 +129,15 @@ function drawCourtHUD() {
   // room label
   if (COURT.room && NOW - COURT.roomT < 3.2) { const a = clamp(Math.min((NOW - COURT.roomT) * 3, (3.2 - (NOW - COURT.roomT)) * 2), 0, 1); ctx.globalAlpha = a; const w = tw(COURT.room) + 24; rect(8, 24, w, 15, 'rgba(20,14,12,0.82)'); strokeR(8, 24, w, 15, '#8a6a3a'); txt(COURT.room, 8 + w / 2, 28, PAL.y, { al: 'c' }); ctx.globalAlpha = 1; }
   // prompt
-  if (!courtBlocked() && P) { const t = nearestTarget(); let s = null; if (t) s = t.n ? 'Поговорить: ' + npcTitle(t.n) : t.a.id === 'council' && P.sit === LOCS.keep.spots.seat_king ? (meetingOpen() ? 'Совет: ждать или начать' : 'Совет: созвать или раздать дела') : t.a.label; else if (P.sit) s = P.sit === LOCS.keep.spots.throne ? 'Встать с трона' : 'Встать';
+  if (!courtBlocked() && P) { const t = nearestTarget(); let s = null; if (t) s = t.e ? t.label : t.n ? 'Поговорить: ' + npcTitle(t.n) : t.a.id === 'council' && P.sit === LOCS.keep.spots.seat_king ? (meetingOpen() ? 'Совет: ждать или начать' : 'Совет: созвать или раздать дела') : t.a.label; else if (P.sit) s = P.sit === LOCS.keep.spots.throne ? 'Встать с трона' : 'Встать';
     if (s) { const w = tw(s) + 30; const x = W / 2 - w / 2, y = H - 30; rect(x, y, w, 16, 'rgba(20,14,12,0.85)'); strokeR(x, y, w, 16, '#8a6a3a'); rect(x + 4, y + 3, 11, 10, '#e8d5a8'); txt('E', x + 7, y + 5, '#3a2614'); txt(s, x + 20, y + 5, '#f4ecd8'); hit(x, y, w, 16, { id: 'cprompt', cursor: true, onClick: () => { if (t) interact(t); else standUp(); } }); } }
   // hint line
   const L = curLoc(); let hint = '';
   if (L.out && isNight() && COURT.room === 'Сад') hint = 'Shift — красться: так можно подслушать ночной разговор.';
   if (COURT.ear && COURT.ear.prog > 0 && !COURT.ear.done) hint = 'Не выходите из тени… Ещё немного.';
   if (hint) { const w = tw(hint, { f: 's' }) + 10; rect(8, H - 14, w, 11, 'rgba(20,14,12,0.8)'); txt(hint, 13, H - 11, '#c8d8e8', { f: 's' }); }
+  if (G.visit) drawVisitPanel();
+  for (const f of HUD_EXT) f();
   if (!DLG.open()) drawFeed(); drawStatus(); drawPausedBadge();
 }
 // ---------- keys / update ----------
@@ -143,14 +149,14 @@ function courtKeys() {
     if (DLG.open() && !UI.modalOpen()) { DLG.key(k); continue; }
     if (c === 'Escape') { if (UI.win) UI.shut(); else if (!blocked) UI.open({ k: 'menu' }); continue; }
     if (blocked) continue;
-    const winK = { KeyK: 'council', KeyV: 'cmd', KeyF: 'dyn', KeyJ: 'tech', KeyL: 'letters', KeyR: 'realm', KeyN: 'diplo' }[c];
+    const winK = { KeyK: 'council', KeyV: 'cmd', KeyF: 'dyn', KeyJ: 'tech', KeyL: 'letters', KeyR: 'realm', KeyN: 'diplo', KeyP: 'proj' }[c];
     if (winK) { if (UI.win && UI.win.k === winK) UI.shut(); else if (winK === 'diplo') UI.open({ k: 'diplo', t: firstForeign() }); else UI.open({ k: winK }); continue; }
     if (c === 'KeyB') { if (UI.win && UI.win.k === 'book') UI.shut(); else UI.open({ k: 'book', ch: TUT.lastCh() }); continue; }
     if (UI.win) continue;
     if (c === 'KeyE' || c === 'Enter' || c === 'NumpadEnter') { const t = nearestTarget(); if (t) interact(t); else if (COURT.p.sit) standUp(); }
     else if (c === 'Space') setSpeed(G.speed > 0 ? 0 : (UI.lastSpeed || 1));
     else if (c === 'Digit1' || c === 'Numpad1') setSpeed(1); else if (c === 'Digit2' || c === 'Numpad2') setSpeed(2); else if (c === 'Digit3' || c === 'Numpad3') setSpeed(3); else if (c === 'Digit0' || c === 'Numpad0') setSpeed(0);
-    else if (c === 'Tab') openMapFromCourt();
+    else if (c === 'Tab') { if (G.visit) visitLeave(); else openMapFromCourt(); }
     else if (c === 'KeyZ') { COURT.Z = COURT.Z === 2 ? 1 : 2; snapCam(); }
     else if (c === 'KeyH' || c === 'F1') UI.alert('help');
   }
@@ -160,11 +166,11 @@ function courtKeys() {
 const NPC_SPDK = [1, 1, 1.4, 2.2];
 function courtUpdate() {
   const dt = Math.min(DT, 0.05), run = !UI.paused() && !DLG.open() && !COURT.fade;
-  if (run) { worldAdvance(dt / COURT_SPD[G.speed]); if (SCREEN !== 'court') return; }
+  if (run) { let tk = 1; for (const f of TIMEK_EXT) tk = Math.min(tk, f() || 1); worldAdvance(dt * tk / COURT_SPD[G.speed]); if (SCREEN !== 'court') return; }
   const ha = G.day * 24 + hourAbs(); if (COURT.lastHA !== undefined && ha - COURT.lastHA > 0.75) npcSnap(false); COURT.lastHA = ha;
-  const hh = Math.floor(hourAbs() * 2); if (hh !== COURT.lastHH) { COURT.lastHH = hh; try { courtHalfHour(hh / 2); } catch (e) { onErr(e); } }
-  if (run) { const k = NPC_SPDK[G.speed] || 1; for (const n of COURT.npcs) { schedTick(n); npcUpdate(n, dt * k); } aniUpdate(dt); partsUpdate(dt); eavesdropUpdate(dt); playerUpdate(dt); }
-  if (!COURT.fade) { councilUpdate(); audienceAuto(); }
+  const hh = Math.floor(hourAbs() * 2), home = !G.visit; if (hh !== COURT.lastHH) { COURT.lastHH = hh; if (home) try { courtHalfHour(hh / 2); } catch (e) { onErr(e); } }
+  if (run) { const k = NPC_SPDK[G.speed] || 1; for (const n of COURT.npcs) { schedTick(n); npcUpdate(n, dt * k); } aniUpdate(dt); partsUpdate(dt); for (const f of UPD_EXT) f(dt); if (home) eavesdropUpdate(dt); else siteUpdate(dt); playerUpdate(dt); }
+  if (!COURT.fade && home) { councilUpdate(); audienceAuto(); }
   else if (COURT.p) COURT.p.moving = 0;
   camUpdate(dt);
   if (COURT.fade) { const ph = (NOW - COURT.fadeT) / 0.22; if (ph >= 1 && COURT.fadeFn) { const f = COURT.fadeFn; COURT.fadeFn = null; try { f(); } catch (e) { onErr(e); } } COURT.fade = ph >= 2 ? 0 : Math.max(0.001, ph); }
@@ -181,11 +187,12 @@ function drawCourt() {
 function courtSyncVisual() { const r = G.realms[0], C = G.court; COURT.goldPiles = clamp(Math.round(r.gold / 90), 0, 10); COURT.sacks = clamp(Math.round((C.grain || 0) / 250), 0, 6);
   const king = charOf(G.player.char), kids = (king.kids || []).map(charOf).filter(c => c && c.alive); COURT.hasBaby = kids.some(c => c.age < 3) ? 1 : 0; COURT.hasKids = kids.some(c => c.age >= 3 && c.age < 12) ? 1 : 0; }
 function courtEnter(spName) {
-  buildCourt(); const king = charOf(G.player.char);
+  if (G.visit) visitCleanup(); buildCourt(); projApply(); const king = charOf(G.player.char);
   COURT.p = COURT.p || { x: 0, y: 0, dir: 'down', f: 0, moving: 0, sit: null, lie: 0, key: 'king' }; COURT.p.c = king; COURT.p.sit = null; COURT.p.lie = 0;
   courtPopulate(); const sp = spotOf(spName || 'throne_front') || LOCS.keep.spots.throne_front; COURT.loc = sp.loc; COURT.p.x = sp.x; COURT.p.y = sp.y; COURT.p.dir = sp.dir;
   COURT.parts = []; COURT.path = null; COURT.onArrive = null; COURT.room = ''; COURT.fade = 0; COURT.sleepT = 0; SCREEN = 'court'; snapCam(); courtSyncVisual();
   COURT.lastHA = G.day * 24 + hourAbs(); COURT.lastHH = Math.floor(hourAbs() * 2); Snd.music('auto'); UI.win = null; G.atCourt = 1; if (!G.speed) G.speed = UI.lastSpeed || 1; // life at court goes on by itself
+  for (const f of ENTER_EXT) try { f(); } catch (e) { onErr(e); }
 }
 // ---------- simple acts & small talk ----------
 function doAct(a) {
@@ -206,18 +213,18 @@ function doAct(a) {
     case 'kitchen': DLG.say(null, R.pick(['Из кухни тянет луком, дымом и свежим хлебом. Повариха гремит котлами.', 'На кухне ощипывают кур. Кто-то напевает старую песню о походе на север.', 'Поварята при виде короля роняют половник.'])); break;
     case 'smithy': DLG.say(null, 'Кузнец бьёт молотом по раскалённой полосе. ' + (hasTech('mail') ? 'Вдоль стены висят новые кольчуги — по новому способу, частым плетением.' : 'Наконечники копий, подковы, гвозди — кузня работает на войско.')); break;
     case 'barracks': barracksAct(); break;
-    case 'dummy': if (P.practiceT && NOW - P.practiceT < 1.2) break; P.practiceT = NOW; P.dir = 'up'; Snd.sfx('swish'); setTimeout(() => Snd.sfx('thud'), 180); COURT.parts.push({ k: 'puff', x: a.x, y: a.y - 10, vx: 0, vy: -6, t: 0, life: 0.6 });
+    case 'dummy': if (P.c && P.c.wound > G.day) { { const n = P.c.wound - G.day; UI.toast('Рана ещё не зажила: меч подождёт (ещё ' + n + ' ' + plural(n, 'день', 'дня', 'дней') + ').'); } break; } if (P.practiceT && NOW - P.practiceT < 1.2) break; P.practiceT = NOW; P.dir = 'up'; Snd.sfx('swish'); setTimeout(() => Snd.sfx('thud'), 180); COURT.parts.push({ k: 'puff', x: a.x, y: a.y - 10, vx: 0, vy: -6, t: 0, life: 0.6 });
       if (!G.court.drillDay || G.court.drillDay !== G.day) { G.court.drillDay = G.day; const k = charOf(G.player.char); k.mx = (k.mx || 0) + 1; if (k.mx >= 6) { k.mx = 0; k.mar = Math.min(20, k.mar + 1); UI.toast('Рука крепнет: Меч короля +1'); } else UI.toast('Упражнение с мечом. Солдаты одобрительно гудят.'); } break;
     case 'fountain': DLG.say(null, 'Вода в фонтане холодная и прозрачная. На дне блестят монеты — придворные бросают их на счастье.', { choices: [{ t: 'Бросить монету (1 зол.)', fx: () => { G.realms[0].gold -= 1; Snd.sfx('coin'); UI.toast(R.pick(['Монета булькнула. Говорят, к удаче.', 'Монета легла рядом с чужими желаниями.', 'Кто-то из служанок хихикнул за кустами.'])); } }, { t: 'Уйти', fx: () => { } }], esc: 1 }); break;
     case 'well': DLG.say(null, R.pick(['Глубокий колодец. Ведро скрипит на вороте.', 'Вода в колодце сладкая — замок выдержит долгую осаду.'])); break;
-    case 'stairs': DLG.say(null, 'Лестница ведёт в верхние покои, где живут придворные.'); break;
     case 'stall': stallAct(); break;
-    default: UI.toast(a.label);
+    default: if (ACTS_EXT[a.id]) ACTS_EXT[a.id](a); else UI.toast(a.label);
   }
 }
 function talkTo(n) {
   const P = COURT.p; if (P.sit && n.seat === undefined && !n.petition && !n.envoy) standUp();
   if (!n.sit && !n.path) { const dx = P.x - n.x, dy = P.y - n.y; n.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); }
+  if (n.talk) return n.talk(n);
   if (n.msgr) return talkMessenger(n); if (n.envoy) return talkEnvoy(n); if (n.petition) return talkPetitioner(n);
   if (n.seat) return talkSeat(n); if (n.fam) return talkFamily(n); if (n.key.startsWith('ward')) return talkWard(n);
   if (n.vis) return talkVisitor(n);
@@ -241,8 +248,8 @@ function bedDialog() { const h = hourAbs();
   if (h >= 18.5 || h < 6) ch.push({ t: 'Лечь спать до утра', fx: () => sleepUntil(6.5 + 24 * (h >= 6 ? 1 : 0)) });
   ch.push({ t: 'Отдохнуть пару часов', fx: () => sleepUntil(h + 2) }); ch.push({ t: 'Не сейчас', fx: () => { } });
   DLG.say(null, h >= 18.5 || h < 6 ? 'Королевская постель застелена. В камине догорают угли.' : 'Ещё светло. Спать днём — дурная примета для короля, но отдохнуть можно.', { choices: ch, esc: ch.length - 1 }); }
-function sleepUntil(tgtAbs) { // tgtAbs: hour in 5..29+ space relative to today
-  const L = LOCS.keep; sitAt(L.spots.bed_king); COURT.sleepT = NOW; COURT.sleepTo = G.day + (tgtAbs - 5) / 24; G.speed = G.speed || 1; Snd.sfx('paper'); }
+function sleepUntil(tgtAbs, sp) { // tgtAbs: hour in 5..29+ space relative to today; sp: the bed (the king's own by default)
+  sitAt(sp || LOCS.keep.spots.bed_king); COURT.sleepT = NOW; COURT.sleepTo = G.day + (tgtAbs - 5) / 24; G.speed = G.speed || 1; Snd.sfx('paper'); }
 function drawSleep() { // advance the world quickly while the king sleeps; stops for events
   const tgt = COURT.sleepTo, cur = G.day + G.frac; let a = clamp((NOW - COURT.sleepT) * 2, 0, 0.85);
   if (cur < tgt && !UI.modalOpen() && !DLG.open()) { const step = Math.min(0.004, tgt - cur); for (let i = 0; i < 3 && G.day + G.frac < tgt && !UI.modalOpen(); i++) worldAdvance(step); }
