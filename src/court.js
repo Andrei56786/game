@@ -30,7 +30,7 @@ function nearFree(L, tx, ty) { if (!solidAt(L, tx, ty)) return [tx, ty]; for (le
 // npc: { key, c (char or pseudo), loc, x, y (feet px), dir, path, goal, state, f, sched, away, sit, bub, bubT, spd }
 function mkNpc(key, c, o) { const prev = COURT.old && COURT.old.get(key); if (prev) { prev.c = c; Object.assign(prev, o || {}); COURT.npcs.push(prev); return prev; } const n = Object.assign({ fresh: 1,  key, c, loc: 'keep', x: 0, y: 0, dir: 'down', path: null, goal: null, state: 'idle', f: 0, sched: null, away: 1, sit: null, bub: null, bubT: 0, spd: 46 + (c.age > 60 ? -10 : 0), idleT: 0, seen: {} }, o || {}); COURT.npcs.push(n); return n; }
 function npcByKey(k) { return COURT.npcs.find(n => n.key === k); }
-function spotOf(name) { if (!name) return null; for (const id in LOCS) { const s = LOCS[id].spots[name]; if (s) return s; } return null; }
+function spotOf(name) { if (!name) return null; const site = curSite(); for (const id in LOCS) { const L = LOCS[id]; if (siteOf(L) !== site) continue; const s = L.spots[name]; if (s) return s; } return null; }
 function npcPlace(n, sp) { n.loc = sp.loc; n.x = sp.x; n.y = sp.y; n.dir = sp.dir; n.path = null; }
 function npcGoTo(n, spName, then) { const sp = spotOf(spName); if (sp) npcGoToSp(n, sp, then); }
 function npcGoToSp(n, sp, then) { // walk to a spot (across locations via doors); away NPCs re-appear where they left
@@ -38,7 +38,7 @@ function npcGoToSp(n, sp, then) { // walk to a spot (across locations via doors)
   if (n.away) { const from = n.awaySp || spotOf(n.home || 'stairs') || sp; npcPlace(n, from); n.away = 0; }
   npcRepath(n); }
 function npcRepath(n) { const sp = n.goal && n.goal.sp; if (!sp) return; const L = LOCS[n.loc]; let tx, ty;
-  if (sp.loc !== n.loc) { const d = L.doors.find(d => d.to === sp.loc); if (!d) { npcPlace(n, sp); n.path = []; return; } tx = d.x0; ty = d.y1; n.goal.door = d; } else { [tx, ty] = nearFree(L, Math.floor(sp.x / CT), Math.floor(sp.y / CT)); n.goal.door = null; }
+  if (sp.loc !== n.loc) { const d = L.doors.find(d => d.to === sp.loc) || doorToward(n.loc, sp.loc); if (!d) { npcPlace(n, sp); n.path = []; return; } tx = d.x0; ty = d.y1; n.goal.door = d; } else { [tx, ty] = nearFree(L, Math.floor(sp.x / CT), Math.floor(sp.y / CT)); n.goal.door = null; }
   const [sx, sy] = nearFree(L, Math.floor(n.x / CT), Math.floor(n.y / CT)); n.path = castar(L, sx, sy, tx, ty) || []; n.pi = 0; }
 function npcArrive(n) { const g = n.goal; if (!g) return;
   if (g.door) { const d = g.door, L2 = LOCS[d.to]; n.loc = d.to; n.x = d.ax; n.y = d.ay; n.dir = d.dir; npcRepath(n); return; }
@@ -54,7 +54,7 @@ function npcUpdate(n, dt) {
   if (n.wander && --n.idleT < 0) { const [x0, y0, x1, y1] = n.wander; const L = LOCS[n.loc]; const tx = R.i(x0, x1), ty = R.i(y0, y1); if (!solidAt(L, tx, ty)) { const [sx, sy] = [Math.floor(n.x / CT), Math.floor(n.y / CT)]; const p = castar(L, sx, sy, tx, ty, 600); if (p) { n.path = p; n.pi = 0; n.goal = { sp: { loc: n.loc, x: tx * CT + 8, y: ty * CT + 12, dir: R.pick(DIRS) } }; } } n.idleT = R.i(120, 420); }
 }
 // schedule: list of [hour, spot] ; spot 'wander:x0,y0,x1,y1@loc' supported
-function schedTarget(n) { const S = n.sched; if (!S) return null; const h = hourAbs(); let cur = S[0]; for (const e of S) if (e[0] <= h) cur = e; if (n.override && n.override.until > h && n.override.day === G.day) return n.override.spot; return cur[1]; }
+function schedTarget(n) { const S = n.sched; if (!S) return null; const h = hourAbs(); let cur = S[0]; for (const e of S) if (e[0] <= h) cur = e; if (n.override && n.override.until > h && n.override.day === G.day) return n.override.spot; return cur[1] === 'stairs' && n.bed && spotOf(n.bed) ? n.bed : cur[1]; }
 function schedTick(n) { if (n.hold) return; const t = schedTarget(n); if (!t || t === n.curT) return; n.curT = t; n.wander = null;
   if (t.startsWith('wander:')) { const [rc, loc] = t.slice(7).split('@'); const r = rc.split(',').map(Number); const sp = { loc, x: Math.round((r[0] + r[2]) / 2) * CT + 8, y: Math.round((r[1] + r[3]) / 2) * CT + 12, dir: 'down' }; npcGoToSp(n, sp, m => { m.wander = r; m.idleT = 20; }); return; }
   npcGoTo(n, t); }
@@ -86,7 +86,7 @@ const SERVANTS = [['cook', 'cook', 0, 48, 'Марта-повариха', 'kitche
   ['master', 'knight', 0, 44, 'Мастер над оружием', 'barracks1'], ['soldier', 'guard', 0, 23, 'Солдат', 'barracks1'], ['soldier2', 'guard', 0, 27, 'Лучник', 'barracks2'], ['merchant', 'merchant', 0, 46, 'Торговец Ансельм', 'gate_out'], ['page', 'servant', 0, 13, 'Паж Робин', 'stairs']];
 const GUARDS = [['guard_dl', 'guard_dl'], ['guard_dr', 'guard_dr'], ['guard_hl', 'guard_hl'], ['guard_hr', 'guard_hr'], ['gate_l', 'gate_l'], ['gate_r', 'gate_r']];
 function pseudoChar(i, role, fem, age, name) { return { id: 7000 + i, name, role, cul: 'K', fem, age, realm: 0, pseed: ((G.seed * 31 + i * 7919) >>> 0) % 1e9 + 1, traits: [], alive: 1, prison: -1, pseudo: 1 }; }
-function courtPopulate() {
+function courtPopulate() { if (G.visit) return;
   COURT.old = new Map(COURT.npcs.map(n => [n.key, n])); const vis = COURT.npcs.filter(n => n.visitor); COURT.npcs = []; const C = G.court; const firstAni = !COURT.ani || !COURT.ani.length;
   // family
   const king = charOf(G.player.char);
@@ -98,19 +98,20 @@ function courtPopulate() {
   // staff
   SERVANTS.forEach((d, i) => { const c = pseudoChar(i, d[1], d[2], d[3], d[4]); mkNpc('srv_' + d[0], c, { sched: SCHED[d[0]], home: d[5], staff: d[0] }); });
   GUARDS.forEach((d, i) => { const c = pseudoChar(40 + i, 'guard', 0, 22 + i * 3, 'Стражник'); const n = mkNpc('grd_' + d[0], c, { staff: 'guard', post: d[1] }); npcPlace(n, spotOf(d[1])); n.away = 0; });
+  homeExtras(); assignBeds();
   COURT.npcs.push(...vis); COURT.old = null;
   // animals
   if (firstAni) { COURT.ani = []; } const A = (kind, loc, rect, col, n) => { for (let k = 0; k < (n || 1); k++) COURT.ani.push({ kind, loc, r: rect, x: (rect[0] + R.f() * (rect[2] - rect[0] + 1)) * CT, y: (rect[1] + R.f() * (rect[3] - rect[1] + 1)) * CT, tx: 0, ty: 0, t: R.f() * 3, flip: R.f() < 0.5, col, f: 0 }); };
   if (firstAni) { A('horse', 'yard', [2, 23, 9, 25], 'brown'); A('horse', 'yard', [2, 23, 9, 25], 'dwood'); A('horse', 'yard', [2, 23, 9, 25], 'white');
   A('hen', 'yard', [9, 34, 22, 35], null, 4); A('pigeon', 'yard', [19, 17, 30, 24], null, 4); A('pigeon', 'yard', [8, 8, 12, 12], null, 2);
-  A('dog', 'yard', [20, 12, 30, 30], null); A('cat', 'keep', [14, 8, 33, 26], null); }
+  A('dog', 'yard', [20, 12, 30, 30], null); A('cat', 'keep', [14, 8, 33, 26], null); homeAnimals(A); }
   npcSnap(true);
 }
 function npcSnap(onlyFresh) { // jump NPCs straight to where their schedule says they should be (on entering court / after time skips)
-  for (const n of COURT.npcs) { if (onlyFresh && !n.fresh) continue; n.fresh = 0; if (n.post) { npcPlace(n, spotOf(n.post)); n.away = 0; continue; } if (n.visitor) continue;
+  for (const n of COURT.npcs) { if (onlyFresh && !n.fresh) continue; n.fresh = 0; if (n.follow) continue; if (n.post) { npcPlace(n, spotOf(n.post)); n.away = 0; continue; } if (n.visitor) continue;
     n.curT = null; n.hold = 0; schedTick(n); const g = n.goal; if (!g || !g.sp) continue;
     if (g.sp.away) { n.away = 1; n.awaySp = g.sp; n.goal = null; n.path = null; }
-    else { npcPlace(n, g.sp); n.away = 0; if (g.sp.sx !== undefined) { n.x = g.sp.sx; n.y = g.sp.sy; } n.sit = g.sp.sit ? g.sp : null; n.lie = g.sp.lie ? 1 : 0; n.path = null; n.goal = null; n.state = 'idle'; if (g.then) g.then(n); } }
+    else { npcPlace(n, g.sp); n.away = 0; if (g.sp.sx !== undefined) n.x = g.sp.sx; if (g.sp.sy !== undefined) n.y = g.sp.sy; n.sit = g.sp.sit ? g.sp : null; n.lie = g.sp.lie ? 1 : 0; n.path = null; n.goal = null; n.state = 'idle'; if (g.then) g.then(n); } }
 }
 // ---------- player ----------
 const MOVEK = { KeyW: [0, -1], ArrowUp: [0, -1], KeyS: [0, 1], ArrowDown: [0, 1], KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0] };
@@ -124,7 +125,7 @@ function playerUpdate(dt) {
   if (dx || dy) { COURT.path = null; COURT.onArrive = null; if (P.sit) standUp(); }
   else if (COURT.path && !courtBlocked()) { const pt = COURT.path[0]; if (!pt) { COURT.path = null; const f = COURT.onArrive; COURT.onArrive = null; if (f) f(); } else { const gx = pt[0] * CT + 8, gy = pt[1] * CT + 11, ex = gx - P.x, ey = gy - P.y, d = Math.hypot(ex, ey); if (d < 2) COURT.path.shift(); else { dx = ex / d; dy = ey / d; } } }
   if (P.sit) return;
-  if (dx || dy) { const n = Math.hypot(dx, dy), sp = (COURT.sneak ? 34 : 80) * dt; const vx = dx / n * sp, vy = dy / n * sp;
+  if (dx || dy) { const n = Math.hypot(dx, dy), sp = (COURT.sneak ? 34 : 80) * (P.c && P.c.wound > G.day ? 0.62 : 1) * dt; const vx = dx / n * sp, vy = dy / n * sp;
     if (canStand(L, P.x + vx, P.y)) P.x += vx;
     if (canStand(L, P.x, P.y + vy)) P.y += vy;
     P.f += sp; P.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); P.moving = 1;
@@ -138,7 +139,7 @@ function playerUpdate(dt) {
   if (COURT.autoLock && !L.acts.some(a => a.auto && Math.hypot(a.x - P.x, a.y - P.y) < 30)) COURT.autoLock = 0;
   const rn = roomName(L, tx, ty); if (rn !== COURT.room) { COURT.room = rn; COURT.roomT = NOW; if (typeof TUT !== 'undefined') TUT.ev('room', rn); }
 }
-function goThrough(d) { if (COURT.fade > 0) return; COURT.path = null; fadeTo(() => { COURT.loc = d.to; const P = COURT.p; P.x = d.ax; P.y = d.ay; P.dir = d.dir; snapCam(); COURT.parts = []; Snd.sfx('door'); }); }
+function goThrough(d) { if (COURT.fade > 0) return; for (const f of DOOR_EXT) if (f(d)) return; COURT.path = null; fadeTo(() => { COURT.loc = d.to; const P = COURT.p; P.x = d.ax; P.y = d.ay; P.dir = d.dir; snapCam(); COURT.parts = []; Snd.sfx('door'); }); }
 function fadeTo(fn) { COURT.fade = 0.001; COURT.fadeT = NOW; COURT.fadeFn = fn; }
 function sitAt(sp, look) { const P = COURT.p; P.x = sp.sx !== undefined ? sp.sx : sp.x; P.y = sp.sy !== undefined ? sp.sy : sp.y; P.dir = sp.dir; P.sit = sp; P.lie = sp.lie ? 1 : 0; COURT.path = null; }
 function standUp() { const P = COURT.p; if (!P.sit) return; const L = curLoc(); const sp = P.sit; P.sit = null; P.lie = 0; let [tx, ty] = nearFree(L, Math.floor(sp.x / CT), Math.floor(sp.y / CT) + (sp.dir === 'down' ? 1 : 0)); if (sp === L.spots.throne) { tx = 23; ty = 7; } if (sp === L.spots.seat_king) { tx = 38; ty = 9; } P.x = tx * CT + 8; P.y = ty * CT + 11; if (COURT.audience) endAudience(); }
@@ -146,28 +147,30 @@ function standUp() { const P = COURT.p; if (!P.sit) return; const L = curLoc(); 
 function courtClick(c) {
   if (courtBlocked()) return; const P = COURT.p, L = curLoc(); const wx = COURT.cam.x + c.ux / COURT.Z, wy = COURT.cam.y + c.uy / COURT.Z;
   if (c.b === 2) { COURT.path = null; return; }
-  const t = pickTarget(wx, wy); if (t) { const tx0 = t.n ? t.n.x : t.a.x, ty0 = t.n ? t.n.y : t.a.y; if (Math.hypot(tx0 - P.x, ty0 - P.y) < (t.n ? 26 : t.a.r + 4)) { interact(t); return; } walkTo(tx0, ty0, () => interact(t)); return; }
+  const t = pickTarget(wx, wy); if (t && t.e) { t.go(); return; } if (t) { const tx0 = t.n ? t.n.x : t.a.x, ty0 = t.n ? t.n.y : t.a.y; if (Math.hypot(tx0 - P.x, ty0 - P.y) < (t.n ? (t.n.talkR || 24) + 2 : t.a.r + 4)) { interact(t); return; } walkTo(tx0, ty0, () => interact(t)); return; }
   walkTo(wx, wy, null);
 }
 function walkTo(wx, wy, then) { const L = curLoc(), P = COURT.p; if (P.sit) standUp(); const [tx, ty] = nearFree(L, Math.floor(wx / CT), Math.floor(wy / CT)); const p = castar(L, Math.floor(P.x / CT), Math.floor((P.y - 2) / CT), tx, ty); if (!p) { UI.toast('Туда не пройти.'); return; } COURT.path = p; COURT.onArrive = then; COURT.dest = [tx, ty, NOW]; }
 function pickTarget(wx, wy) { // something under the cursor: npc first, then act
+  for (const f of PICK_EXT) { const t = f(wx, wy); if (t) return t; }
   const L = curLoc(); let best = null, bd = 1e9;
   for (const n of COURT.npcs) { if (n.loc !== COURT.loc || n.away || !talkable(n)) continue; if (wx > n.x - 8 && wx < n.x + 8 && wy > n.y - 30 && wy < n.y + 2) { const d = Math.abs(wy - n.y + 14); if (d < bd) { bd = d; best = { n }; } } }
   if (best) return best; for (const a of L.acts) { if (a.auto || (a.show && !a.show())) continue; if (Math.hypot(a.x - wx, a.y - wy) < Math.max(14, a.r * 0.7)) return { a }; } return null; }
-function talkable(n) { return n.staff !== undefined || n.seat || n.fam || n.c.role === 'envoy' || n.petition || n.c.role === 'child' || n.key.startsWith('ward') || n.key.startsWith('kid') || n.msgr; }
+function talkable(n) { return n.staff !== undefined || n.seat || n.fam || n.c.role === 'envoy' || n.petition || n.c.role === 'child' || n.key.startsWith('ward') || n.key.startsWith('kid') || n.msgr || !!n.talk; }
 function nearestTarget() { // for the E prompt
   const P = COURT.p, L = curLoc(); let best = null, bd = 1e9; const fx = P.x + ({ left: -8, right: 8 }[P.dir] || 0), fy = P.y - 6 + ({ up: -8, down: 6 }[P.dir] || 0);
-  for (const n of COURT.npcs) { if (n.loc !== COURT.loc || n.away || !talkable(n)) continue; const d = Math.hypot(n.x - fx, n.y - 6 - fy); if (d < 24 && d < bd) { bd = d; best = { n, d }; } }
+  for (const n of COURT.npcs) { if (n.loc !== COURT.loc || n.away || !talkable(n)) continue; const d = Math.hypot(n.x - fx, n.y - 6 - fy); if (d < (n.talkR || 24) && d < bd) { bd = d; best = { n, d }; } }
   for (const a of L.acts) { if (a.auto || (a.show && !a.show())) continue; const d = Math.hypot(a.x - P.x, a.y - P.y + 4); if (d < a.r && d * 0.9 < bd) { bd = d * 0.9; best = { a, d }; } }
+  for (const f of TARGET_EXT) { const t = f(P); if (t && t.d < bd) { bd = t.d; best = t; } }
   return best; }
-function interact(t) { if (!t) return; if (t.n) talkTo(t.n); else doAct(t.a); }
+function interact(t) { if (!t) return; if (t.e) t.go(); else if (t.n) talkTo(t.n); else doAct(t.a); }
 // ---------- animals ----------
 const ANISP = { horse: 12, dog: 44, cat: 20, hen: 11, pigeon: 9 };
 function lineFree(L, x0, y0, x1, y1) { const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 6)); for (let i = 1; i <= n; i++) if (solidAt(L, Math.floor((x0 + (x1 - x0) * i / n) / CT), Math.floor((y0 + (y1 - y0) * i / n) / CT))) return false; return true; }
 function aniUpdate(dt) {
   const P = COURT.p, L = curLoc();
   for (const a of COURT.ani) {
-    if (a.loc !== COURT.loc) continue;
+    if (a.loc !== COURT.loc || a.game) continue;
     const pd = P ? Math.hypot(P.x - a.x, P.y - a.y) : 999;
     if (a.kind === 'pigeon') {
       if (a.fly > 0) { a.fly -= dt; a.x += a.vx * dt; a.y += a.vy * dt; a.h = Math.min(34, (a.h || 0) + 46 * dt); a.f += dt * 40; continue; }
@@ -182,8 +185,9 @@ function aniUpdate(dt) {
   }
 }
 function drawAni(g, a) {
+  if (a.st === 'dead') { const s = animalSprite(a.kind, 0, a.flip, a.col || null), oy = Math.round(s.height * 0.55) - 3; if (!a.h) { g.fillStyle = 'rgba(90,16,16,0.55)'; g.fillRect(Math.round(a.x - 4), Math.round(a.y - 1), 8, 2); } g.save(); g.translate(Math.round(a.x), Math.round(a.y - (a.h || 0) + oy)); g.scale(1, -1); g.drawImage(s, -Math.round(s.width / 2), 0); g.restore(); return; }
   const fr = (a.moving || a.fly > 0 || a.h > 0) ? (Math.floor(a.f / (a.kind === 'pigeon' ? 3 : 5)) % 2) : (a.peck ? 1 : 0);
-  const s = animalSprite(a.kind, fr, a.flip, a.kind === 'horse' ? a.col : null), x = Math.round(a.x - s.width / 2), y = Math.round(a.y - s.height - (a.h || 0));
+  const s = animalSprite(a.kind, fr, a.flip, a.col || null), x = Math.round(a.x - s.width / 2), y = Math.round(a.y - s.height - (a.h || 0));
   g.drawImage(shadowSpr(s.width > 20 ? 22 : 9), Math.round(a.x - (s.width > 20 ? 11 : 4.5)), Math.round(a.y - 2)); g.drawImage(s, x, y);
 }
 const SHSPR = {};
@@ -227,6 +231,6 @@ function lightSpr(col) { if (LSPR[col]) return LSPR[col]; const c = document.cre
 function dayK() { const h = hourAbs(); return h < 6 || h > 20.5 ? 0 : h < 8 ? (h - 6) / 2 : h > 18.5 ? (20.5 - h) / 2 : 1; }
 function weatherDim() { const k = G.weather ? G.weather.k : 'clear'; return { cloud: 0.9, rain: 0.78, storm: 0.62, fog: 0.86, snow: 0.9, blizzard: 0.72 }[k] || 1; }
 // ---------- camera ----------
-function camTarget() { const P = COURT.p, L = curLoc(), vw = W / COURT.Z, vh = (H - 19) / COURT.Z; let x = P.x - vw / 2, y = P.y - 16 - vh / 2 - 19 / COURT.Z; x = clamp(x, 0, Math.max(0, L.w * CT - vw)); y = clamp(y, -19 / COURT.Z, Math.max(0, L.h * CT - H / COURT.Z)); return [x, y]; }
+function camTarget() { const P = COURT.p, L = curLoc(), vw = W / COURT.Z, vh = (H - 19) / COURT.Z; let x = P.x - vw / 2, y = P.y - 16 - vh / 2 - 19 / COURT.Z; const mw = L.w * CT, mh = L.h * CT; x = mw < vw ? (mw - vw) / 2 : clamp(x, 0, mw - vw); y = mh < vh ? mh / 2 - (H + 19) / (2 * COURT.Z) : clamp(y, -19 / COURT.Z, Math.max(0, mh - H / COURT.Z)); return [x, y]; }
 function snapCam() { if (!COURT.p) return; const [x, y] = camTarget(); COURT.cam.x = x; COURT.cam.y = y; }
 function camUpdate(dt) { const [x, y] = camTarget(), k = 1 - Math.exp(-dt * 7); COURT.cam.x += (x - COURT.cam.x) * k; COURT.cam.y += (y - COURT.cam.y) * k; if (Math.abs(x - COURT.cam.x) < 0.05) COURT.cam.x = x; if (Math.abs(y - COURT.cam.y) < 0.05) COURT.cam.y = y; }
