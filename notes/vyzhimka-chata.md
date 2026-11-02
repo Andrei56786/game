@@ -466,7 +466,7 @@ node tools/drive.mjs "file:///data/game3/dist/index.html#court" tests/deep3.json
 
 | Что | Путь |
 |---|---|
-| Актуальная игра (v3.3: замок, охота и поездки) | `/data/slovo-korolya-v3.3.html` (~1.4 МБ) |
+| Актуальная игра (v3.3: замок, охота и поездки) | `/data/slovo-korolya-v3.3.html` (~1.5 МБ) |
 | v3.2 (большая карта и экономика) | `/data/slovo-korolya-v3.2.html` (~1.1 МБ) |
 | v3.1 | `/data/slovo-korolya-v3.1.html` |
 | v3 (этапы 1–2 + правки) | `/data/slovo-korolya-v3.html` (~990 КБ) |
