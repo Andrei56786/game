@@ -68,7 +68,7 @@ function drawSettWin(w) {
   if (typeof settEnterBtn === 'function') settEnterBtn(sid, X, Y, WW, near, host);
   const T = own ? ['Рынок', 'Набор', 'Гарнизон', 'Товары', 'Сведения'] : host ? ['Осада', 'Товары', 'Сведения'] : S.ctrl === 5 ? ['Рынок', 'Осада', 'Товары', 'Сведения'] : ['Рынок', 'Товары', 'Сведения']; if (UI.tab >= T.length) UI.tab = 0;
   tabs(X + 12, Y + 44, T, T.length > 4 ? 80 : 76); const tab = T[UI.tab]; const y0 = Y + 64;
-  if (!near && tab !== 'Сведения' && tab !== 'Товары') { para('Войско короля далеко отсюда. Подойдите к поселению, чтобы торговать, набирать воинов или вести осаду.', X + 20, y0 + 20, WW - 40, INK); sbtn('s_go', X + WW / 2 - 50, y0 + 60, 100, 'Идти сюда', () => { UI.shut(); orderMove(s.i, () => arriveSett(sid)); }); return; }
+  if (!near && tab !== 'Сведения' && tab !== 'Товары') { para('Войско короля далеко отсюда. Подойдите к поселению, чтобы торговать, набирать воинов или вести осаду.', X + 20, y0 + 20, WW - 40, INK); sbtn('s_go', X + WW / 2 - 50, y0 + 60, 100, 'Идти сюда', () => { UI.shut(); orderMove(s.i, { k: 'sett', s: sid }); }); return; }
   if (tab === 'Рынок') drawMarket(sid, X, y0, WW);
   else if (tab === 'Набор') drawRecruit(sid, X, y0, WW);
   else if (tab === 'Гарнизон') drawGarrison(sid, X, y0, WW);
