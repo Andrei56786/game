@@ -1,7 +1,7 @@
 // Автотесты в браузере без окна (Playwright).
 // node tools/drive.mjs <url> <steps.json> [width height]
 // Шаги: {waitFor: expr}, {eval: code}, {evalFile: path}, {print: expr}, {move:[x,y]}, {click:[x,y,btn?]},
-//       {key: 'KeyE'}, {wait: ms}, {shot: 'name.png'}. Координаты — логические (640×360). Код выполняется через T.ev внутри игры.
+//       {key: 'KeyE'}, {wait: ms}, {shot: 'name.png'}, {png: 'name.png', expr: 'код, возвращающий dataURL'}. Координаты — логические (640×360). Код выполняется через T.ev внутри игры.
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -29,6 +29,7 @@ for (const s of steps) {
     else if (s.key) await page.keyboard.press(s.key);
     else if (s.wait) await page.waitForTimeout(s.wait);
     else if (s.shot) await page.screenshot({ path: path.resolve(ROOT, 'shots', s.shot) });
+    else if (s.png) { const d = await ev(s.expr); if (typeof d === 'string' && d.startsWith('data:')) fs.writeFileSync(path.resolve(ROOT, 'shots', s.png), Buffer.from(d.split(',')[1], 'base64')); else console.log('png: no data for', s.png, String(d).slice(0, 200)); }
   } catch (e) { console.log('STEP FAILED', JSON.stringify(s).slice(0, 200), String(e.message || e).split('\n')[0]); if (s.must !== false) break; }
 }
 if (errs.length) console.log('ERRORS:\n' + errs.slice(0, 10).join('\n')); else console.log('no page errors');
