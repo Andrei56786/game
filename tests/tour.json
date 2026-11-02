@@ -1,0 +1,146 @@
+[
+ {
+  "waitFor": "SCREEN==='court' && G && COURT.p",
+  "timeout": 60000
+ },
+ {
+  "evalFile": "tests/locshot.js"
+ },
+ {
+  "eval": "UI.win=null; G.speed=1; window.__errs=[]; const go=(loc,x,y)=>{COURT.loc=loc; COURT.p.x=x*CT+8; COURT.p.y=y*CT+12; snapCam();}; window.__go=go; projFinish('stands'); while (DLG.open()) DLG.close(); tourSetup(); G.frac=(9.95-5)/24; go('yard',61,18); 'T ' + (tourT() ? tourT().ent.map(e=>e.n+':'+e.mar).join(', ') : '-') + ' label ' + tourLabel()"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "'on ' + TRN.on + ' tourOn ' + tourOn() + ' h ' + hourAbs().toFixed(2) + ' stands ' + COURT.npcs.filter(n=>n.override&&n.override.tour).map(n=>n.key+'>'+n.override.spot).join(' ') + ' tg ' + COURT.npcs.filter(n=>n.tguest).length"
+ },
+ {
+  "wait": 5000
+ },
+ {
+  "shot": "tour1.png"
+ },
+ {
+  "eval": "'bout ' + (TRN.b ? TRN.b.ph + ' ' + TRN.b.a + 'v' + TRN.b.b : '-') + ' res ' + JSON.stringify(tourT().res)"
+ },
+ {
+  "wait": 1200
+ },
+ {
+  "shot": "tour_bout.png"
+ },
+ {
+  "wait": 1300
+ },
+ {
+  "shot": "tour_bout2.png"
+ },
+ {
+  "png": "tour_yard.png",
+  "expr": "__locShot('yard', 1)"
+ },
+ {
+  "eval": "ACTS_EXT.lists(); 'dlg ' + (DLG.cur && DLG.cur.choices ? DLG.cur.choices.map(c=>c.t+(c.ok&&!c.ok()?'(x:'+c.why+')':'')).join(' | ') : DLG.cur ? DLG.cur.pages.flat().join(' ') : '-')"
+ },
+ {
+  "wait": 600
+ },
+ {
+  "shot": "tour_menu.png"
+ },
+ {
+  "eval": "while (DLG.open()) DLG.close(); 'closed'"
+ },
+ {
+  "eval": "ACTS_EXT.lists(); const d=DLG.cur, c0 = d.choices[0].t; d.page=d.pages.length-1; d.full=1; DLG.key({code:'Digit1'}); 'queue ' + c0 + ' kq ' + TRN.kq + ' b ' + !!TRN.b + ' dlg ' + DLG.open()"
+ },
+ {
+  "wait": 400
+ },
+ {
+  "shot": "tour_kq.png"
+ },
+ {
+  "waitFor": "TRN.kj || !TRN.kq",
+  "timeout": 30000
+ },
+ {
+  "eval": "'res so far ' + JSON.stringify(tourT().res) + ' kj ' + !!TRN.kj"
+ },
+ {
+  "waitFor": "TRN.kj && TRN.kj.ph==='run' && TRN.kj.t>0.45",
+  "timeout": 15000
+ },
+ {
+  "shot": "tour_kj_aim.png"
+ },
+ {
+  "eval": "kjPress(); 'pass ' + TRN.kj.pass + ' q ' + (TRN.kj.q||0).toFixed(2)"
+ },
+ {
+  "waitFor": "TRN.kj && TRN.kj.roll",
+  "timeout": 8000
+ },
+ {
+  "shot": "tour_kj_hit.png"
+ },
+ {
+  "eval": "'roll ' + JSON.stringify(TRN.kj.roll) + ' score ' + TRN.kj.sa + ':' + TRN.kj.sb"
+ },
+ {
+  "waitFor": "!TRN.kj || (TRN.kj.pass>=1 && TRN.kj.ph==='run' && TRN.kj.t>0.45)",
+  "timeout": 15000
+ },
+ {
+  "eval": "if (TRN.kj) kjPress(); 'p2 ' + (TRN.kj ? TRN.kj.pass + ' q ' + (TRN.kj.q||0).toFixed(2) : 'done')"
+ },
+ {
+  "waitFor": "!TRN.kj || (TRN.kj.pass>=2 && TRN.kj.ph==='run' && TRN.kj.t>0.45)",
+  "timeout": 15000
+ },
+ {
+  "eval": "if (TRN.kj) kjPress(); 'p3 ' + (TRN.kj ? TRN.kj.pass + ' q ' + (TRN.kj.q||0).toFixed(2) : 'done')"
+ },
+ {
+  "waitFor": "!TRN.kj",
+  "timeout": 20000
+ },
+ {
+  "wait": 700
+ },
+ {
+  "shot": "tour_kj_end.png"
+ },
+ {
+  "eval": "const T=tourT(); 'king ' + T.king + ' prestige ' + G.court.prestige + ' wound ' + (kingC().wound||0) + ' day ' + G.day + ' hide ' + COURT.p.hide + ' dlg ' + (DLG.cur ? DLG.cur.pages.flat().join(' ') : '-')"
+ },
+ {
+  "eval": "while (DLG.open()) DLG.close(); G.frac=(14.45-5)/24; 'to end'"
+ },
+ {
+  "waitFor": "!tourT() || tourT().champ>=0",
+  "timeout": 30000
+ },
+ {
+  "eval": "const T=tourT(); 'champ ' + (T? T.champ : '-') + ' res ' + (T? T.res.length : '-') + ' done ' + (T?T.done:'-') + ' on ' + TRN.on"
+ },
+ {
+  "eval": "if (tourT() && tourT().champ>=0) { ACTS_EXT.lists(); } 'prize dlg ' + (DLG.cur ? DLG.cur.pages.flat().join(' ') + ' | ' + (DLG.cur.choices||[]).map(c=>c.t).join(' | ') : '-')"
+ },
+ {
+  "wait": 500
+ },
+ {
+  "shot": "tour_prize.png"
+ },
+ {
+  "eval": "while (DLG.open()) DLG.close(); G.frac=(16.2-5)/24; 'after'"
+ },
+ {
+  "wait": 2500
+ },
+ {
+  "eval": "'on ' + TRN.on + ' tg ' + COURT.npcs.filter(n=>n.tguest).length + ' ov ' + COURT.npcs.filter(n=>n.override&&n.override.tour).length + ' log ' + G.log.slice(0,4).map(l=>l.t||l).join(' || ')"
+ }
+]
