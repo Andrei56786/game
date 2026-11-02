@@ -28,7 +28,7 @@ function mapKeys() {
     if (blocked) continue;
     if (G.court) { // v3: the court's windows are reachable from the map too
       if (c === 'Tab' && G.atCourt && !playerArmy()) { backToCourt(); continue; }
-      const pa0 = playerArmy(); const wk = { KeyK: 'council', KeyJ: 'tech', KeyL: 'letters', KeyG: 'cmd' }[c] || (c === 'KeyV' && !pa0 ? 'cmd' : null) || (c === 'KeyF' && !pa0 ? 'dyn' : null) || (c === 'KeyY' ? 'dyn' : null);
+      const pa0 = playerArmy(); const wk = { KeyK: 'council', KeyJ: 'tech', KeyL: 'letters', KeyG: 'cmd', KeyP: 'proj' }[c] || (c === 'KeyV' && !pa0 ? 'cmd' : null) || (c === 'KeyF' && !pa0 ? 'dyn' : null) || (c === 'KeyY' ? 'dyn' : null);
       if (wk) { if (UI.win && UI.win.k === wk) UI.shut(); else UI.open({ k: wk }); continue; }
     }
     if (c === 'Space') { if (UI.win) UI.shut(); setSpeed(G.speed > 0 ? 0 : (UI.lastSpeed || 1)); }
@@ -89,6 +89,7 @@ function frame(ts) {
   DT = lastTS ? Math.min(0.1, (ts - lastTS) / 1000) : 1 / 60; lastTS = ts; NOW = ts / 1000;
   LAST = HITS; HITS = []; HOVER = topHit(LAST, input.mx, input.my);
   try {
+    if (G && G.visit && SCREEN !== 'court' && SCREEN !== 'loading') visitCleanup();
     if (SCREEN === 'map' && G && G.toCourt && !UI.modalOpen() && !(G.over && !G.over.ack)) { G.toCourt = 0; courtEnter('throne_front'); }
     if (SCREEN === 'map' && G) { mapKeys(); dispatchClicks(); const dr = mapCamera(); mapUpdate(); cv.style.cursor = dr ? 'grabbing' : HOVER && HOVER.cursor ? 'pointer' : 'default'; if (SCREEN === 'court') drawCourt(); else drawMapScreen(); }
     else if (SCREEN === 'court' && G) { courtKeys(); dispatchClicks(); courtUpdate(); if (SCREEN === 'court') drawCourt(); else if (SCREEN === 'map') drawMapScreen(); else if (SCREEN === 'battle' && BT) drawBattle(); cv.style.cursor = HOVER && HOVER.cursor ? 'pointer' : 'default'; }

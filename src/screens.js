@@ -65,6 +65,7 @@ function drawSettWin(w) {
   spr('shield' + S.ctrl, X + 76, Y + 10); txt(s.name, X + 92, Y + 10, INK); txt(typ + ' · ' + REALM_DEF[S.ctrl].name + (S.owner !== S.ctrl ? ' (занято)' : ''), X + 92, Y + 21, INK2);
   txt('Провинция ' + WD.provs[s.prov].name + ' · жителей ' + fmt(S.pop) + (S.walls ? ' · стены: ' + ['нет', 'частокол', 'камень', 'мощные'][S.walls] : ''), X + 92, Y + 31, INK2, { f: 's' });
   const near = Math.hypot(s.x + 0.5 - pa.x, s.y + 0.5 - pa.y) < 1.5, own = S.ctrl === G.player.realm, host = hostile(G.player.realm, S.ctrl);
+  if (typeof settEnterBtn === 'function') settEnterBtn(sid, X, Y, WW, near, host);
   const T = own ? ['Рынок', 'Набор', 'Гарнизон', 'Товары', 'Сведения'] : host ? ['Осада', 'Товары', 'Сведения'] : S.ctrl === 5 ? ['Рынок', 'Осада', 'Товары', 'Сведения'] : ['Рынок', 'Товары', 'Сведения']; if (UI.tab >= T.length) UI.tab = 0;
   tabs(X + 12, Y + 44, T, T.length > 4 ? 80 : 76); const tab = T[UI.tab]; const y0 = Y + 64;
   if (!near && tab !== 'Сведения' && tab !== 'Товары') { para('Войско короля далеко отсюда. Подойдите к поселению, чтобы торговать, набирать воинов или вести осаду.', X + 20, y0 + 20, WW - 40, INK); sbtn('s_go', X + WW / 2 - 50, y0 + 60, 100, 'Идти сюда', () => { UI.shut(); orderMove(s.i, () => arriveSett(sid)); }); return; }
