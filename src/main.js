@@ -28,7 +28,7 @@ function mapKeys() {
     if (blocked) continue;
     if (G.court) { // v3: the court's windows are reachable from the map too
       if (c === 'Tab' && G.atCourt && !playerArmy()) { backToCourt(); continue; }
-      const pa0 = playerArmy(); const wk = { KeyK: 'council', KeyJ: 'tech', KeyL: 'letters', KeyG: 'cmd', KeyP: 'proj' }[c] || (c === 'KeyV' && !pa0 ? 'cmd' : null) || (c === 'KeyF' && !pa0 ? 'dyn' : null) || (c === 'KeyY' ? 'dyn' : null);
+      const pa0 = playerArmy(); const wk = { KeyK: 'council', KeyJ: 'tech', KeyL: 'letters', KeyG: 'cmd', KeyP: 'proj', KeyO: 'supply' }[c] || (c === 'KeyV' && !pa0 ? 'cmd' : null) || (c === 'KeyF' && !pa0 ? 'dyn' : null) || (c === 'KeyY' ? 'dyn' : null);
       if (wk) { if (UI.win && UI.win.k === wk) UI.shut(); else UI.open({ k: wk }); continue; }
     }
     if (c === 'Space') { if (UI.win) UI.shut(); setSpeed(G.speed > 0 ? 0 : (UI.lastSpeed || 1)); }
