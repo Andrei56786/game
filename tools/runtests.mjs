@@ -29,6 +29,14 @@ function run(n) {
 const queue = list.slice();
 await Promise.all(Array.from({ length: Math.min(JOBS, queue.length) }, async () => { while (queue.length) await run(queue.shift()); }));
 const failed = res.filter(r => !r.ok);
-for (const r of failed) console.log('\n===== ' + r.n + ' =====\n' + r.out.split('\n').filter(l => /FAILED|ERRORS|errs|TIMEOUT|Error/.test(l)).slice(0, 12).map(l => l.slice(0, 400)).join('\n'));
+const GH = process.env.GITHUB_ACTIONS === 'true', esc = s => s.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+for (const r of failed) {
+  let ls = r.out.split('\n').filter(l => /FAILED|ERRORS|errs|TIMEOUT|Error/.test(l)).slice(0, 12).map(l => l.slice(0, 400));
+  if (!ls.length) ls = r.out.trim().split('\n').slice(-8).map(l => l.slice(0, 400));
+  console.log('\n===== ' + r.n + ' =====\n' + ls.join('\n'));
+  fs.writeFileSync(path.join(ROOT, 'shots', 'FAIL_' + r.n + '.log'), r.out);
+  if (GH) console.log('::error title=Тест ' + r.n + '::' + esc(ls.join('\n')));
+}
+if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '### Тесты: ' + (res.length - failed.length) + ' из ' + res.length + ' прошли\n\n' + res.map(r => '- ' + (r.ok ? '✅ ' : '❌ ') + r.n + ' (' + r.s + ' с)').join('\n') + '\n');
 console.log('\nИтого: ' + (res.length - failed.length) + ' из ' + res.length + ' прошли' + (failed.length ? '; не прошли: ' + failed.map(r => r.n).join(', ') : ''));
 process.exit(failed.length ? 1 : 0);
