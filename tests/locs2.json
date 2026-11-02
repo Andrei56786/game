@@ -1,0 +1,8 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "UI.win=null; G.speed=0; 'ok'"},
+ {"evalFile": "tests/reach.js"},
+ {"evalFile": "tests/locshot.js"},
+ {"png": "loc_yard_clean.png", "expr": "__locShot('yard', 1, 0)"},
+ {"png": "loc_forest_clean.png", "expr": "__locShot('forest', 1, 0)"}
+]
