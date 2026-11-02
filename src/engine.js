@@ -14,16 +14,17 @@ addEventListener('resize', fit); fit();
 // ---------- RNG ----------
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function mkRng(seed) {
-  let f = mulberry32(seed >>> 0);
+  let st = seed >>> 0; // the whole state of mulberry32 is one 32-bit number: it can be saved and restored
+  const f = () => { st = st + 0x6D2B79F5 | 0; let t = Math.imul(st ^ st >>> 15, 1 | st); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const r = {
-    f: () => f(), i: (a, b) => a + Math.floor(f() * (b - a + 1)), pick: a => a[Math.floor(f() * a.length)],
-    chance: p => f() < p, range: (a, b) => a + (b - a) * f(), seed: s => { f = mulberry32(s >>> 0); },
+    f: () => f(), get: () => st, set: v => { st = v | 0; }, i: (a, b) => a + Math.floor(f() * (b - a + 1)), pick: a => a[Math.floor(f() * a.length)],
+    chance: p => f() < p, range: (a, b) => a + (b - a) * f(), seed: s => { st = s >>> 0; },
     shuffle: a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(f() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; },
     wpick: (a, wf) => { let s = 0; for (const x of a) s += wf(x); let k = f() * s; for (const x of a) { k -= wf(x); if (k <= 0) return x; } return a[a.length - 1]; },
   };
   return r;
 }
-const R = mkRng((Date.now() ^ 0x5bd1e995) >>> 0); // gameplay rng
+const R = mkRng((Date.now() ^ 0x5bd1e995) >>> 0); // gameplay rng: newGame seeds it from the world seed, saves keep its state
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = t => t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t);

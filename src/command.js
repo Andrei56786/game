@@ -61,7 +61,7 @@ function cmdArmyTick(a) {
         if (best) { o.t = tgt = best.id; o.swapped = 1; cmdNote(a, 'swap', ws.name + ' слишком крепок для нас. Ваш замысел я понял — бить врага там, где он слаб: иду на ' + WD.setts[best.id].name + '.', true); } }
       const w2 = WD.setts[tgt]; const d = Math.hypot(w2.x + 0.5 - a.x, w2.y + 0.5 - a.y);
       if (d < 1.5) { aiArriveSett(a, tgt); a.ai.t = 2; return; }
-      if (!a.path || a.ai.task !== 'siege') { if (goTo(a, w2.i, 'siege')) { a.onArrive = x => { const c = G.setts[tgt].ctrl; if (c !== 0 && (hostile(0, c) || c === 5)) aiArriveSett(x, tgt); }; if (!o.told) { o.told = 1; cmdNote(a, 'march', 'Выступаем на ' + w2.name + '. ' + (gp > my * 1.5 ? 'Гарнизон силён — будет тяжело.' : 'Думаю, крепость наша.'), true); } } } return; }
+      if (!a.path || a.ai.task !== 'siege') { if (goTo(a, w2.i, 'siege')) { a.onArrive = { k: 'siege', s: tgt, r: 0 }; if (!o.told) { o.told = 1; cmdNote(a, 'march', 'Выступаем на ' + w2.name + '. ' + (gp > my * 1.5 ? 'Гарнизон силён — будет тяжело.' : 'Думаю, крепость наша.'), true); } } } return; }
     case 'join': { const b = armyById(o.t); if (!b || b.realm !== 0) { a.cmd = { o: 'hold', mode: o.mode, day: G.day, x: a.x, y: a.y }; return; }
       if (Math.hypot(b.x - a.x, b.y - a.y) < 1.3) { mergeArmies(b, a); return; } if (!a.path || a.ai.t <= 0) { goTo(a, armyTile(b), 'join'); a.ai.t = 1; } return; }
     case 'ret': { const ws = WD.setts[G.realms[0].capital]; if (Math.hypot(ws.x + 0.5 - a.x, ws.y + 0.5 - a.y) < 1.6) { a.cmd = { o: 'hold', mode: o.mode, day: G.day, x: a.x, y: a.y }; cmdNote(a, 'home', 'Войско у стен столицы, государь.'); return; } if (!a.path) goTo(a, ws.i, 'ret'); return; }
@@ -133,7 +133,7 @@ function rideTo(sid) { const C = G.court; if (!C || !G.atCourt) return; const ws
   const ca = capitalArmy(), kn = ca && charOf(ca.gen), ret = C.retinue, foe = hostile(0, G.setts[sid].ctrl);
   const r0 = Object.assign({}, ret || mkRetinue(), { x: cw.x + 0.5, y: cw.y + 0.5 }); const days = pathDays(r0, planPath(r0, ws.i));
   const eta = !isFinite(days) ? 'пути нет' : days < 1 ? 'меньше дня пути' : 'около ' + Math.round(days) + ' ' + plural(Math.round(days), 'дня', 'дней', 'дней') + ' пути';
-  const go = a => { leaveCourt(a); if (orderMove(ws.i, () => arriveSett(sid))) UI.toast('Король выехал ' + (a ? 'во главе войска' : 'со свитой') + ' · путь на ' + ws.name + ' (' + eta + ').'); };
+  const go = a => { leaveCourt(a); if (orderMove(ws.i, { k: 'sett', s: sid })) UI.toast('Король выехал ' + (a ? 'во главе войска' : 'со свитой') + ' · путь на ' + ws.name + ' (' + eta + ').'); };
   const ch = [{ t: 'Со свитой (' + (ret ? armyMen(ret) : 22) + ' чел.)', tip: foe ? 'Свита мала для войны: на чужой земле опасно.' : 'Налегке и быстро. Двор будет жить без короля.', fx: () => go(null) }];
   if (ca) ch.push({ t: 'Во главе войска у столицы (' + armyMen(ca) + (kn ? ', ' + charName(kn) : '') + ')', tip: 'Король ведёт войско сам: битвы — под вашей рукой.', fx: () => go(ca) });
   ch.push({ t: 'Остаться в замке', fx: () => { } });
