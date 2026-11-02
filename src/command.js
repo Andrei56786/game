@@ -142,7 +142,7 @@ function stableAct() { gateAct('Конюх выводит осёдланного
 function leaveCourt(a) { const C = G.court, king = kingC(), ws = WD.setts[G.realms[0].capital]; let pa;
   const ret = C.retinue || mkRetinue(); C.retinue = null;
   if (a && a.alive) { const kn = charOf(a.gen); a.prevGen = a.gen; if (kn) kn.withKing = 1; a.gen = king.id; a.kind = 'player'; a.ai = null; a.cmd = null; a.pend = 0; G.couriers = (G.couriers || []).filter(c => c.to !== a.id); if (a.siegeOf >= 0) endSiege(a); a.path = null; a.onArrive = null;
-    addU(a.u, ret.u); a.food += ret.food; a.morale = Math.max(a.morale, 55); pa = a; }
+    const m0 = armyMen(a), m1 = armyMen(ret); addU(a.u, ret.u); for (const k of ['food', 'fodder', 'arrows', 'weap', 'horses', 'wagons', 'pitch']) a[k] = (a[k] || 0) + (ret[k] || 0); a.water = Math.min(waterCap(a), (a.water * m0 + ret.water * m1) / Math.max(1, m0 + m1)); a.morale = Math.max(a.morale, 55); pa = a; }
   else { pa = ret; pa.x = ws.x + 0.5; pa.y = ws.y + 0.5; pa.path = null; pa.alive = 1; pa.gen = king.id; if (!G.armies.includes(pa)) G.armies.push(pa); }
   G.player.army = pa.id; G.atCourt = 0; C.view = 0; king.atCourt = 0; G.player.follow = -1;
   COURT.sleepT = 0; UI.win = null; UI.target = null; SCREEN = 'map'; cam.z = 1; centerArmy(); if (!G.speed) G.speed = 1; autoPause('Король выехал в поле: укажите путь');
