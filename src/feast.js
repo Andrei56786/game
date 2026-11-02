@@ -13,8 +13,9 @@ const FS = { on: 0, q: [], qt: 0, chat: 0, mus: null, notes: [], seat: {}, chk: 
 // ---------- the seneschal's orders now lead to real events ----------
 (() => { const f = ordDef('seneschal', 'feast'), t = ordDef('seneschal', 'tourney'); if (f) { const d0 = f.done; f.d = 'Пир в пиршественном зале: знать довольна, слава короля растёт. Вечером в последний день король сам может сесть во главе стола.';
     f.done = (o, c, e) => { d0(o, c, e); return 'Пир готов (' + effWord(e) + '): сегодня с 17:00 столы в пиршественном зале ломятся от яств, знать съезжается в замок.'; }; }
-  if (t) { const d0 = t.done; t.d = 'Рыцарский турнир: знать довольна, слава растёт, конные воины в столице набираются удали. С трибунами у ристалища — поединки в замке, король может сразиться сам.';
-    t.done = (o, c, e) => { const r = d0(o, c, e); if (projDone('stands') && !G.visit) { tourSetup(); return r + ' Сегодня с 10:00 — поединки на ристалище!'; } return r; }; } })();
+  if (t) { const d0 = t.done; Object.defineProperty(t, 'd', { configurable: true, get: () => projDone('stands') ? 'Рыцарский турнир на ристалище замка: в последний день с 10:00 — поединки на глазах у знати, король может сразиться сам. Знать довольна, слава растёт, конные воины набираются удали.'
+      : 'Рыцарский турнир в поле у стен замка: знать довольна, слава растёт, конные воины набираются удали. Поединков в замке не будет — для них нужны трибуны у ристалища (стол зодчего).' });
+    t.done = (o, c, e) => { const r = d0(o, c, e); if (projDone('stands') && !G.visit) { tourSetup(); return r + ' Сегодня с 10:00 — поединки на ристалище!'; } return r + ' Бились в поле у стен замка: чтобы смотреть поединки с трибун и выйти на ристалище самому, постройте трибуны (стол зодчего).'; }; } })();
 // ---------- feast: who comes and where they sit ----------
 const FEAST_FILL = ['Сэр Ивейн', 'Леди Энида', 'Сэр Бедивер', 'Леди Линетта', 'Сэр Гарет', 'Леди Розамунда', 'Сэр Персиваль', 'Леди Матильда', 'Сэр Тристрам', 'Леди Изольда', 'Сэр Ламорак', 'Сэр Кай'];
 function feastGuests() { const fam = new Set(royalFamily().map(c => c.id)), used = new Set(COURT.npcs.map(n => n.c && n.c.id)), out = []; fam.add(G.player.char);
@@ -188,7 +189,7 @@ function tourInfo(n) { const T = tourT(); if (!T) { DLG.say(n, 'Турнир о�
   const L = T.ent.map((e, i) => e.n + ' (' + e.mar + ')' + (T.res.some(x => (x.a === i || x.b === i) && x.w !== i) ? ' — выбыл' : '')).join(', ');
   DLG.say(n, 'Сейчас — ' + rd + '. Рыцари (в скобках — удаль): ' + L + '.', { name: 'Герольд' }); }
 ACTS_EXT.lists = () => { const C = G.court, T = tourT(), k = kingC();
-  if (!projDone('stands')) { DLG.say(null, 'Пустое ристалище с барьером посередине. Без трибун знать на турнир не съедется — их можно построить (стол зодчего, «Трибуны у ристалища»).', { name: 'Ристалище' }); return; }
+  if (!projDone('stands')) { DLG.say(null, 'Пустое ристалище с барьером посередине. Без трибун турнир (поручение сенешалю) пройдёт в поле у стен замка, и поединков здесь не будет. Трибуны строят через стол зодчего — «Трибуны у ристалища».', { name: 'Ристалище' }); return; }
   if (!T) { const cur = C.orders && C.orders.seneschal, sen = seatChar('seneschal'), d = ordDef('seneschal', 'tourney'), busy = cur && cur.k === 'tourney';
     DLG.say(null, busy ? 'Сенешаль уже созывает рыцарей: турнир — ' + inDays(cur.day0 + cur.dur - G.day) + ', с 10:00.' : 'Трибуны пусты. Турниры устраивает сенешаль: поручение «Турнир».', { name: 'Ристалище', choices: [
       { t: 'Велеть сенешалю устроить турнир (' + d.cost + ' зол., ' + d.dur + ' дн.)', ok: () => !!sen && !busy, why: !sen ? 'Сенешаля нет — некому созвать рыцарей' : 'Турнир уже готовится', fx: () => giveOrder('seneschal', 'tourney', 'intent') }, { t: 'Уйти', fx: () => { } }], esc: 1 }); return; }
