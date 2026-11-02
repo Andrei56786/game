@@ -49,6 +49,7 @@ function lookOf(c) {
   else if (role === 'peasant') { o = 'tunic'; cl = r.pick(['brown', 'forest', 'orange', 'gray']); hat = r.pick(['none', 'straw', fem ? 'kerchief' : 'none']); bg = 'forest'; }
   else if (role === 'envoy') { o = 'doublet'; hat = 'cap'; bg = REALM_RAMP[c.realm | 0]; chain = 1; }
   else if (role === 'scholar') { o = 'robe'; cl = 'gray'; bg = 'teal'; hat = 'skull'; }
+  else if (LOOK_EXT[role]) { const e = LOOK_EXT[role](r, fem); o = e.o; cl = e.cl; bg = e.bg; hat = e.hat; chain = e.chain || 0; keys = e.keys || 0; if (e.apron) L.apron = 1; }
   else if (role === 'courtier' || role === 'noble') { o = fem ? 'dress' : 'doublet'; cl = c.hcol || r.pick(['wine', 'blue', 'green', 'teal', 'purple']); bg = 'brown'; hat = fem ? r.pick(['none', 'circlet']) : r.pick(['none', 'cap']); }
   if (c.hcol && (role === 'knight' || role === 'courtier' || role === 'lord' || role === 'general')) cl = c.hcol;
   if (fem && o === 'armor' && r.f() < 0.5) hat = 'none';
