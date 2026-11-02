@@ -93,7 +93,7 @@ function gameUpd(a, dt, L, P, HU) { const g = gameOf(a);
       if (a.calm > 2.5 && a.ft > 2) gameSettle(a, L); return; }
     case 'bay': { a.bt -= dt; a.moving = 0; let hd = 1e9; for (const h of COURT.ani) if (h.game === 2 && h.loc === 'forest') { const d = Math.hypot(h.x - a.x, h.y - a.y); if (d < hd) { hd = d; a.flip = h.x > a.x; } }
       if (fierce && kd < 70 && R.chance(dt * 0.8)) { gameCharge(a); return; }
-      if (kd < 34 || a.bt <= 0) { gameFlee(a, kd < 80 ? P : null); a.ft = 4; a.free = NOW + 2.5; } return; }
+      if (kd < (HU && HU.wpn === 'pike' ? 15 : 34) || a.bt <= 0) { gameFlee(a, kd < 80 ? P : null); a.ft = 4; a.free = NOW + 2.5; } return; }
     case 'charge': { a.ct += dt; if (!fierce || a.ct > 4 || kd > 220) { gameFlee(a, P); return; } steer(a, P.x, P.y, g.sp * 1.3, dt, L, false);
       if (kd < 34 && !a.tried) { a.tried = 1; const hn = npcByKey('srv_hunter'), cn = HU.comp && npcByKey(HU.comp);
         if (hn && Math.hypot(hn.x - P.x, hn.y - P.y) < 70 && R.chance(0.45)) { huntKill(a, 'hunter'); say(hn, 'Ага, попался! На рогатину его!', 3); return; }
@@ -152,7 +152,7 @@ function huntShoot(a, useF) { const HU = COURT.hunt, P = COURT.p; if (!HU || HU.
   HU.fl.push({ x0: P.x + (dx > 0 ? 5 : -5), y0: P.y - 15, tx: a.x + ox, ty: a.y - 7 + oy, t: 0, dur: Math.max(0.12, d / 380), hit, a });
   for (const b of COURT.ani) if (b !== a && b.loc === 'forest' && b.game === 1 && b.st === 'graze' && Math.hypot(b.x - a.x, b.y - a.y) < 60) { b.fx = P.x; b.fy = P.y; if (gameOf(b).bird) birdUp(b, P); else { b.st = 'alert'; b.at = R.range(0.2, 0.6); } } }
 function arrowsUpd(HU, dt, P) { for (let i = HU.fl.length - 1; i >= 0; i--) { const f = HU.fl[i], a = f.a; f.t += dt; if (f.hit && a.st !== 'dead') { f.tx = a.x; f.ty = a.y - 7 - (a.h || 0); } if (f.t < f.dur) continue; HU.fl.splice(i, 1);
-    if (f.hit && a.st !== 'dead') { HU.hits++; Snd.sfx('hit'); a.hp--; if (a.hp <= 0) { huntKill(a, 'king'); continue; } const g = gameOf(a); a.hurt = 1;
+    if (f.hit && a.st !== 'dead') { HU.hits++; Snd.sfx('hit'); a.hp -= f.dmg || 1; if (a.hp <= 0) { huntKill(a, 'king'); continue; } const g = gameOf(a); a.hurt = 1;
       if (g.fierce && Math.hypot(a.x - P.x, a.y - P.y) < 130 && R.chance(0.7)) gameCharge(a); else gameFlee(a, P); UI.toast('Попали! ' + (g.f ? 'Раненая ' : 'Раненый ') + g.n + ' ещё на ногах.'); continue; }
     HU.stuck.push({ x: f.tx, y: f.ty + 7, dx: f.tx - f.x0, dy: f.ty - f.y0, t: NOW }); if (HU.stuck.length > 12) HU.stuck.shift();
     if (a.st !== 'dead') { if (gameOf(a).bird) { if (a.st !== 'fly') birdUp(a, P); } else if (a.st !== 'charge' && a.st !== 'bay') gameFlee(a, P); }
@@ -237,6 +237,7 @@ function huntSummary(HU, why) { const k = kingC(), C = G.court, bag = HU.bag; le
   if (meat) T.push('Мясо — на кухню и в погреба: +' + meat + ' мер.'); if (fur) T.push('Шкуры ловчий продаст: +' + fur + ' зол.'); if (pr) T.push('Слава охотника: престиж +' + pr + '.');
   const cn = HU.comp && npcByKey(HU.comp); if (cn && cn.c && !cn.c.pseudo) { const v = 4 + Math.min(4, bag.length); cn.c.loy = clamp((cn.c.loy || 50) + v, 0, 100); if (cn.key === 'spouse') C.together = G.day; T.push(huntCompName(cn) + ' — расположение +' + v + '.'); }
   if (bag.some(b => b.by === 'king' && (b.k === 'boar' || b.k === 'bear'))) { k.mx = (k.mx || 0) + 1; if (k.mx >= 6) { k.mx = 0; k.mar = Math.min(20, k.mar + 1); T.push('Рука крепнет: Меч короля +1.'); } }
+  huntSum2(HU, T, why);
   if (HU.shots) T.push('Стрел пущено: ' + HU.shots + ', в цель: ' + HU.hits + '.');
   log('Королевская охота' + (bag.length ? ': ' + bagStr(bag) : ' без добычи') + '.', bag.length ? 'good' : 'info');
   DLG.say(null, T.join(' '), { name: 'Итоги охоты' }); }
@@ -259,7 +260,7 @@ PICK_EXT.push((wx, wy) => { const HU = COURT.hunt; if (!HU || HU.ended || COURT.
   for (const a of COURT.ani) { if (a.loc !== 'forest' || a.game !== 1 || a.st === 'dead') continue; const s = animalSprite(a.kind, 0, a.flip, a.col || null), hw = s.width / 2 + 2, top = a.y - s.height - (a.h || 0) - 2;
     if (wx < a.x - hw || wx > a.x + hw || wy < top || wy > a.y + 3) continue; const g = gameOf(a), d = Math.hypot(a.x - P.x, a.y - P.y), useF = HU.kind === 'falcon' && !HU.fal && (g.bird || a.kind === 'hare');
     if (huntCanShoot(a, d, useF, L, P)) return huntTarget({ a, d, useF });
-    const why = !useF && HU.arrows <= 0 ? 'колчан пуст' : !useF && a.st === 'fly' ? 'в полёте — луком не достать' : d >= (useF ? 210 : 150) ? 'далеко — подойдите ближе (Shift — красться)' : 'мешают деревья';
+    const why = huntWhy(a, d, useF);
     return { e: 1, d: 1e9, label: g.n[0].toUpperCase() + g.n.slice(1), sub: why, x: a.x, y: a.y - 8 - (a.h || 0), go: () => UI.toast('Не выстрелить: ' + why + '.') }; }
   return null; });
 // ---------- drawing: arrows, the falcon, the aim, alarms; the HUD panel ----------
@@ -271,14 +272,10 @@ CRENDER2.push((g, L) => { if (L.id !== 'forest') return; const HU = COURT.hunt, 
   for (const s of HU.stuck) { const d = Math.hypot(s.dx, s.dy) || 1; drawArrowPx(g, s.x, s.y, s.dx / d * 0.7, s.dy / d * 0.4 - 0.5, 6); }
   for (const f of HU.fl) { const k = Math.min(1, f.t / f.dur), dd = Math.hypot(f.tx - f.x0, f.ty - f.y0) || 1, arc = Math.sin(Math.PI * k) * Math.min(14, dd * 0.06), x = f.x0 + (f.tx - f.x0) * k, y = f.y0 + (f.ty - f.y0) * k - arc;
     const vy = (f.ty - f.y0) / dd - Math.cos(Math.PI * k) * 0.25, vx = (f.tx - f.x0) / dd, vn = Math.hypot(vx, vy) || 1; drawArrowPx(g, x, y, vx / vn, vy / vn, 7); }
-  if (HU.fal) { const f = HU.fal, s = animalSprite('falcon', Math.floor(NOW * 10) % 2, f.flip, null); g.drawImage(shadowSpr(9), Math.round(f.x - 4.5), Math.round(f.y - 2)); g.drawImage(s, Math.round(f.x - s.width / 2), Math.round(f.y - s.height - f.h)); }
+  if (HU.fal) { const f = HU.fal, s = animalSprite('falcon', f.st === 'kill' ? 5 : 6 + Math.floor(NOW * 12) % 4, f.flip, null); g.drawImage(shadowSpr(9), Math.round(f.x - 4.5), Math.round(f.y - 2)); g.drawImage(s, Math.round(f.x - s.width / 2), Math.round(f.y - s.height - f.h)); }
   if (P && HU.bowT && NOW - HU.bowT < 0.3) { const sx = { left: -1, right: 1 }[P.dir] || 0, x = Math.round(P.x + sx * 7), y = Math.round(P.y - 22); g.fillStyle = '#6a4020'; if (sx) for (let i = -5; i <= 5; i++) g.fillRect(x + Math.round(sx * (2 - i * i / 12)), y + i, 1, 1); else for (let i = -5; i <= 5; i++) g.fillRect(x + i, y + Math.round((P.dir === 'up' ? -1 : 1) * (2 - i * i / 12)) + 6, 1, 1); }
  });
 HUD_EXT.push(() => { const HU = COURT.hunt; if (!HU) return;
-  const t = HU.aim && HU.aim.a; if (t && t.st !== 'dead' && COURT.loc === 'forest' && !courtBlocked()) { const s = animalSprite(t.kind, 0, t.flip, t.col || null), Z = COURT.Z, [x0, y0] = cw2s(t.x - s.width / 2 - 2, t.y - s.height - (t.h || 0) - 2), w = (s.width + 4) * Z, h = (s.height + 4) * Z, c = HU.aim.useF ? '#a8d8ff' : '#f7d35c', k = 3 + Z * 2;
+  const t = HU.aim && HU.aim.a; if (t && t.st !== 'dead' && COURT.loc === 'forest' && !courtBlocked()) { const s = animalSprite(t.kind, 0, t.flip, t.col || null), Z = COURT.Z, [x0, y0] = cw2s(t.x - s.width / 2 - 2, t.y - s.height - (t.h || 0) - 2), w = (s.width + 4) * Z, h = (s.height + 4) * Z, c = HU.aim.useF ? '#a8d8ff' : HU.wpn === 'pike' ? '#ff9a6a' : '#f7d35c', k = 3 + Z * 2;
     ctx.globalAlpha = 0.75 + 0.25 * Math.sin(NOW * 6); for (const [cx, cy, dx, dy] of [[x0, y0, 1, 1], [x0 + w, y0, -1, 1], [x0, y0 + h, 1, -1], [x0 + w, y0 + h, -1, -1]]) { const xa = dx > 0 ? cx : cx - k, ya = dy > 0 ? cy : cy - 2, xb = dx > 0 ? cx : cx - 2, yb = dy > 0 ? cy : cy - k; rect(xa - 1, ya - 1, k + 2, 4, PAL.o); rect(xb - 1, yb - 1, 4, k + 2, PAL.o); rect(xa, ya, k, 2, c); rect(xb, yb, 2, k, c); } ctx.globalAlpha = 1; }
-  const fal = HU.kind === 'falcon' ? '  ·  сокол: ' + (HU.fal ? 'в полёте' : 'на перчатке') : '';
-  const t1 = HUNTK[HU.kind].n + '  ·  стрел: ' + HU.arrows + fal + '  ·  до 19:30', t2 = HU.bag.length ? 'Добыча: ' + bagStr(HU.bag) : 'Добычи пока нет', w = Math.max(tw(t1, { f: 's' }), tw(t2, { f: 's' })) + 12, x = W - w - 6, y = 22;
-  rect(x, y, w, 21, 'rgba(20,14,12,0.84)'); strokeR(x, y, w, 21, '#8a6a3a'); txt(t1, x + 6, y + 3, '#e8d5a8', { f: 's' }); txt(t2, x + 6, y + 12, HU.bag.length ? '#c8e8a0' : '#a89878', { f: 's' });
-  hit(x, y, w, 21, { id: 'hpanel', cursor: true, tip: ['Королевская охота', 'E или клик по зверю — выстрел (лук бьёт шагов на 150). Стоящего зверя бить легче, бегущего — труднее; лучше всего — когда гончие его держат.', 'Shift — красться: зверь подпустит ближе, а гончие пойдут у ноги.', 'Отбой — через ворота леса или у ловчего.'], onClick: () => { const n = npcByKey('srv_hunter'); if (n && !DLG.open()) huntHunterTalk(n); } });
-  if (COURT.loc === 'forest' && !DLG.open()) { const s = 'E / клик по зверю — ' + (HU.kind === 'falcon' ? 'стрела или сокол' : 'выстрел') + '  ·  Shift — красться  ·  ворота леса — домой', w2 = tw(s, { f: 's' }) + 10; rect(8, H - 14, w2, 11, 'rgba(20,14,12,0.8)'); txt(s, 13, H - 11, '#c8d8e8', { f: 's' }); } });
+  huntPanel(HU); });
