@@ -25,19 +25,21 @@ function yardEast(L) { const T = GT;
   place(L, 'gatepost', { flip: 1, ck: 'gp1' }, 72, 9, { dx: -1, light: { r: 30, col: '#ffa040', a: 0.8, fl: 0.2, night: 1, dx: -11, dy: 4 } }); place(L, 'gatepost', { ck: 'gp0' }, 72, 12, { dx: -1, light: { r: 30, col: '#ffa040', a: 0.8, fl: 0.2, night: 1, dx: 9, dy: 4 } });
   // the lists (stands are a project)
   place(L, 'tilt', { n: 14, ramp: 'navy', ck: 't14' }, 55, 21, { solid: [55, 21, 68, 21] });
-  place(L, 'tent', { ramp: 'red', ck: 'tr' }, 52, 18, { solid: [52, 17, 53, 18] }); place(L, 'tent', { ramp: 'blue', ck: 'tb' }, 70, 18, { dx: -2, solid: [70, 17, 71, 18] });
+  place(L, 'tent', { ramp: 'red', ck: 'tr' }, 52, 18, { cx: 52.5 * CT, solid: [51, 17, 53, 18], anim: 2, fps: 1.5 }); place(L, 'tent', { ramp: 'blue', ck: 'tb' }, 70, 18, { cx: 70.2 * CT, solid: [69, 17, 71, 18], anim: 2, fps: 1.5 });
   place(L, 'rack', {}, 52, 24, { solid: [52, 24, 53, 24] }); place(L, 'rack', {}, 70, 24, { solid: [70, 24, 71, 24] });
   for (const bx of [53, 68]) place(L, 'bush', { seed: bx, ck: 'lb' + bx }, bx, 13, { dx: -4, solid: [bx, 13, bx, 13] });
   act(L, 'lists', 61, 23, 'Турнирное поле', { r: 40 }); spot(L, 'lists_n', 61, 19, 'down'); spot(L, 'lists_s', 61, 23, 'up'); spot(L, 'lists_w', 51, 23, 'right'); spot(L, 'lists_e', 69, 20, 'left');
   // kennels & the hounds' run
   place(L, 'bld', { w: 5, fh: 38, rh: 34, wall: 'plank', roof: 'shake', doors: [[28, 14, 20, 1]], wins: [[6, 10]], seed: 13, sign: [56, 'dog'], ck: 'kennel' }, 52, 30, { dx: -2, solid: [52, 28, 56, 30] });
-  place(L, 'fence', { n: 6, ck: 6 }, 57, 27, { solid: [57, 27, 62, 27] }); place(L, 'fence', { n: 6, ck: 6 }, 57, 31, { solid: [57, 31, 62, 31] });
+  place(L, 'fence', { n: 6, ck: 6 }, 57, 27, { solid: [57, 27, 62, 27] }); place(L, 'fence', { n: 2, ck: 2 }, 57, 31, { solid: [57, 31, 58, 31] }); place(L, 'fence', { n: 3, ck: 3 }, 60, 31, { solid: [60, 31, 62, 31] }); place(L, 'gate', { ck: 'g1' }, 59, 31, { dy: 2, fr: gateFr });
   place(L, 'fence', { n: 4, v: 1, ck: 'v4' }, 57, 31, { solid: [57, 27, 57, 31] }); place(L, 'fence', { n: 4, v: 1, ck: 'v4' }, 62, 31, { dx: 12, solid: [62, 27, 62, 31] });
   place(L, 'trough', {}, 59, 29, { solid: [59, 29, 60, 29] });
   act(L, 'kennel', 54, 31, 'Псарня: выехать на охоту', { r: 30 }); spot(L, 'hunter', 55, 32, 'up'); spot(L, 'kennel_in', 54, 31, 'up', { away: 1 });
-  // the dungeon hatch by the smithy
-  place(L, 'cellar', {}, 34, 28, { dx: -4, solid: [33, 27, 36, 27] }); sfill(L, 33, 28, 33, 28); sfill(L, 36, 28, 36, 28);
-  door(L, 34, 28, 35, 28, 'dungeon', 3 * CT + 8, 8 * CT + 12, 'right', { label: 'В темницу' });
+  // the way down to the dungeon: a stone stairwell on the lawn by the road, torches and a guard
+  place(L, 'cellar', {}, 33, 24, { anim: 2, fps: 5, solid: [33, 22, 36, 23] }); sfill(L, 33, 24, 33, 24); sfill(L, 36, 24, 36, 24);
+  door(L, 34, 24, 35, 24, 'dungeon', 3 * CT + 8, 8 * CT + 12, 'right', { label: 'В темницу' }); spot(L, 'dun_guard', 32, 24, 'down');
+  for (const tx of [12, 51]) lightAt(L, 33 * CT + tx, 25 * CT - 35, 44, '#ff9a40', 0.85, { fl: 0.2, night: 1 });
+  L.rooms.unshift([32, 21, 37, 24, 'Вход в темницу']);
   // outside the walls
   place(L, 'tower', {}, 70, 39, { cx: 72 * CT, solid: [70, 34, 73, 39] });
   for (const [tx, ty, k] of [[53, 42, 'oak'], [58, 41, 'pine'], [62, 43, 'oak'], [66, 41, 'oak'], [71, 42, 'pine'], [56, 43, 'pine']]) place(L, k, { seed: tx * 7 + ty, ck: k + tx }, tx, ty, { cx: tx * CT + 8, solid: [tx, ty, tx, ty], shadow: k === 'pine' ? [12, 4] : [20, 6] });
@@ -85,25 +87,27 @@ function buildUpper() {
   spot(L, 'cor_w', 3, 13, 'right'); spot(L, 'cor_e', 46, 13, 'left'); spot(L, 'cor_mid', 25, 13, 'down');
   // nursery
   ['blue', 'pink', 'teal', 'green'].forEach((rp0, i) => { const x = 1 + i * 2; place(L, 'cot', { ramp: rp0, ck: 'cot' + rp0 }, x, 20, { solid: [x, 19, x, 20] }); spot(L, 'bed_kid' + i, x, 20, 'down', { sx: x * CT + 9, sy: 21 * CT - 8, lie: 1 }); });
-  place(L, 'rhorse', {}, 3, 23, { solid: [3, 23, 3, 23] }); place(L, 'toys', {}, 6, 24, {}); place(L, 'chest', {}, 8, 22, { solid: [8, 22, 8, 22] }); win(4, 17); candle(L, 1, 24);
+  place(L, 'rhorse', {}, 3, 23, { solid: [3, 23, 3, 23] }); place(L, 'toys', {}, 6, 24, {}); place(L, 'chest', {}, 8, 22, { solid: [8, 22, 8, 22] }); place(L, 'wallpic', { kind: 'stars', ck: 'wp_st' }, 7, 17, { wall: 1, dy: -2, dx: -3 }); candle(L, 1, 24);
   spot(L, 'nur_rug', 4, 22, 'down'); spot(L, 'nur_play', 6, 23, 'left');
   // advisors' bedrooms
   ADV_ROOMS.forEach((k, i) => { const x0 = 10 + i * 5; place(L, 'bed', { ramp: ADV_RAMP[k], ck: 'b_' + k }, x0, 21, { dy: 2, solid: [x0, 19, x0 + 1, 21] }); bedSpot(L, 'bed_' + k, x0, 21);
-    place(L, 'chest', {}, x0 + 3, 19, { solid: [x0 + 3, 19, x0 + 3, 19] }); candle(L, x0 + 3, 24); win(x0 + 2, 17);
+    place(L, 'chest', {}, x0 + 3, 19, { solid: [x0 + 3, 19, x0 + 3, 19] }); candle(L, x0 + 3, 24); { const kd = ['land', 'hunt', 'sea', 'flowers', 'saint', 'land', 'sea'][i % 7]; place(L, 'wallpic', { kind: kd, ck: 'wp_' + kd }, x0 + 2, 17, { wall: 1, dy: -8, dx: 4 }); } // the back wall faces the corridor: a painting, not a window
     place(L, ADV_ITEM[k], { seed: i + 3, ck: 'ai' + i }, x0, 24, { solid: [x0, 24, x0, 24] }); spot(L, 'room_' + k, x0 + 2, 22, 'down'); });
   // servants
   place(L, 'cot', { ramp: 'gray', ck: 'cotg' }, 45, 20, { solid: [45, 19, 45, 20] }); spot(L, 'bed_maid', 45, 20, 'down', { sx: 45 * CT + 9, sy: 21 * CT - 8, lie: 1 });
   place(L, 'cot', { ramp: 'brown', ck: 'cotb' }, 47, 20, { solid: [47, 19, 47, 20] }); spot(L, 'bed_page', 47, 20, 'down', { sx: 47 * CT + 9, sy: 21 * CT - 8, lie: 1 });
-  place(L, 'chest', {}, 46, 24, { solid: [46, 24, 46, 24] }); place(L, 'barrel', {}, 48, 24, { solid: [48, 24, 48, 24] }); win(47, 17);
+  place(L, 'chest', {}, 46, 24, { solid: [46, 24, 46, 24] }); place(L, 'barrel', {}, 48, 24, { solid: [48, 24, 48, 24] }); place(L, 'wallpic', { kind: 'pegs', ck: 'wp_pg' }, 47, 17, { wall: 1, dy: -6, dx: 1 });
   return L;
 }
 // portraits in the gallery: ancestors to the left, the king (big frame) in the middle, his family to the right
 function galleryChars() { const k = kingC(), C = G.court; const anc = ((C && C.ancestors) || []).map(charOf).filter(Boolean).slice(-3);
   const sp = k.spouse >= 0 ? charOf(k.spouse) : null, h = heirOf(k), kid = royalFamily().find(c => c !== sp && c !== h && !c.dowager && c.age >= 3) || null;
   const L = [null, null, null, k, sp && sp.alive ? sp : null, h, kid]; anc.slice().reverse().forEach((c, i) => { L[2 - i] = c; }); return L; }
-function galleryLabel(i) { const c = galleryChars()[i]; if (!c) return i === 3 ? 'Место для парадного портрета' : 'Пустая рама'; return 'Портрет: ' + (c.title ? c.title + ' ' : '') + c.name + (c.alive ? '' : ' †'); }
+function galleryLabel(i) { const c = galleryChars()[i]; if (i === 3 && !projBuiltFor('portrait')) return projCur('portrait') ? 'Парадный портрет: живописец за работой' : 'Место для парадного портрета (не заказан)'; if (!c) return 'Пустая рама'; return 'Портрет: ' + (c.title ? c.title + ' ' : '') + c.name + (c.alive ? '' : ' †'); }
 function galleryAct(a) { const c = galleryChars()[a.slot]; const k = kingC();
-  if (!c) { DLG.say(null, a.slot === 3 ? 'Над камином — пустое место для парадного портрета. Придворный живописец ждёт заказа (см. «Замыслы» у сенешаля).' : 'Пустая золочёная рама. Её место — для тех, кого ещё не нарисовали.'); return; }
+  if (a.slot === 3 && !projBuiltFor('portrait')) { const cur = projCur('portrait'), left = cur ? Math.max(1, Math.ceil((cur.need - cur.prog) / projRate())) : 0;
+    DLG.say(null, cur ? 'Рама над камином пока пуста: портрет ещё в мастерской (сейчас ' + projPhase(cur) + '). Осталось ≈' + left + ' ' + plural(left, 'день', 'дня', 'дней') + '.' : 'Над камином — пустая рама для парадного портрета нынешнего государя. Портрет нужно заказать: «Замыслы и стройки» (клавиша P или стол зодчего во дворе) → «Парадный портрет», ' + PROJK.portrait.cost + ' зол.', { name: 'Галерея предков' }); return; }
+  if (!c) { DLG.say(null, 'Пустая золочёная рама. Её место — для тех, кого ещё не нарисовали.'); return; }
   const dead = !c.alive, role = c.id === k.id ? 'Ныне царствующий государь.' : dead ? 'Правил до вас. Покоится в склепе под часовней.' : famRole(c) + '.';
   DLG.say(c, (dead ? 'Старый портрет, потемневший от свечной копоти. ' : '') + c.name + ' — ' + role + (c.id === k.id && projBuiltFor('portrait') ? ' Парадный портрет в полный рост: художник польстил вам ровно настолько, насколько было уплачено.' : ''), { name: 'Галерея предков' }); }
 ACTS_EXT.gallery = galleryAct;
@@ -111,6 +115,7 @@ CRENDER.push((g, L) => { if (L.id !== 'upper' || !L.gallery) return; const ch = 
   for (const s of L.gallery) { const c = ch[s.i], w = s.big ? 38 : 28, h = s.big ? 44 : 32, x = Math.round(s.x - w / 2), y = s.big ? 6 : 15;
     if (s.big && !(c && projBuiltFor('portrait'))) { g.fillStyle = '#1c1418'; g.fillRect(x + 3, y + 3, w - 6, h - 6); g.drawImage(objSprite('pframe', { w, h, ck: 'pf' + w }, 0), x, y); continue; }
     g.fillStyle = '#20161a'; g.fillRect(x + 3, y + 3, w - 6, h - 6);
+    if (s.big) { g.fillStyle = '#5c1824'; g.fillRect(x + 3, y + 3, w - 6, h - 6); g.fillStyle = '#8c2830'; for (let k = 0; k < w - 6; k += 4) g.fillRect(x + 3 + k, y + 3, 2, h - 6); g.fillStyle = '#b6821c'; g.fillRect(x + 5, y + h - 9, w - 10, 4); g.fillStyle = '#f6de7e'; g.fillRect(x + 6, y + h - 8, w - 12, 1); }
     if (c) { const p = portrait(c); if (p) { const ps = s.big ? 32 : 22; g.drawImage(p, 0, 0, 48, 48, Math.round(s.x - ps / 2), y + (s.big ? 5 : 4), ps, ps); if (!c.alive) { g.globalAlpha = 0.25; g.fillStyle = '#3a2a10'; g.fillRect(x + 3, y + 3, w - 6, h - 6); g.globalAlpha = 1; } } }
     g.drawImage(objSprite('pframe', { w, h, ck: 'pf' + w }, 0), x, y); } });
 // ---------- dungeon ----------
@@ -120,7 +125,7 @@ function buildDungeon() {
   for (let i = 0; i < 6; i++) tfill(L, 5 + i * 5, 3, 8 + i * 5, 7, T.FLAGD); tfill(L, 35, 3, 38, 7, T.FLAG);
   for (let i = 0; i < L.w * L.h; i++) if (L.ter[i] === T.WALL) L.solid[i] = 1;
   L.dark = 0.5; L.rooms = [[1, 3, 3, 7, 'Лестница наверх'], [5, 3, 33, 7, 'Камеры'], [35, 3, 38, 7, 'Каморка тюремщика'], [0, 0, 39, 15, 'Темница']];
-  place(L, 'stairs', {}, 1, 6, { solid: [1, 3, 2, 4] }); door(L, 1, 5, 2, 6, 'yard', 35 * CT, 29 * CT + 12, 'down', { label: 'Наверх, во двор' });
+  place(L, 'stairs', {}, 1, 6, { solid: [1, 3, 2, 4] }); door(L, 1, 5, 2, 6, 'yard', 35 * CT, 25 * CT + 10, 'down', { label: 'Наверх, во двор' });
   L.cells = [];
   for (let i = 0; i < 6; i++) { const x0 = 5 + i * 5; place(L, 'bars', { n: 4, door: 1, ck: 'bars4' }, x0, 7, { solid: [x0, 7, x0 + 3, 7] });
     place(L, 'straw', { seed: i + 1, ck: 'st' + i }, x0, 5, { bake: 1 }); place(L, 'chains', {}, x0 + 3, 2, { wall: 1, dy: 6 }); if (i % 2) place(L, 'stool', {}, x0 + 3, 4, { solid: [x0 + 3, 4, x0 + 3, 4] });
@@ -220,7 +225,10 @@ Object.assign(SCHED, {
   hunter: [[5, 'kennel_in'], [6, 'hunter'], [10, 'lists_w'], [11.5, 'hunter'], [13, 'kitchen'], [14, 'hunter'], [19.5, 'kennel_in']],
   jailer: [[5, 'jailer'], [8, 'wander:5,9,33,11@dungeon'], [11, 'jail_desk'], [14, 'wander:5,9,33,11@dungeon'], [17, 'jailer'], [21, 'jail_desk'], [23, 'jail_in']],
 });
-GUARDS.push(['fgate', 'forest_gate']);
+GUARDS.push(['fgate', 'forest_gate'], ['dun', 'dun_guard']);
+// the guard at the dungeon stairs tells who is held below
+function dunGuardLine() { const n = G.chars.filter(c => c.alive && c.prison === 0 && c.id !== G.player.char).length;
+  return n ? 'Внизу темница, государь. Под замком ' + n + ' ' + plural(n, 'узник', 'узника', 'узников') + '; тюремщик при них — с ним можно допросить, отпустить или потребовать выкуп.' : R.pick(['Здесь спуск в темницу, государь. Камеры пусты — одни крысы.', 'Темница пуста, государь. Пленных с поля боя приведут сюда.']); }
 Object.assign(STAFF_LINES, {
   chaplain: ['Благослови вас Господь, государь.', 'Свечи у алтаря горят за ваше здравие.', 'Молитва короля стоит десятка проповедей.'],
   hunter: ['Олени нынче жирные, государь. Самое время.', 'Гончие застоялись — им бы в лес.', 'Кабан у брода изрыл весь берег.'],
