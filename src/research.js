@@ -26,14 +26,14 @@ function techState(k) { return hasTech(k) ? 'done' : G.tech.cur === k ? 'cur' : 
 // research points: if nobody chose a subject, the magister's notes pile up in the "bank" and are spent on the next subject
 function techProgress(p) { const T = G.tech; if (!T) return;
   if (!T.cur || T.done[T.cur] || !TECH[T.cur]) { T.cur = null; T.bank = Math.min(30, (T.bank || 0) + p); return; }
-  if (T.bank) { p += T.bank; T.bank = 0; }
+  if (T.bank) { p += T.bank; T.bank = 0; } if (projDone('libwing')) p *= 1.15; if (projDone('observatory')) p *= 1.05;
   T.prog = (T.prog || 0) + p; const t = TECH[T.cur];
   if (T.prog >= t.cost) { const k = T.cur; T.done[k] = G.day + 1; T.bank = Math.min(30, T.prog - t.cost); T.prog = 0; T.cur = null; techApply(k);
     log('Магистр: изучено знание «' + t.n + '». ' + t.d, 'good'); if (typeof Snd !== 'undefined') Snd.sfx('chime');
     if (G.court && G.court.orders.magister && G.court.orders.magister.k === 'research') G.court.orders.magister.fin = 1; } }
 function techApply(k) { if (k === 'fairs') prestige(5); if (k === 'laws') for (const P of G.provs) if (G.setts[WD.provs[P.id].seat].owner === 0) P.unrest = Math.max(0, P.unrest - 8); }
 // economy multiplier for the crown (called from realmEconomy)
-function techIncK() { return 1 + (hasTech('rotation') ? 0.08 : 0) + (hasTech('ledgers') ? 0.04 : 0) + (hasTech('mills') ? 0.06 : 0) + (hasTech('townhalls') ? 0.06 : 0); }
+function techIncK() { return 1 + (projDone('mint') ? 0.05 : 0) + (hasTech('rotation') ? 0.08 : 0) + (hasTech('ledgers') ? 0.04 : 0) + (hasTech('mills') ? 0.06 : 0) + (hasTech('townhalls') ? 0.06 : 0); }
 // battle: tech shows as experience of the crown's soldiers
 function techXp(realm, xp) { if (realm !== 0 || !G.tech) return xp; const o = Object.assign({}, xp); if (hasTech('mail')) for (const t of UT) o[t] = (o[t] || 0) + 18; if (hasTech('crossbow')) { o.archer = (o.archer || 0) + 36; o.xbow = (o.xbow || 0) + 36; } return o; }
 function researchDaily() { if (!G.court) return; const C = G.court;
@@ -41,7 +41,7 @@ function researchDaily() { if (!G.court) return; const C = G.court;
   const m = seatChar('magister'); if (m && !(C.orders.magister && C.orders.magister.k === 'research')) techProgress(clamp(m.lrn / 30, 0.1, 0.6));
   // granary: the court eats, mills & fields give
   C.grain = Math.max(0, (C.grain || 0) - 3 + (hasTech('rotation') ? 2 : 0) + (hasTech('mills') ? 4 : 0));
-  if (dayOfYear(G.day) === DAYS_SEASON * 2 + 3) { let h = 0; for (const S of G.setts) if (S.owner === 0 && S.ctrl === 0 && WD.setts[S.id].type === 'village') h += 30 * (S.prosp / 60); h = Math.round(h * (hasTech('rotation') ? 1.25 : 1)); C.grain += h; log('Урожай собран: в амбары столицы свезено ' + h + ' мер зерна.', 'good'); }
+  if (dayOfYear(G.day) === DAYS_SEASON * 2 + 3) { let h = 0; for (const S of G.setts) if (S.owner === 0 && S.ctrl === 0 && WD.setts[S.id].type === 'village') h += 30 * (S.prosp / 60); h = Math.round(h * (hasTech('rotation') ? 1.25 : 1) * (projDone('granary') ? 1.2 : 1)); C.grain += h; log('Урожай собран: в амбары столицы свезено ' + h + ' мер зерна.', 'good'); }
   // laws & townhalls calm the land; fairs add a bit of glory each season
   const calm = (hasTech('laws') ? 0.15 : 0) + (hasTech('townhalls') ? 0.15 : 0); if (calm) for (const P of G.provs) if (G.setts[WD.provs[P.id].seat].owner === 0) P.unrest = Math.max(0, P.unrest - calm);
   if (G.day % DAYS_SEASON === 0) { if (hasTech('fairs')) prestige(1); if (hasTech('informants')) { const L = [1, 2, 3, 4].filter(t => alive(t) && (C.net[t] || 0) < 3); if (L.length) { const t = R.pick(L); C.net[t] = (C.net[t] || 0) + 1; addReport('eye', 'Осведомители окрепли: сеть в державе ' + realmName(t) + ' теперь ' + C.net[t] + ' из 3.'); } } } }
