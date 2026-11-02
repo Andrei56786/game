@@ -1,0 +1,417 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"evalFile": "tests/vhelp.js"
+},
+{
+"evalFile": "tests/locshot.js"
+},
+{
+"evalFile": "tests/khelp.js"
+},
+{
+"comment": "--- a foreign court ---"
+},
+{
+"eval": "leaveCourt(); const rs = [1,2,3,4].filter(r => G.realms[r].ruler >= 0 && !hostile(0, r) && G.setts[G.realms[r].capital].ctrl === r); window.__r = rs[0]; G.frac = (10 - 5) / 24; G.realms[0].gold = 2000; 'realms ' + rs + ' | ' + __kgo(G.realms[__r].capital)"
+},
+{
+"print": "__kwhere()"
+},
+{
+"wait": 2500
+},
+{
+"shot": "k_arrive.png"
+},
+{
+"png": "k_yard.png",
+"expr": "__locShot('k_yard', 1, false)"
+},
+{
+"png": "k_yard_m.png",
+"expr": "__locShot('k_yard', 1, true)"
+},
+{
+"png": "k_hall.png",
+"expr": "__locShot('k_hall', 2, false)"
+},
+{
+"png": "k_guest.png",
+"expr": "__locShot('k_guest', 3, false)"
+},
+{
+"comment": "--- the host ---"
+},
+{
+"eval": "__ktalk('host')"
+},
+{
+"eval": "__kpick('Какие')"
+},
+{
+"eval": "__end(); const o0 = opinionOf(__r, 0); __ktalk('host'); const r = __kpick('Щедрый'); 'gift > ' + r + ' | opn ' + o0 + '->' + opinionOf(__r, 0) + ' pts ' + G.visit.pts + ' gold ' + G.realms[0].gold"
+},
+{
+"eval": "__end(); const a = acceptance('pact', __r); 'pact acc ' + JSON.stringify(a)"
+},
+{
+"eval": "__ktalk('host'); const r = __kpick('Поговорить'); 'diplo > ' + r + ' | win ' + (UI.win && UI.win.k) + ' t ' + (UI.win && UI.win.t)"
+},
+{
+"wait": 700
+},
+{
+"shot": "k_diplo.png"
+},
+{
+"eval": "UI.shut(); __end(); 'shut'"
+},
+{
+"comment": "--- everyone else ---"
+},
+{
+"eval": "['lady','heir','child','steward','knight','guard','cook','servant','groom','smith','minstrel','priest'].map(j => { const n = __kjob(j); if (!n) return j + ': -'; const r = __ktalk(n); __end(); return r.slice(0, 330); }).join('\\n')"
+},
+{
+"eval": "const n = __kjob('lady'); if (!n) 'no lady'; else { __ktalk(n); const r = __kpick('Расскажите'); __end(); 'gossip > ' + r }"
+},
+{
+"eval": "const n = __kjob('lady'); if (!n) 'no lady'; else { __ktalk(n); const r = __kpick('Сказать'); __end(); 'compl > ' + r + ' pts ' + G.visit.pts }"
+},
+{
+"eval": "const n = __kjob('steward'); __ktalk(n); const r0 = __kpick('Как припасы'); __end(); __ktalk(n); const r = __kpick('Сунуть'); const r2 = __next(); __end(); 'stores > ' + r0 + '\\nbribe > ' + r + ' >> ' + r2"
+},
+{
+"eval": "const n = __kjob('knight'); __ktalk(n); const r = __kpick('Как служба'); __end(); 'army > ' + r"
+},
+{
+"eval": "const n = __kjob('knight', 1); const p0 = G.court.prestige; __ktalk(n); const r = __kpick('Учебный'); __end(); 'spar > ' + r + ' | prestige ' + p0 + '->' + G.court.prestige + ' pts ' + G.visit.pts"
+},
+{
+"eval": "const n = __kjob('heir'); if (!n) 'no heir'; else { __ktalk(n); const r = __kpick('О чём'); __end(); __ktalk(n); 'heir > ' + r + ' | again ' + __dlg() + (__end(), '') }"
+},
+{
+"eval": "const n = __kjob('minstrel'); if (!n) 'no minstrel'; else { __ktalk(n); const r = __kpick('Спой'); __end(); 'song > ' + r }"
+},
+{
+"eval": "const n = __kjob('priest'); if (!n) 'no priest'; else { __ktalk(n); const r = __kpick('Благословите'); __end(); 'bless > ' + r }"
+},
+{
+"eval": "['k_well','k_stable','k_kitchen','k_forge','k_granary','k_barracks','k_dove','k_kennel'].map(k => { ACTS_EXT[k](); return k + ': ' + (UI.toasts ? '' : '') + __dlg(); }).join(' | ')"
+},
+{
+"eval": "ACTS_EXT.k_chapel(); const r = __dlg(); __end(); ACTS_EXT.k_fount(); const r2 = __kpick('Бросить'); __end(); ACTS_EXT.k_dummy(); const r3 = __dlg(); __end(); 'chapel > ' + r + '\\nfount > ' + r2 + '\\ndummy > ' + r3"
+},
+{
+"comment": "--- the hall and dinner ---"
+},
+{
+"eval": "__setH(18.7); __goSp('k_kseat', 0, 3); 'h ' + hourAbs().toFixed(2) + ' loc ' + COURT.loc + ' dinner ' + kDinner() + ' label ' + LOCS.k_hall.acts.find(a => a.id === 'k_dine').label"
+},
+{
+"wait": 2500
+},
+{
+"print": "__kwhere()"
+},
+{
+"eval": "const o0 = opinionOf(__r, 0); ACTS_EXT.k_dine(); 'dine sit ' + !!COURT.p.sit + ' dine ' + G.visit.dine + ' pts ' + G.visit.pts + ' opn ' + o0 + '->' + opinionOf(__r, 0) + ' dlg ' + __dlg()"
+},
+{
+"wait": 1500
+},
+{
+"shot": "k_dinner.png"
+},
+{
+"eval": "const n = __kjob('host'); const r = __ktalk(n); __end(); 'talk from seat > ' + r.slice(0, 200) + ' | d ' + Math.round(Math.hypot(n.x - COURT.p.x, n.y - COURT.p.y)) + ' talkR ' + n.talkR"
+},
+{
+"eval": "const a = acceptance('pact', __r); 'pact acc after ' + JSON.stringify(a.lines.filter(l => /Король|Гостеп/.test(l.t))) + ' sum ' + a.sum"
+},
+{
+"comment": "--- the night ---"
+},
+{
+"eval": "standUp(); __setH(21.8); __goSp('k_priv', 0, 1); const d = LOCS.k_hall.doors.find(x => x.to === 'k_guest'); goThrough(d); 'door ' + !!d"
+},
+{
+"wait": 1500
+},
+{
+"eval": "'loc ' + COURT.loc"
+},
+{
+"shot": "k_guest_room.png"
+},
+{
+"eval": "ACTS_EXT.k_bed(); __dlg()"
+},
+{
+"eval": "window.__d0 = G.day; const r = __pick(0); 'sleep > ' + r + ' sleepT ' + COURT.sleepT + ' from ' + G.visit.sleepFrom"
+},
+{
+"wait": 7000
+},
+{
+"eval": "'after sleep day ' + __d0 + '->' + G.day + ' h ' + hourAbs().toFixed(2) + ' nights ' + G.visit.nights + ' pts ' + G.visit.pts + ' sleepFrom ' + G.visit.sleepFrom + ' dlg ' + __dlg()"
+},
+{
+"comment": "--- save and load ---"
+},
+{
+"eval": "__end(); window.__ksave = JSON.stringify(G.visit) + ' kmem ' + JSON.stringify(G.kmem[__sid]).slice(0, 300); saveGame() ? 'saved ' + __ksave : 'save failed'"
+},
+{
+"eval": "startLoad(); 'loading'"
+},
+{
+"waitFor": "SCREEN==='court' && G && G.visit && LOCS.k_hall",
+"timeout": 60000
+},
+{
+"wait": 1000
+},
+{
+"evalFile": "tests/vhelp.js"
+},
+{
+"evalFile": "tests/khelp.js"
+},
+{
+"eval": "'resumed ' + JSON.stringify(G.visit) + ' loc ' + COURT.loc + ' npcs ' + COURT.npcs.length + ' | ' + visitTitle() + ' | host ' + __khost()"
+},
+{
+"print": "__kwhere()"
+},
+{
+"shot": "k_resume.png"
+},
+{
+"comment": "--- leave by the gate ---"
+},
+{
+"eval": "__goSp('k_arrive'); ACTS_EXT.k_exit(); const r = __dlg(); __pick(0); 'exit > ' + r + ' | screen ' + SCREEN + ' visit ' + JSON.stringify(G.visit)"
+},
+{
+"comment": "--- the way in from the settlement window ---"
+},
+{
+"eval": "const s = WD.setts[__sid], pa = playerArmy(); pa.x = s.x + 0.5; pa.y = s.y + 0.5; UI.open({ k: 'sett', id: __sid }); 'open'"
+},
+{
+"wait": 700
+},
+{
+"eval": "const h = HITS.find(x => x.id === 's_kvisit'); h ? 'btn tip ' + JSON.stringify(h.tip) + ' click ' + !!h.onClick : 'no button; ids ' + HITS.map(x => x.id).join(',')"
+},
+{
+"shot": "k_settwin.png"
+},
+{
+"eval": "const pa = playerArmy(); pa.x += 4; 'moved away'"
+},
+{
+"wait": 500
+},
+{
+"eval": "const h = HITS.find(x => x.id === 's_kvisit'); h ? 'far: btn tip ' + JSON.stringify(h.tip) + ' click ' + !!h.onClick : 'far: no button'"
+},
+{
+"eval": "UI.shut(); const ws = WD.setts[G.realms[0].capital]; const pa = playerArmy(); pa.x = ws.x + 0.5; pa.y = ws.y + 0.5; UI.open({ k: 'sett', id: G.realms[0].capital }); 'own capital'"
+},
+{
+"wait": 500
+},
+{
+"eval": "const h = HITS.find(x => x.id === 's_kvisit'); UI.shut(); h ? 'own capital: BUTTON (bad)' : 'own capital: no button (ok)'"
+},
+{
+"comment": "--- a vassal's castle (simulated: a house head holds a royal castle) ---"
+},
+{
+"eval": "const cs = WD.setts.filter(s => s.type === 'castle' && G.setts[s.id].ctrl === 0); const H = G.houses.find(h => h.alive && __kfree(charOf(h.head))); const sid = cs[0].id; window.__vsLord = G.setts[sid].lord; G.setts[sid].lord = H.head; G.setts[sid].house = H.id; window.__vs = sid; window.__vH = H; 'vassal sim: house ' + H.name + ' loy ' + Math.round(H.loy) + ' | ' + __kgo(sid)"
+},
+{
+"print": "__kwhere()"
+},
+{
+"wait": 1500
+},
+{
+"shot": "k_vassal.png"
+},
+{
+"png": "k_vassal_yard.png",
+"expr": "__locShot('k_yard', 1, false)"
+},
+{
+"eval": "__ktalk('host')"
+},
+{
+"eval": "__kpick('Как ваши')"
+},
+{
+"eval": "__end(); __vH.loy = 70; __ktalk('host'); __kpick('Что говорят')"
+},
+{
+"eval": "__end(); const H = KV.host.H, l0 = H ? H.loy : -1; __ktalk('host'); const r = __kpick('Пожаловать'); __end(); 'favor > ' + r + ' | loy ' + l0 + '->' + (H ? H.loy : -1)"
+},
+{
+"eval": "const n = __kjob('lady'); if (!n) 'no lady'; else { __ktalk(n); const r = __kpick('Расскажите'); __end(); 'gossip > ' + r }"
+},
+{
+"eval": "const n = __kjob('steward'); __ktalk(n); const r = __kpick('Как припасы'); __end(); 'stores > ' + r"
+},
+{
+"eval": "__setH(18.8); __goSp('k_kseat', 0, 3); const H = KV.host.H, l0 = H ? H.loy : -1; ACTS_EXT.k_dine(); 'vassal dine loy ' + l0 + '->' + (H ? H.loy : -1) + ' pts ' + G.visit.pts"
+},
+{
+"wait": 1500
+},
+{
+"shot": "k_vassal_hall.png"
+},
+{
+"eval": "visitLeave(1); G.setts[__vs].lord = __vsLord; delete G.setts[__vs].house; 'left ' + SCREEN"
+},
+{
+"comment": "--- the king's own castle: the castellan ---"
+},
+{
+"eval": "__setH(10); __kgo(__vs)"
+},
+{
+"eval": "__ktalk('host')"
+},
+{
+"eval": "__kpick('Доложите')"
+},
+{
+"eval": "__end(); const p0 = G.court.prestige; __ktalk('host'); const r = __kpick('Наградить'); __end(); 'reward > ' + r + ' prestige ' + p0 + '->' + G.court.prestige"
+},
+{
+"eval": "const n = __kjob('steward'); __ktalk(n); const r = __kpick('Как припасы'); __end(); 'own stores > ' + r"
+},
+{
+"eval": "ACTS_EXT.k_granary(); ACTS_EXT.k_barracks(); 'acts ok'"
+},
+{
+"eval": "visitLeave(1); 'left'"
+},
+{
+"comment": "--- an occupied castle (simulated) ---"
+},
+{
+"eval": "G.setts[__vs].owner = __r; const r = __kgo(__vs); r"
+},
+{
+"eval": "__ktalk('host')"
+},
+{
+"eval": "__kpick('Доложите')"
+},
+{
+"eval": "__end(); visitLeave(1); G.setts[__vs].owner = 0; 'left'"
+},
+{
+"comment": "--- a castellan / a lord in a foreign castle ---"
+},
+{
+"eval": "const cs = WD.setts.filter(s => s.type === 'castle' && G.setts[s.id].ctrl === __r && !G.setts[s.id].siege); window.__fs = (cs[0] || {}).id; 'foreign castles ' + cs.length + ' | ' + (__fs >= 0 ? __kgo(__fs) : 'none')"
+},
+{
+"eval": "__ktalk('host')"
+},
+{
+"eval": "__end(); const r = ['lady','heir','child','steward','knight','priest'].map(j => { const n = __kjob(j); if (!n) return j + ': -'; const r = __ktalk(n); __end(); return r.slice(0, 200); }).join('\\n'); r"
+},
+{
+"wait": 1200
+},
+{
+"shot": "k_foreign.png"
+},
+{
+"eval": "visitLeave(1); 'left'"
+},
+{
+"comment": "--- a free baron ---"
+},
+{
+"eval": "const cs = WD.setts.filter(s => s.type === 'castle' && G.setts[s.id].ctrl === 5); window.__bs = (cs[0] || {}).id; 'baron castles ' + cs.length + ' | ' + (__bs >= 0 ? __kgo(__bs) : 'none')"
+},
+{
+"eval": "G.visit ? (__ktalk('host') + (__end(), '')) : 'skip'"
+},
+{
+"eval": "if (G.visit) { __ktalk('host'); const r = __kpick('Преподнести'); __end(); 'baron gift > ' + r + ' opn ' + kMem(__bs).opn } else 'skip'"
+},
+{
+"wait": 1000
+},
+{
+"shot": "k_baron.png"
+},
+{
+"comment": "--- war breaks out while visiting ---"
+},
+{
+"eval": "if (G.visit) visitLeave(1); __kgo(G.realms[__r].capital)"
+},
+{
+"eval": "G.rel[0][__r].war = 1; G.rel[__r][0].war = 1; 'war set ' + hostile(0, __r)"
+},
+{
+"wait": 1000
+},
+{
+"eval": "'modals ' + JSON.stringify(UI.modals.map(m => m.k)) + ' win ' + JSON.stringify(UI.win)"
+},
+{
+"eval": "G.encCool = G.encCool || {}; for (const a of G.armies) G.encCool[a.id] = G.day + 5; let k = 0; while (UI.modals.length && k++ < 9) UI.close(); 'closed modals ' + UI.modals.length + ' paused ' + UI.paused()"
+},
+{
+"wait": 1600
+},
+{
+"eval": "'alarm > ' + __dlg()"
+},
+{
+"shot": "k_alarm.png"
+},
+{
+"eval": "__pick(0); 'after alarm screen ' + SCREEN + ' visit ' + JSON.stringify(G.visit)"
+},
+{
+"eval": "G.rel[0][__r].war = 0; G.rel[__r][0].war = 0; 'peace restored'"
+},
+{
+"comment": "--- the castle changes hands while visiting ---"
+},
+{
+"eval": "__kgo(G.realms[__r].capital)"
+},
+{
+"wait": 800
+},
+{
+"eval": "KV.rl = -1; 'ctrl mismatch'"
+},
+{
+"wait": 1500
+},
+{
+"eval": "'alarm2 > ' + __dlg()"
+},
+{
+"eval": "__pick(0); 'after alarm2 screen ' + SCREEN + ' visit ' + JSON.stringify(G.visit)"
+},
+{
+"eval": "'errs ' + JSON.stringify(window.__errs||[]) + ' ERR ' + JSON.stringify(typeof ERR !== 'undefined' ? ERR : null)"
+}
+]
