@@ -160,7 +160,18 @@ const OBJP = {
   crib(o) { const b = new PB(20, 18), W0 = RPK.wood; b.rect(1, 4, 18, 12, W0[3]); b.rect(2, 5, 16, 6, RPK.ivory[4]); b.ell(7, 7, 3, 2.4, 0, () => RPK.skin1[3]); for (let x = 2; x < 19; x += 3) b.vl(x, 10, 6, W0[2]); b.hl(1, 4, 18, W0[5]); b.outline(OUTL); return b; },
   toys(o) { const b = new PB(18, 12); b.rect(1, 6, 4, 4, RPK.red[3]); b.rect(5, 7, 4, 3, RPK.blue[3]); b.rect(3, 3, 4, 3, RPK.gold[3]); b.ell(13, 8, 3.5, 2.4, 0, () => RPK.wood[4]); b.vl(11, 3, 4, RPK.wood[3]); b.set(10, 3, RPK.wood[4]); b.outline(OUTL); return b; },
   statue(o) { const b = new PB(20, 46), S = RPK.stone; b.rect(2, 34, 16, 10, S[3]); b.hl(2, 34, 16, S[5]); b.rect(1, 44, 18, 2, S[2]); b.ell(10, 7, 4, 4.5, 0, (x) => S[x < 9 ? 5 : 3]); b.poly([[4, 13], [16, 13], [17, 34], [3, 34]], 0, (x) => S[x < 8 ? 5 : x > 13 ? 3 : 4]); b.vl(15, 4, 30, S[2]); b.set(15, 3, S[5]); b.outline(OUTL); return b; },
-  stairs(o) { const b = new PB(32, 56), W0 = RPK.wood, S = RPK.stone; b.rect(0, 0, 32, 10, hx('#0e0a12')); for (let k = 0; k < 8; k++) { const y = 8 + k * 6; b.rect(3, y, 26, 6, W0[k % 2 ? 3 : 4]); b.hl(3, y, 26, W0[5]); b.hl(3, y + 5, 26, W0[1]); } b.rect(0, 4, 3, 52, S[4]); b.rect(29, 4, 3, 52, S[2]); b.vl(0, 4, 52, S[5]); b.outline(OUTL); return b; },
+  // stairs up: an archway, eleven shallow stone steps with a red runner, stone parapets (the same stone as the stairwell above)
+  stairs(o) { const b = new PB(32, 56), S = RPK.stone, R0 = RPK.red, Gd = RPK.gmetal;
+  b.rect(0, 0, 32, 12, S[2]); b.ell(16, 9, 11, 9, 0, (x, y) => y < 12 ? hx('#0e0a12') : 0); b.rect(5, 9, 22, 4, hx('#0e0a12'));
+  for (let x = 4; x < 28; x++) { const t = Math.abs(x - 16) / 12; if (t <= 1) { const y = Math.round(9 - Math.sqrt(1 - t * t) * 9); b.set(x, y - 1, S[5]); b.set(x, y - 2, S[4]); } }
+  const n = 11, y0 = 12, sh = (56 - y0) / n;
+  for (let k = 0; k < n; k++) { const y = Math.round(y0 + k * sh), y1 = Math.round(y0 + (k + 1) * sh), lit = k / n; // k = 0 at the top: farther and a little darker
+    for (let yy = y; yy < y1; yy++) { const tread = yy < y1 - 1; for (let x = 3; x < 29; x++) { const run = x >= 10 && x <= 21;
+      b.set(x, yy, run ? (tread ? R0[yy === y ? 4 : 3] : R0[1]) : (tread ? S[yy === y ? 5 : lit < 0.3 ? 3 : 4] : S[2])); } }
+    b.hl(10, y1 - 1, 12, Gd[3]); b.set(9, y1 - 1, Gd[4]); b.set(22, y1 - 1, Gd[4]); for (let x = 4; x < 9; x += 4) if (hsh(x, k, 3) > 0.6) b.set(x, y + 1, S[3]); }
+  for (let y = 10; y < 56; y++) { b.set(0, y, S[5]); b.set(1, y, S[4]); b.set(2, y, S[3]); b.set(29, y, S[3]); b.set(30, y, S[2]); b.set(31, y, S[1]); }
+  for (let y = 14; y < 56; y += 9) { b.hl(0, y, 3, S[2]); b.hl(29, y, 3, S[1]); }
+  b.outline(OUTL); return b; },
   shelfs(o) { const b = new PB(32, 40), W0 = RPK.dwood; b.rect(0, 0, 32, 40, W0[2]); b.rect(0, 0, 32, 3, W0[4]); for (let sh = 0; sh < 4; sh++) { const y0 = 4 + sh * 9; b.rect(2, y0, 28, 8, W0[0]); b.hl(1, y0 + 8, 30, W0[3]); for (let k = 0; k < 6; k++) { const x = 3 + k * 4.5; if (hsh(k, sh, o.seed || 3) < 0.25) continue; b.ell(x + 1.5, y0 + 6, 2, 1.6, 0, () => RPK.parch[3]); b.set(x + 1, y0 + 6, RPK.parch[1]); } } b.outline(OUTL); return b; },
   scales(o) { const b = new PB(16, 14), G0 = RPK.gmetal; b.vl(8, 1, 11, G0[3]); b.hl(2, 2, 13, G0[4]); b.ell(3, 7, 2.6, 1.2, 0, () => G0[3]); b.ell(13, 6, 2.6, 1.2, 0, () => G0[3]); b.line(3, 2, 2, 6, G0[2]); b.line(13, 2, 14, 5, G0[2]); b.rect(5, 12, 7, 2, G0[2]); b.outline(OUTL); return b; },
 };
