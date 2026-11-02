@@ -107,15 +107,50 @@ function walkerPB(L, dir, f, small, c) {
   b.outline(OUTL);
   return b;
 }
+// a horse in side view, facing left (32×26): sloping neck with a mane, long head, jointed legs with hooves
+function horsePB(f, col) { // side view facing left, 32×26
+  const b = new PB(32, 26), C0 = RPK[col || 'brown'] || RPK.brown, wh = col === 'white';
+  const MN = wh ? RPK.gray : col === 'dwood' ? RPK.black : RPK.dwood, HO = RPK.black, EYE = hx('#120a10');
+  const tone = (y, d) => C0[clamp((y < 10 ? 4 : y < 13 ? 3 : y < 15 ? 2 : 1) - (d || 0), 0, 4)];
+  // legs: far pair first (darker), then near pair; phase f swaps which diagonal pair steps forward
+  const leg = (x, hind, fwd, dark) => { const C = i => C0[clamp(i - dark, 0, 4)], lx = fwd ? -1 : 0, up = fwd ? 1 : 0;
+    if (hind) { for (let y = 14; y < 19; y++) { b.set(x, y, C(3)); b.set(x + 1, y, C(2)); b.set(x + 2, y, C(2)); }
+      b.set(x + 1, 19, C(2)); b.set(x + 2, 19, C(1)); // hock
+      for (let y = 20; y < 24 - up; y++) { b.set(x + 1 + lx, y, C(3)); b.set(x + 2 + lx, y, C(2)); } }
+    else { for (let y = 15; y < 19; y++) { b.set(x, y, C(3)); b.set(x + 1, y, C(2)); b.set(x + 2, y, C(2)); }
+      b.set(x, 19, C(3)); b.set(x + 1, 19, C(2)); // knee
+      for (let y = 20; y < 24 - up; y++) { b.set(x + lx, y, C(3)); b.set(x + 1 + lx, y, C(2)); } }
+    const hx0 = (hind ? x + 1 : x) + lx, hy = 24 - up; b.set(hx0, hy, HO[2]); b.set(hx0 + 1, hy, HO[2]); b.set(hx0 - 1, hy + 1, HO[3]); b.set(hx0, hy + 1, HO[3]); b.set(hx0 + 1, hy + 1, HO[2]); };
+  const p = f % 2;
+  leg(12, 0, p === 1, 1); leg(24, 1, p === 0, 1); // far legs
+  // tail (behind body)
+  b.poly([[26, 9], [29, 10], [30, 15], [31, 21], [29, 22], [28, 17], [26, 12]], 0, (x, y) => MN[y < 13 ? 2 : (x + y) % 3 ? 2 : 1]);
+  // body: barrel, chest, hindquarters
+  b.ell(17.5, 12.6, 9.2, 4.3, 0, (x, y) => tone(y));
+  b.ell(10.6, 12.4, 3.6, 4.0, 0, (x, y) => tone(y));
+  b.ell(24.2, 11.9, 4.2, 4.4, 0, (x, y) => tone(y));
+  // neck: thick at the shoulder, narrowing to the poll
+  b.poly([[7, 2], [10, 1], [18, 9], [13, 13], [8, 12], [6, 6]], 0, (x, y) => tone(y + 2));
+  // head: long wedge pointing down-forward, rounded cheek, soft muzzle
+  b.poly([[5, 1], [9, 1], [9, 5], [5, 9], [2, 11], [0, 10], [0, 8], [3, 4]], 0, (x, y) => C0[y < 4 ? 4 : y < 8 ? 3 : 3]);
+  b.ell(7.4, 4.6, 2.4, 2.4, 0, (x, y) => C0[y < 4 ? 4 : 3]);
+  b.ell(1.6, 9.4, 1.8, 1.6, 0, () => C0[wh ? 3 : 2]); // muzzle
+  b.set(0, 9, C0[1]); b.set(2, 11, C0[1]); b.set(1, 10, C0[1]); // nostril, mouth
+  b.set(6, 3, EYE); b.set(7, 3, C0[2]);
+  b.set(7, 0, C0[3]); b.set(8, 0, C0[2]); b.set(9, 0, C0[3]); // ears
+  // mane along the crest + forelock
+  for (const [x, y] of [[9, 1], [10, 1], [10, 2], [11, 2], [11, 3], [12, 3], [12, 4], [13, 4], [13, 5], [14, 5], [14, 6], [15, 6], [15, 7], [16, 7], [16, 8], [17, 8]]) b.set(x, y, MN[2]);
+  for (const [x, y] of [[10, 3], [11, 4], [12, 5], [13, 6], [14, 7]]) b.set(x, y, MN[1]);
+  b.set(6, 1, MN[2]); b.set(5, 2, MN[2]);
+  // belly shadow & shoulder line
+  for (let x = 12; x < 23; x++) if (b.get(x, 16)) b.set(x, 16, C0[1]);
+  for (const [x, y] of [[8, 6], [7, 7], [6, 8], [5, 9], [9, 7], [9, 8]]) b.set(x, y, C0[2]); // jaw line & throat
+  leg(9, 0, p === 0, 0); leg(21, 1, p === 1, 0); // near legs
+  b.outline(OUTL); return b; }
 // ---------- small animals and props that walk ----------
 function animalPB(kind, f, dir) {
-  if (kind === 'horse') { const b = new PB(32, 26), C0 = RPK[dir || 'brown'], M = RPK.dwood; const legs = f % 2;
-    b.ell(16, 12, 10, 5.5, 0, (x, y) => C0[y < 10 ? 4 : y > 14 ? 2 : 3]); // body
-    b.poly([[5, 11], [9, 9], [6, 2], [2, 2], [1, 5]], 0, (x, y) => C0[y < 5 ? 4 : 3]); b.set(2, 4, hx('#1a1418')); // head & neck
-    for (let y = 1; y < 10; y++) b.set(7 + (y >> 2), y, M[2]); // mane
-    for (const [x, ph] of [[8, 0], [11, 1], [21, 1], [24, 0]]) { const up = (ph === legs) ? 1 : 0; for (let y = 16; y < 24 - up; y++) b.set(x, y, C0[2]), b.set(x + 1, y, C0[1]); b.set(x, 24 - up, M[1]); b.set(x + 1, 24 - up, M[1]); }
-    for (let y = 9; y < 20; y++) b.set(27 + (y > 14 ? 1 : 0), y, M[2]); // tail
-    b.outline(OUTL); return b; }
+  if (kind === 'horse') return horsePB(f, dir);
+  if (FAUNA[kind]) return FAUNA[kind](f, dir);
   if (kind === 'dog') { const b = new PB(16, 12), C0 = RPK.orange; b.ell(8, 6, 5, 2.8, 0, (x, y) => C0[y < 5 ? 4 : 3]); b.ell(3, 4, 2.4, 2.2, 0, () => C0[4]); b.set(2, 3, hx('#1a1418')); b.set(1, 5, hx('#1a1418')); b.set(4, 2, C0[1]); const l = f % 2; for (const [x, p] of [[5, 0], [11, 1]]) { const up = p === l ? 1 : 0; b.set(x, 9 - up, C0[2]); b.set(x, 10 - up, C0[1]); b.set(x + 1, 9, C0[2]); } b.set(13, 4 - l, C0[3]); b.set(14, 3 - l, C0[3]); b.outline(OUTL); return b; }
   if (kind === 'cat') { const b = new PB(12, 10), C0 = RPK.gray; b.ell(6, 6, 4, 2.2, 0, (x, y) => C0[y < 5 ? 3 : 2]); b.ell(2.5, 4, 2, 1.8, 0, () => C0[3]); b.set(1, 2, C0[2]); b.set(3, 2, C0[2]); b.set(2, 4, hx('#e8d040')); b.set(10, 4 - (f % 2), C0[3]); b.set(11, 3, C0[3]); b.set(4, 8, C0[1]); b.set(8, 8, C0[1]); b.outline(OUTL); return b; }
   if (kind === 'hen') { const b = new PB(10, 10), C0 = RPK.white; b.ell(5, 6, 3.4, 2.6, 0, (x, y) => C0[y < 6 ? 4 : 3]); b.ell(2.5, 3.5, 1.6, 1.6, 0, () => C0[4]); b.set(2, 1, hx('#d02838')); b.set(0, 4, hx('#e8a030')); b.set(2, 3, hx('#1a1418')); b.set(4, 9, hx('#e8a030')); b.set(6, 9, hx('#e8a030')); if (f % 2) b.set(1, 5, hx('#e8a030')); b.outline(OUTL); return b; }
