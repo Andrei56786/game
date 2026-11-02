@@ -86,7 +86,7 @@ function orderMove(t, onArrive, follow) {
   const pa = playerArmy(); if (!pa || t < 0) return false;
   if (!passable(WD.ter[t])) { UI.toast('Туда не пройти.'); return false; }
   const p = planPath(pa, t); if (!p) { UI.toast('Пути нет.'); return false; }
-  if (p.length <= 1) { if (onArrive) onArrive(pa); return true; }
+  if (p.length <= 1) { if (onArrive) runArrive(pa, onArrive); return true; }
   setPath(pa, p); pa.onArrive = onArrive || null; G.player.follow = follow || -1; pa.hidden = 0; pa.fires = 0;
   if (G.speed === 0) G.speed = UI.lastSpeed || 1;
   if (typeof Snd !== 'undefined') Snd.sfx('march'); if (typeof TUT !== 'undefined') TUT.ev('move', t);
@@ -101,7 +101,7 @@ function clickSett(sid, c) {
   if (c && c.b === 2) { UI.open({ k: 'sett', id: sid }); return; }
   if (settHere(pa) === sid) { arriveSett(sid); return; }
   const acc = { village: 'деревню', castle: 'замок', town: 'город', capital: 'столицу' }[ws.type];
-  if (orderMove(ws.i, () => arriveSett(sid))) UI.toast(hostile(pa.realm, G.setts[sid].ctrl) ? 'Идём на ' + ws.name + ': по прибытии — осада или приступ.' : 'Идём в ' + ws.name + ': по прибытии войдём в ' + acc + '.');
+  if (orderMove(ws.i, { k: 'sett', s: sid })) UI.toast(hostile(pa.realm, G.setts[sid].ctrl) ? 'Идём на ' + ws.name + ': по прибытии — осада или приступ.' : 'Идём в ' + ws.name + ': по прибытии войдём в ' + acc + '.');
 }
 // the settlement the army is standing in (or -1)
 function settHere(a) { let best = -1, bd = 1.3; for (const s of WD.setts) { const d = Math.hypot(s.x + 0.5 - a.x, s.y + 0.5 - a.y); if (d < bd) { bd = d; best = s.id; } } return best; }

@@ -3,3 +3,4 @@ tmp/
 shots/
 /*.html
 tmp_*
+node_modules/

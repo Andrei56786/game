@@ -1,7 +1,9 @@
 // Автотесты в браузере без окна (Playwright).
 // node tools/drive.mjs <url> <steps.json> [width height]
 // Шаги: {waitFor: expr}, {eval: code}, {evalFile: path}, {print: expr}, {move:[x,y]}, {click:[x,y,btn?]},
-//       {key: 'KeyE'}, {wait: ms}, {shot: 'name.png'}, {png: 'name.png', expr: 'код, возвращающий dataURL'}. Координаты — логические (640×360). Код выполняется через T.ev внутри игры.
+//       {key: 'KeyE'}, {wait: ms}, {shot: 'name.png'}, {png: 'name.png', expr: 'код, возвращающий dataURL'},
+//       {expect: 'выражение', label: 'что проверяем'} — проверка: ложь = тест не прошёл. Координаты — логические (640×360). Код выполняется через T.ev внутри игры.
+// Код выхода: 0 — всё хорошо; 1 — шаг упал, проверка не прошла или на странице были ошибки.
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -10,7 +12,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const exe = process.env.CHROME || '/vercel/sandbox/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome';
 const browser = await chromium.launch({ executablePath: fs.existsSync(exe) ? exe : undefined, args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: +w, height: +h } });
-const errs = [];
+const errs = []; let failed = 0;
 page.on('pageerror', e => errs.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text()); else if (m.type() === 'log' && process.env.LOG) console.log('[page]', m.text()); });
 await page.goto(url);
@@ -23,6 +25,7 @@ for (const s of steps) {
     if (s.waitFor) await page.waitForFunction(c => { try { return !!window.T.ev(c); } catch (_) { return false; } }, s.waitFor, { timeout: s.timeout || 20000, polling: 100 });
     else if (s.eval !== undefined) { const r = await ev(s.eval); if (s.out !== false && r !== null) console.log(typeof r === 'string' ? r : JSON.stringify(r)); }
     else if (s.evalFile) { const r = await ev(fs.readFileSync(path.resolve(ROOT, s.evalFile), 'utf8')); if (r !== null) console.log(typeof r === 'string' ? r : JSON.stringify(r)); }
+    else if (s.expect !== undefined) { const r = await ev(s.expect); if (!r) { failed++; console.log('EXPECT FAILED', s.label || s.expect); } else if (process.env.LOG) console.log('ok:', s.label || s.expect); }
     else if (s.print) console.log(s.label ? s.label + ': ' : '', JSON.stringify(await ev(s.print)));
     else if (s.move) { const [x, y] = await toPage(...s.move); await page.mouse.move(x, y); }
     else if (s.click) { const [x, y] = await toPage(s.click[0], s.click[1]); await page.mouse.click(x, y, { button: ['left', 'middle', 'right'][s.click[2] || 0] }); }
@@ -30,7 +33,8 @@ for (const s of steps) {
     else if (s.wait) await page.waitForTimeout(s.wait);
     else if (s.shot) await page.screenshot({ path: path.resolve(ROOT, 'shots', s.shot) });
     else if (s.png) { const d = await ev(s.expr); if (typeof d === 'string' && d.startsWith('data:')) fs.writeFileSync(path.resolve(ROOT, 'shots', s.png), Buffer.from(d.split(',')[1], 'base64')); else console.log('png: no data for', s.png, String(d).slice(0, 200)); }
-  } catch (e) { console.log('STEP FAILED', JSON.stringify(s).slice(0, 200), String(e.message || e).split('\n')[0]); if (s.must !== false) break; }
+  } catch (e) { console.log('STEP FAILED', JSON.stringify(s).slice(0, 200), String(e.message || e).split('\n')[0]); if (s.must !== false) { failed++; break; } }
 }
 if (errs.length) console.log('ERRORS:\n' + errs.slice(0, 10).join('\n')); else console.log('no page errors');
 await browser.close();
+process.exitCode = failed || errs.length ? 1 : 0;

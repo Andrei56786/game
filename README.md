@@ -17,17 +17,22 @@ python3 tools/build.py out.html   # собрать в другой файл
 |---|---|
 | `src/` | 55 модулей игры. Порядок склейки — `ORDER` в `tools/build.py`; всё оборачивается в одну IIFE. Каждый файл — меньше ~55 КБ |
 | `tools/` | сборка (`build.py`, `head.html`, `tail.html`), автотесты в браузере без окна (`drive.mjs`, `smoke.mjs`), замер генерации мира (`genbench.mjs`), точечные правки (`patch.py`), подготовка отправки в GitHub (`ghpush.py`) |
-| `tests/` | сценарии для `drive.mjs`: `smoke.json` (300 дней), `econ.json` (год экономики), `econui.json` (окна экономики), `play.json`, `map.json`, `path.json`, сцены v3.3 — `castle.json`, `hunt.json`, `feast.json`, `chapel.json`, `proj.json` и другие |
+| `tests/` | сценарии для `drive.mjs` (`save.json` — сохранение и загрузка): `smoke.json` (300 дней), `econ.json` (год экономики), `econui.json` (окна экономики), `play.json`, `map.json`, `path.json`, сцены v3.3 — `castle.json`, `hunt.json`, `feast.json`, `chapel.json`, `proj.json` и другие |
 | `notes/` | `vyzhimka-chata.md` — подробная выжимка: замысел, что сделано, техника, баланс, дорожная карта; `prilozheniya.md` — приложения к ней |
 
 ## Тесты
 
 ```bash
-python3 tools/build.py
-node tools/drive.mjs "file://$PWD/dist/index.html#court777" tests/smoke.json
+npm install && npx playwright install chromium   # один раз
+npm test            # сборка и все сценарии, кроме долгих стендов баланса
+npm run test:all    # вместе со стендами баланса (hl_*, q*)
+node tools/runtests.mjs smoke save                  # только названные сценарии
+node tools/drive.mjs "file://$PWD/dist/index.html#court777" tests/smoke.json   # один сценарий с выводом
 ```
 
-Нужны Node 18+ и пакет `playwright` с Chromium. Скриншоты тестов пишутся в `shots/` (в git не хранятся).
+Нужны Node 18+, Python 3 и `playwright` с Chromium. Сценарий не проходит, если упал шаг, не выполнилась проверка `{"expect": …}`, на странице была ошибка или в выводе есть непустой список `"errs"`. На каждый PR и пуш в `main` тесты запускает GitHub Actions (`.github/workflows/tests.yml`). Скриншоты тестов пишутся в `shots/` (в git не хранятся).
+
+Одно и то же зерно мира даёт одну и ту же игру: генератор случайностей засевается от зерна, а его состояние хранится в сохранении (`tests/save.json` это проверяет).
 
 ## Версии
 
