@@ -2,12 +2,34 @@
 // ===== ART 2 (v3.3): sprites for the bigger castle, hunting grounds, villages & taverns; game animals & livestock; extra looks =====
 const DK = hx('#120a10'), DK2 = hx('#1c1216');
 // ---------- castle interiors ----------
-OBJP.stairdn = function () { const b = new PB(32, 30), S = RPK.stone; b.rect(0, 0, 32, 30, S[3]); b.hl(0, 0, 32, S[5]); b.vl(0, 0, 30, S[4]); b.rect(3, 3, 26, 25, DK);
-  for (let k = 0; k < 6; k++) { const y = 4 + k * 4; b.rect(4, y, 24, 3, S[Math.max(0, 5 - k)]); b.hl(4, y, 24, S[Math.max(1, 6 - k)]); } b.vl(30, 2, 26, S[2]); b.outline(OUTL); return b; };
-OBJP.cellar = function () { const b = new PB(40, 28), S = RPK.stone, W0 = RPK.wood; b.rect(7, 3, 26, 23, S[3]); b.hl(7, 3, 26, S[5]); b.vl(7, 3, 23, S[4]); b.rect(10, 6, 20, 19, DK);
-  for (let k = 0; k < 4; k++) { const y = 7 + k * 4; b.rect(11, y, 18, 2, S[Math.max(1, 5 - k)]); }
-  b.rect(0, 7, 8, 17, W0[3]); for (let y = 9; y < 24; y += 3) b.hl(0, y, 8, W0[2]); b.vl(0, 7, 17, W0[4]); b.rect(2, 14, 3, 3, RPK.steel[3]);
-  b.rect(32, 7, 8, 17, W0[2]); for (let y = 9; y < 24; y += 3) b.hl(32, y, 8, W0[1]); b.rect(35, 14, 3, 3, RPK.steel[2]); b.outline(OUTL); return b; };
+// stairs down: a stairwell in the floor, nine shallow steps sinking into the dark (same stone and runner as the flight below)
+OBJP.stairdn = function () { const b = new PB(32, 30), S = RPK.stone, R0 = RPK.red, Gd = RPK.gmetal;
+  b.rect(0, 0, 32, 30, S[3]); b.hl(0, 0, 32, S[5]); b.vl(0, 0, 30, S[4]); b.vl(31, 0, 30, S[2]); b.hl(0, 29, 32, S[2]);
+  const n = 9; for (let k = 0; k < n; k++) { const y = 27 - k * 3, d = k / (n - 1); // k = 0 at the bottom edge (nearest, highest), sinking toward the top
+    for (let yy = y - 2; yy <= y; yy++) for (let x = 3; x < 29; x++) { const run = x >= 10 && x <= 21, edge = yy === y - 2;
+      const c = run ? cmix(R0[edge ? 4 : 3], DK, d * 0.85) : cmix(S[edge ? 5 : 4], DK, d * 0.85); b.set(x, yy, c); }
+    b.hl(10, y, 12, cmix(Gd[3], DK, d * 0.8)); }
+  b.rect(3, 0, 26, 2, DK); for (let y = 2; y < 29; y++) { b.set(2, y, S[1]); b.set(29, y, S[1]); }
+  b.outline(OUTL); return b; };
+// the way down to the dungeon: a stone stairwell with an arched doorway, a raised portcullis and two torches (f = flicker frame)
+OBJP.cellar = function (o, f) { const b = new PB(64, 54), S = RPK.stone, M = RPK.steel, SL = RPK.slate, W0 = RPK.wood, F = RPK.fire;
+  b.rect(6, 2, 52, 10, SL[3]); b.hl(6, 2, 52, SL[5]); b.hl(6, 3, 52, SL[4]);
+  for (let y = 5; y < 12; y += 2) { b.hl(6, y, 52, SL[2]); for (let x = 6 + (y & 2 ? 0 : 3); x < 58; x += 6) b.set(x, y + 1, SL[2]); }
+  b.hl(6, 12, 52, SL[1]);
+  b.fill(8, 13, 48, 26, (x, y) => { const r = (y - 13) / 5 | 0, j = (y - 13) % 5, sx = (x - 8 + (r & 1) * 4) % 8; return j === 4 || sx === 0 ? S[2] : j === 0 ? S[4] : hsh(x >> 3, r, 7) < 0.3 ? S[4] : S[3]; });
+  b.ell(32, 25, 14, 11, S[5]); b.rect(18, 25, 28, 14, S[5]); for (let k = -3; k <= 3; k++) { const a = Math.PI / 2 + k * 0.42; b.line(32 + Math.cos(a) * 10, 25 - Math.sin(a) * 8, 32 + Math.cos(a) * 14, 25 - Math.sin(a) * 11, S[3]); }
+  b.vl(18, 25, 14, S[4]); b.vl(45, 25, 14, S[3]); b.rect(29, 13, 6, 4, S[6]); b.hl(29, 16, 6, S[4]);
+  b.ell(32, 25, 10.5, 8.5, DK); b.rect(22, 25, 21, 14, DK);
+  for (let y = 27; y < 39; y += 3) b.hl(23, y, 19, y < 30 ? DK2 : S[y < 34 ? 0 : 1]);
+  for (let x = 23; x < 43; x += 3) for (let y = 17; y < 27; y++) if (b.get(x, y) === DK || b.get(x, y) === DK2) b.set(x, y, y === 26 ? M[4] : M[2]);
+  b.hl(22, 21, 21, M[1]); b.hl(22, 22, 21, M[3]); for (let x = 23; x < 43; x += 3) b.set(x, 27, M[3]);
+  for (const tx of [12, 51]) { b.rect(tx - 1, 27, 3, 2, M[1]); b.set(tx - 2, 27, M[2]); b.set(tx + 2, 27, M[2]); b.rect(tx, 21, 1, 7, W0[3]); b.set(tx, 21, W0[1]);
+    const fl = (f || 0) ^ (tx > 32 ? 1 : 0), h = fl ? 6 : 7; b.ell(tx + 0.5, 20, 2.2, h / 2 + 0.5, F[1]); b.ell(tx + 0.5 + (fl ? 0.6 : -0.4), 19.6, 1.4, h / 2 - 0.6, F[3]); b.set(tx, 20, F[5]); b.set(tx + (fl ? 1 : 0), 20 - h + 2, F[2]); }
+  for (const [y, k] of [[39, 1], [42, 2], [46, 3], [50, 4]]) { b.rect(16, y, 32, 54 - y, S[k]); b.hl(16, y, 32, S[Math.max(0, k - 2)]); b.hl(16, y + 1, 32, S[k - 1]); }
+  b.rect(16, 39, 2, 15, S[0]); b.hl(16, 53, 32, S[5]);
+  for (const [x0, w] of [[2, 14], [48, 14]]) { b.rect(x0, 32, w, 15, S[4]); b.hl(x0, 32, w, S[6]); b.hl(x0, 39, w, S[3]); b.vl(x0 + 7, 32, 7, S[3]); b.vl(x0 + 3, 40, 7, S[3]);
+    b.rect(x0, 47, w, 7, S[3]); b.hl(x0, 47, w, S[2]); for (let x = x0 + 4; x < x0 + w; x += 6) b.vl(x, 48, 6, S[2]); }
+  b.outline(OUTL); return b; };
 OBJP.bars = function (o) { const n = o.n || 1, w = n * 16, b = new PB(w, 34), M = RPK.steel, S = RPK.stone; b.rect(0, 0, w, 4, S[4]); b.hl(0, 0, w, S[6]); b.rect(0, 30, w, 4, S[2]); b.hl(0, 30, w, S[3]);
   for (let x = 2; x < w - 1; x += 4) { b.vl(x, 4, 26, M[1]); b.vl(x + 1, 4, 26, M[3]); b.set(x + 1, 5, M[5]); } b.hl(0, 11, w, M[2]); b.hl(0, 12, w, M[4]); b.hl(0, 23, w, M[2]); b.hl(0, 24, w, M[4]);
   if (o.door) { const dx = (w >> 1) - 2; b.rect(dx, 15, 5, 5, RPK.gmetal[2]); b.set(dx + 2, 17, DK); } b.outline(OUTL); return b; };
@@ -48,12 +70,50 @@ OBJP.platter = function (o) { const w = o.w || 96, b = new PB(w, 16), s = o.seed
   for (let x = 14; x < w - 10; x += 34) { b.rect(x, 2, 2, 6, RPK.ivory[4]); b.set(x, 1, RPK.fire[4]); } b.outline(OUTL2); return b; };
 OBJP.tilt = function (o) { const n = o.n || 8, w = n * 16, b = new PB(w, 22), W0 = RPK.wood, R0 = RPK[o.ramp || 'navy']; for (let x = 0; x < w; x += 16) b.rect(x + 1, 6, 3, 15, W0[2]); b.rect(0, 6, w, 4, W0[4]); b.hl(0, 6, w, W0[5]);
   for (let x = 0; x < w; x++) for (let y = 10; y < 17; y++) b.set(x, y, ((x >> 3) & 1) ? R0[3] : RPK.ivory[4]); b.hl(0, 16, w, R0[1]); b.outline(OUTL); return b; };
-OBJP.stands = function (o) { const n = o.n || 12, w = n * 16, b = new PB(w, 52), W0 = RPK.wood, R0 = RPK[o.ramp || 'red'];
-  for (let t = 0; t < 3; t++) { const y = 22 + t * 9; b.rect(0, y, w, 6, W0[4 - t]); b.hl(0, y, w, W0[5 - t]); b.rect(0, y + 6, w, 3, W0[1]); }
-  for (let x = 0; x < w; x += 24) b.rect(x + 2, 12, 3, 40, W0[2]); for (let x = 0; x < w; x++) for (let y = 4; y < 14; y++) { const sc = y > 10 ? Math.sin(x * 0.5) > 0 : true; if (sc) b.set(x, y, ((x / 8 | 0) & 1) ? R0[3] : RPK.ivory[4]); }
-  for (let x = 4; x < w; x += 32) { b.vl(x, 0, 6, W0[1]); b.rect(x + 1, 0, 6, 3, R0[4]); } b.outline(OUTL); return b; };
-OBJP.tent = function (o) { const b = new PB(34, 36), R0 = RPK[o.ramp || 'red'], I = RPK.ivory[4]; b.vl(17, 0, 6, RPK.wood[2]); b.rect(18, 0, 6, 3, R0[4]);
-  b.poly([[17, 4], [33, 24], [1, 24]], 0, (x, y) => ((Math.floor((x - 17) / (1 + (y - 4) * 0.35)) & 1) ? R0[x < 17 ? 4 : 3] : I)); b.rect(2, 24, 30, 10, R0[2]); for (let x = 2; x < 32; x += 6) b.rect(x, 24, 3, 10, I); b.rect(13, 25, 8, 9, DK2); b.hl(1, 24, 32, R0[1]); b.outline(OUTL); return b; };
+// tournament stands: three tiers of benches under a striped awning, a cloth skirt with shields and a royal box in the middle
+OBJP.stands = function (o) { const n = o.n || 12, w = n * 16, b = new PB(w, 54), W0 = RPK.wood, R0 = RPK[o.ramp || 'red'], I = RPK.ivory, Gd = RPK.gmetal, P = RPK.purple, m = w >> 1;
+  // three tiers of benches with risers
+  for (let t = 0; t < 3; t++) { const y = 22 + t * 9; b.rect(0, y, w, 6, W0[4 - t]); b.hl(0, y, w, W0[5 - t]); for (let x = 6; x < w; x += 12) b.vl(x, y + 1, 5, W0[3 - t]); b.rect(0, y + 6, w, 3, W0[1]); }
+  // posts and the striped awning with a scalloped edge
+  for (let x = 0; x < w; x += 24) { b.rect(x + 2, 10, 3, 42, W0[2]); b.vl(x + 2, 10, 42, W0[3]); }
+  for (let x = 0; x < w; x++) { const st = ((x / 8) | 0) & 1, sc = Math.abs((x % 8) - 3.5) < 2.6; for (let y = 4; y < (sc ? 15 : 13); y++) b.set(x, y, st ? R0[y < 6 ? 4 : 3] : I[y < 6 ? 4 : 3]); b.set(x, 4, st ? R0[4] : I[4]); }
+  for (let x = 4; x < w; x += 32) { if (Math.abs(x - m) < 26) continue; b.vl(x, 0, 6, W0[1]); b.rect(x + 1, 0, 6, 3, R0[4]); b.set(x + 7, 1, R0[3]); }
+  // the cloth skirt along the front, with shields
+  for (let x = 0; x < w; x++) { for (let y = 46; y < 53; y++) b.set(x, y, R0[y < 48 ? 3 : 2]); b.set(x, 46, Gd[3]); if (x % 6 === 0) b.set(x, 52, Gd[2]); }
+  for (let x = 14; x < w - 8; x += 32) { if (Math.abs(x - m) < 22) continue; b.rect(x, 46, 7, 5, I[4]); b.rect(x + 1, 51, 5, 1, I[4]); b.set(x + 3, 52, I[4]); b.rect(x + 1, 47, 5, 4, ((x / 32) | 0) % 2 ? RPK.blue[3] : RPK.green[3]); b.vl(x + 3, 47, 4, Gd[4]); }
+  // the royal box in the middle: a raised canopy in purple and gold
+  const bx0 = m - 22, bx1 = m + 22; b.rect(bx0, 14, bx1 - bx0, 12, W0[1]); b.rect(bx0 + 2, 18, bx1 - bx0 - 4, 8, P[1]); // shade inside
+  for (const px of [bx0, bx1 - 3]) { b.rect(px, 0, 3, 52, W0[3]); b.vl(px, 0, 52, W0[4]); b.set(px + 1, 0, Gd[4]); }
+  for (let x = bx0; x < bx1; x++) { const st = ((x - bx0) / 6 | 0) & 1, sc = Math.abs(((x - bx0) % 6) - 2.5) < 2; for (let y = 2; y < (sc ? 14 : 12); y++) b.set(x, y, st ? P[y < 5 ? 4 : 3] : Gd[y < 5 ? 4 : 3]); b.hl(x, 2, 1, Gd[5]); }
+  b.rect(bx0 + 1, 26, bx1 - bx0 - 2, 2, Gd[3]); b.rect(bx0, 28, bx1 - bx0, 18, P[2]); for (let y = 29; y < 46; y += 4) b.hl(bx0, y, bx1 - bx0, P[3]); b.hl(bx0, 28, bx1 - bx0, Gd[4]);
+  b.rect(m - 5, 30, 11, 10, Gd[3]); b.rect(m - 4, 31, 9, 8, P[1]); b.rect(m - 3, 36, 7, 2, Gd[4]); for (const x of [m - 3, m, m + 3]) { b.set(x, 35, Gd[4]); b.set(x, 34, Gd[5]); } b.set(m - 2, 35, Gd[3]); b.set(m + 2, 35, Gd[3]); b.set(m, 37, RPK.red[4]); // a crown
+  b.vl(m, -1, 1, 0); b.rect(m - 1, 0, 3, 2, Gd[4]);
+  b.outline(OUTL); return b; };
+OBJP.tent = function (o, f) { const W = 58, H = 66, b = new PB(W, H), R0 = RPK[o.ramp || 'red'], I = RPK.ivory, Wd = RPK.wood, cx = 29;
+  shadowEll(b, cx, H - 4, 27, 4);
+  // guy ropes and pegs
+  b.line(3, 34, 0, H - 6, Wd[2]); b.line(W - 4, 34, W - 1, H - 6, Wd[2]); b.rect(0, H - 6, 2, 2, Wd[3]); b.rect(W - 2, H - 6, 2, 2, Wd[3]);
+  // the drum: vertical stripes shaded as a cylinder
+  const x0 = 5, x1 = W - 6, yt = 34, yb = H - 7;
+  for (let x = x0; x <= x1; x++) { const t = (x - x0) / (x1 - x0), stripe = Math.floor((x - x0) / 6) % 2, sh = t < 0.2 ? 1 : t < 0.6 ? 0 : t < 0.85 ? -1 : -2;
+    const c = stripe ? R0[clamp(3 + sh, 0, 4)] : I[clamp(4 + sh, 0, 4)]; for (let y = yt; y <= yb + (Math.abs(t - 0.5) < 0.45 ? 1 : 0); y++) b.set(x, y, c); }
+  b.hl(x0, yb + 1, x1 - x0 + 1, R0[1]);
+  // the doorway with tied-back flaps
+  b.rect(cx - 6, yt + 9, 12, yb - yt - 8, DK2); b.rect(cx - 5, yt + 10, 10, 3, hx('#2a1a14')); b.rect(cx - 4, yb - 3, 8, 3, RPK.dirt[2]);
+  b.poly([[cx - 7, yt + 8], [cx - 2, yt + 8], [cx - 7, yt + 24]], 0, () => I[3]); b.poly([[cx + 7, yt + 8], [cx + 2, yt + 8], [cx + 7, yt + 24]], 0, () => I[2]);
+  b.set(cx - 7, yt + 16, Wd[3]); b.set(cx + 6, yt + 16, Wd[3]);
+  // the cone: radiating stripes, light from the left
+  const ay = 9, ey = 33;
+  b.poly([[cx, ay], [W - 1, ey], [0, ey]], 0, (x, y) => { const k = (y - ay) / (ey - ay), u = (x - cx) / Math.max(1, k * 29), seg = Math.floor((u + 1) * 4.5) % 2, sh = u < -0.5 ? 1 : u < 0.2 ? 0 : u < 0.7 ? -1 : -2;
+    return seg ? R0[clamp(3 + sh, 0, 4)] : I[clamp(4 + sh, 0, 4)]; });
+  // scalloped valance
+  for (let x = 0; x < W; x++) { const s = Math.floor(x / 5) % 2, d = Math.abs((x % 5) - 2); for (let y = ey; y < ey + 4 - (d > 1 ? 1 : 0); y++) b.set(x, y, s ? R0[2] : R0[3]); b.set(x, ey, R0[4]); }
+  // a shield with a charge above the door
+  b.rect(cx - 3, yt + 1, 7, 6, I[4]); b.rect(cx - 2, yt + 7, 5, 1, I[4]); b.set(cx, yt + 8, I[4]); b.rect(cx - 2, yt + 2, 5, 5, R0[2]); b.set(cx, yt + 3, RPK.gmetal[4]); b.set(cx - 1, yt + 4, RPK.gmetal[4]); b.set(cx + 1, yt + 4, RPK.gmetal[4]); b.set(cx, yt + 5, RPK.gmetal[4]);
+  // the pole, a gilded knob and a long pennant (two frames: it streams in the wind)
+  b.vl(cx, 0, ay + 1, Wd[2]); b.set(cx, 0, RPK.gmetal[4]); b.set(cx - 1, 1, RPK.gmetal[3]); b.set(cx + 1, 1, RPK.gmetal[3]);
+  const fl = f ? 1 : 0; for (let k = 0; k < 13; k++) { const y = 2 + Math.round(Math.sin(k * 0.6 + fl * 1.6) * 0.8) + (k > 8 ? 1 : 0), hh = k < 9 ? 3 : 2; for (let j = 0; j < hh; j++) b.set(cx + 1 + k, y + j, (k + j) % 4 === 0 ? R0[2] : R0[4]); }
+  b.outline(OUTL); return b; };
 OBJP.chapelb = function (o) { const W0 = 112, b = new PB(W0 + 4, 104), S = RPK.stone, fy = 52; wallTex(b, 2, fy, W0, 50, 'stone', 21); for (let x = 2; x < W0 + 2; x++) b.put(x, fy + 48, S[2]);
   roofTex(b, 0, 18, W0 + 4, 36, 'slate', 21); for (let x = 2; x < W0 + 2; x++) for (let y = 0; y < 3; y++) b.set(x, fy + y, pk(18, 10, 28, 110 - y * 30));
   const gx = 46; b.poly([[gx, 22], [gx + 12, 4], [gx + 24, 22]], 0, (x, y) => S[x < gx + 12 ? 5 : 3]); b.rect(gx + 2, 22, 20, 30, S[4]); b.vl(gx + 2, 22, 30, S[5]); b.rect(gx + 8, 26, 8, 10, DK); b.ell(gx + 12, 31, 3, 3, 0, () => RPK.gmetal[3]); b.set(gx + 12, 1, RPK.gmetal[4]); b.vl(gx + 12, 0, 5, RPK.gmetal[3]);
@@ -161,6 +221,26 @@ OBJP.gatepost = function (o) { const b = new PB(34, 42), S = RPK.stone, F = RPK.
   b.vl(2, 13, 29, S[4]); b.vl(31, 13, 29, S[1]); b.rect(0, 7, 34, 7, S[5]); b.hl(0, 7, 34, S[6]); b.hl(0, 13, 34, S[1]);
   for (let x = 0; x < 34; x += 7) { b.rect(x, 1, 5, 6, S[4]); b.hl(x, 1, 5, S[6]); b.vl(x + 4, 2, 5, S[2]); }
   b.rect(16, 21, 2, 8, DK2); const tx = o.flip ? 5 : 26; b.rect(tx, 28, 3, 6, RPK.wood[1]); b.rect(tx - 1, 26, 5, 2, RPK.steel[2]); b.set(tx + 1, 25, F[4]); b.set(tx, 24, F[3]); b.set(tx + 2, 24, F[3]); b.set(tx + 1, 23, F[5]);
+  b.outline(OUTL); return b; };
+// a framed painting or a wall hanging for rooms whose back wall is inside the castle (o.kind: land | hunt | sea | flowers | saint | stars | pegs)
+OBJP.wallpic = function (o) { const k = o.kind || 'land';
+  if (k === 'pegs') { const b = new PB(30, 22), W0 = RPK.wood; b.rect(0, 2, 30, 3, W0[3]); b.hl(0, 2, 30, W0[4]); for (const [x, c] of [[4, 'brown'], [14, 'forest'], [24, 'wine']]) { const C = RPK[c]; b.rect(x, 0, 2, 3, W0[1]);
+      b.poly([[x - 1, 4], [x + 3, 4], [x + 5, 20], [x - 3, 20]], 0, (xx, y) => C[xx < x ? 3 : xx > x + 2 ? 1 : 2]); b.hl(x - 3, 20, 9, C[1]); b.rect(x, 4, 2, 2, C[3]); } b.outline(OUTL); return b; }
+  if (k === 'stars') { const b = new PB(22, 28), N = RPK.navy, Gd = RPK.gmetal; b.rect(0, 0, 22, 2, RPK.dwood[3]); for (let y = 2; y < 25; y++) for (let x = 2; x < 20; x++) b.set(x, y, N[y < 6 ? 3 : 2]);
+      for (let x = 2; x < 20; x++) { const d = Math.abs((x - 2) % 6 - 2.5); if (d < 2) b.set(x, 25, N[2]); if (d < 1) b.set(x, 26, N[2]); }
+      b.ell(14, 9, 3.2, 3.2, 0, () => Gd[4]); b.ell(15.5, 8, 2.6, 2.6, 0, () => N[2]); for (const [x, y] of [[5, 6], [8, 14], [5, 19], [12, 18], [16, 21], [10, 6], [17, 14]]) { b.set(x, y, Gd[5]); if ((x + y) % 2) { b.set(x - 1, y, Gd[3]); b.set(x + 1, y, Gd[3]); } } b.outline(OUTL); return b; }
+  const b = new PB(24, 20), Gd = RPK.gmetal; for (let y = 0; y < 20; y++) for (let x = 0; x < 24; x++) { const e = Math.min(x, y, 23 - x, 19 - y); if (e < 2) b.set(x, y, e === 0 ? Gd[2] : (x + y) % 3 ? Gd[3] : Gd[4]); }
+  const I = (x, y, c) => { if (x >= 2 && x < 22 && y >= 2 && y < 18) b.set(x, y, c); };
+  if (k === 'land' || k === 'hunt') { for (let y = 2; y < 18; y++) for (let x = 2; x < 22; x++) I(x, y, y < 9 ? hx(y < 5 ? '#7ab0e0' : '#a8d0ea') : RPK.grass[y < 12 ? 4 : 3]);
+    for (let x = 2; x < 22; x++) { const hgt = 9 + Math.round(Math.sin(x * 0.45) * 1.6); for (let y = hgt; y < 12; y++) I(x, y, RPK.forest[3]); }
+    if (k === 'land') { b.rect(13, 5, 5, 5, RPK.stone[4]); b.rect(14, 3, 2, 3, RPK.stone[4]); b.set(14, 2, RPK.red[3]); b.rect(15, 8, 1, 2, DK2); for (let x = 3; x < 12; x++) I(x, 14 + Math.round(Math.sin(x) * 0.6), RPK.water[4]); }
+    else { const D = RPK.brown; b.rect(6, 11, 6, 3, D[3]); b.set(5, 10, D[3]); b.set(4, 10, D[3]); b.set(5, 9, D[2]); b.set(6, 8, D[2]); b.set(7, 9, D[2]); for (const x of [6, 7, 10, 11]) I(x, 14, D[2]); I(6, 15, D[1]); I(11, 15, D[1]);
+      for (const hx0 of [15, 19]) { I(hx0, 13, RPK.ivory[4]); I(hx0 + 1, 13, RPK.ivory[4]); I(hx0 - 1, 12, RPK.ivory[4]); I(hx0, 14, RPK.ivory[3]); I(hx0 + 1, 14, RPK.ivory[3]); I(hx0 + 2, 12, RPK.ivory[3]); } } }
+  else if (k === 'sea') { for (let y = 2; y < 18; y++) for (let x = 2; x < 22; x++) I(x, y, y < 11 ? hx(y < 6 ? '#e0b070' : '#f0d0a0') : RPK.water[(x + y) % 4 ? 3 : 4]);
+    b.ell(16, 7, 2, 2, 0, () => hx('#fff2c0')); b.poly([[5, 12], [16, 12], [14, 14], [7, 14]], 0, () => RPK.wood[2]); b.vl(10, 4, 8, RPK.wood[1]); b.poly([[10, 4], [15, 10], [10, 10]], 0, () => RPK.ivory[4]); b.poly([[10, 5], [6, 10], [10, 10]], 0, () => RPK.ivory[3]); b.set(10, 3, RPK.red[4]); }
+  else if (k === 'flowers') { for (let y = 2; y < 18; y++) for (let x = 2; x < 22; x++) I(x, y, RPK.wine[y < 10 ? 1 : 2]); b.rect(9, 12, 6, 5, RPK.gmetal[3]); b.rect(10, 11, 4, 1, RPK.gmetal[4]); b.hl(8, 16, 8, RPK.dwood[3]);
+    for (const [x, y, c] of [[9, 6, 'red'], [13, 5, 'ivory'], [16, 8, 'pink'], [7, 9, 'gold'], [12, 8, 'red'], [15, 4, 'gold'], [10, 3, 'pink']]) { b.set(x, y, RPK[c][4]); b.set(x + 1, y, RPK[c][3]); b.set(x, y + 1, RPK[c][3]); b.line(x, y + 2, 12, 11, RPK.leaf[4]); } }
+  else if (k === 'saint') { for (let y = 2; y < 18; y++) for (let x = 2; x < 22; x++) I(x, y, Gd[y < 10 ? 4 : 3]); b.ell(12, 7, 4.5, 4.5, 0, () => Gd[5]); b.ell(12, 7.5, 2.2, 2.6, 0, () => RPK.skin1[3]); b.poly([[7, 18], [9, 11], [15, 11], [17, 18]], 0, (x) => RPK.blue[x < 12 ? 3 : 2]); b.set(11, 7, DK2); b.set(13, 7, DK2); b.hl(10, 5, 5, RPK.h_brown[2]); }
   b.outline(OUTL); return b; };
 // a rose bush in bloom (o.col: red | pink | ivory)
 OBJP.rosebush = function (o) { const b = new PB(22, 20), L0 = RPK.leaf, F = RPK[o.col || 'red'] || RPK.red;

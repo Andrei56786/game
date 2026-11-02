@@ -1,0 +1,15 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"eval": "UI.win=null; G.speed=3; G.frac=(10.6-5)/24; npcSnap(false); COURT.loc='yard'; COURT.p.x=14*CT+8; COURT.p.y=34*CT+11; COURT.p.sit=null; snapCam(); errandStart(npcByKey('srv_runner2'),'prep',7); 'errand '+G.court.errand.st"},
+ {"expect": "['srv_quart','srv_runner','srv_runner2'].every(k => npcByKey(k)) && npcByKey('srv_maid').talk === errandTalk", "label": "снабженец и посыльные при дворе, слугам можно давать поручения"},
+ {"waitFor": "G.court.errand && G.court.errand.st === 'wait'", "timeout": 60000},
+ {"expect": "/Обоз/.test(supS().last) && supDaysOf(G.court.retinue).food >= 6.5", "label": "снабженец собрал обоз, посыльный вернулся с докладом"},
+ {"eval": "const n=npcByKey('srv_runner2'); talkTo(n); const s=DLG.cur ? DLG.cur.name : '-'; DLG.q=[]; DLG.cur=null; s"},
+ {"expect": "!G.court.errand && !npcByKey('srv_runner2').errand", "label": "доклад выслушан — поручение закрыто"},
+ {"eval": "const ca=capitalArmy(); const w0=ca.wagons+G.court.retinue.wagons; leaveCourt(ca); const pa=playerArmy(); window.__w0=w0; 'pa '+armyMen(pa)+' wag '+pa.wagons+' food d '+supDaysOf(pa).food.toFixed(1)"},
+ {"expect": "playerArmy() && playerArmy().wagons === window.__w0", "label": "при выезде свита вливается в войско вместе с повозками"},
+ {"eval": "const pa=playerArmy(), cap=G.realms[0].capital; let best=null,bd=1e9; for(const ws of WD.setts){ const S=G.setts[ws.id]; if(ws.id===cap||S.ctrl!==0||ws.type==='village') continue; const d=Math.hypot(ws.x-pa.x,ws.y-pa.y); if(d<bd){bd=d;best=ws;} } pa.x=best.x+0.5; pa.y=best.y+0.5; pa.path=null; pa.food=armyMen(pa)*2; G.realms[0].gold=400; const o=supS(); o.sid=-1; o.days=7; supTick(); best.name+': '+supDaysOf(pa).food.toFixed(1)+' d | '+o.last"},
+ {"expect": "supDaysOf(playerArmy()).food >= 6.5", "label": "в своём городе снабженец докупил до цели"},
+ {"eval": "let f=-1; for(let i=0;i<MW*MH&&f<0;i+=11){ if(WD.ter[i]===TR.FOREST&&!nearWater(i)) f=i; } const pa=playerArmy(); window.__wd=waterDay(pa,f,{}); window.__ws=waterDay(pa,(()=>{let s=-1; for(let i=0;i<MW*MH&&s<0;i+=11){ if(WD.ter[i]===TR.STEPPE&&!nearWater(i)) s=i; } return s;})(),{}); JSON.stringify([window.__wd, window.__ws])"},
+ {"expect": "window.__wd.d > -0.5 && window.__ws.d < -0.5", "label": "в лесу ручьи покрывают почти всю нужду в воде, в степи — нет"}
+]
