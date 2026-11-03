@@ -227,8 +227,9 @@ const Snd = (() => {
     if (ly.drone && pc.bi === 0) (M.dronef || drone)(M.dr, t, barD * (sec.rest || 4) + 0.6, M.dv, S.b.dr);
     if (!sec.rest) {
       const c = sec.p[pc.bi], mel = sec.mel || M.mel, mb = sec.mel && M.mb2 ? M.mb2 : M.mb, mv = sec.mel && M.mv2 ? M.mv2 : M.mv;
-      if (ly.lute) LUTE[sec.lute || M.lute](S, c, t, st, M.lv, S.b.lu);
-      if (ly.mel && sec.m) for (const n of sec.m[pc.bi]) if (!n.r) MEL[mel](d2m(mb, M.sc, n.d), t + n.s * st + (rnd() - 0.5) * 0.01, n.l * st * 0.94, mv * n.acc * (0.92 + rnd() * 0.16), S.b.me, n);
+      const sc2 = sec.scB && sec.scB[pc.bi]; // a bar may borrow another scale for its chord (the raised seventh of a cadence)
+      if (ly.lute) LUTE[sec.lute || M.lute](sc2 ? Object.assign({}, S, { M: Object.assign({}, M, { sc: sc2 }) }) : S, c, t, st, M.lv, S.b.lu);
+      if (ly.mel && sec.m) for (const n of sec.m[pc.bi]) if (!n.r) MEL[mel](d2m(mb, M.sc, n.d) + (n.sh || 0), t + n.s * st + (rnd() - 0.5) * 0.01, n.l * st * 0.94, mv * n.acc * (0.92 + rnd() * 0.16), S.b.me, n);
       if (ly.drum) DRUM[sec.drum || M.drum](t, st, pc.bi, S.b.dm);
       if (K.hooks.bar) K.hooks.bar(S, sec, pc.bi, t, st, barD);
     }
@@ -309,6 +310,8 @@ const Snd = (() => {
       seq.forEach(([m, d, l]) => { horn(m, t + d, l, 0.12, sfxBus, 1.3); horn(m - (m === 74 ? 5 : m === 69 ? 3 : 3), t + d + 0.005, l, 0.07, sfxBus, 1.1); }); drum('big', t + 1.24, 0.5, sfxBus); drum('low', t + 0.39, 0.3, sfxBus); },
     fanfare_small(t) { [62, 66, 69, 74].forEach((m, i) => lute(m, t + i * 0.07, 0.24, sfxBus)); bellV(587, t + 0.3, 0.05, 2, sfxBus); },
     bow(t) { tone('triangle', 196, 128, t, 0.16, 0.09, sfxBus, 0.002); tone('sine', 392, 250, t, 0.07, 0.035, sfxBus, 0.002); nz(t + 0.03, 0.22, 'bandpass', 2600, 1.8, 0.07, sfxBus, { a: 0.02, f1: 800 }); },
+    draw(t) { nz(t, 0.55, 'bandpass', 420, 6, 0.05, sfxBus, { a: 0.35, f1: 900 }); tone('triangle', 70, 95, t, 0.5, 0.012, sfxBus, 0.3); },
+    stick(t) { nz(t, 0.03, 'bandpass', 1800, 2, 0.12, sfxBus); tone('triangle', 520, 300, t, 0.05, 0.05, sfxBus); },
     hit(t) { nz(t, 0.05, 'lowpass', 900, 0.8, 0.15, sfxBus); tone('sine', 180, 90, t, 0.07, 0.07, sfxBus); },
     bark(t) { for (let i = 0; i < 2; i++) { const tt = t + i * 0.2 + rnd() * 0.05, f = 400 + rnd() * 120, p = pan(sfxBus, rnd() * 1.2 - 0.6), o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, tt); o.frequency.exponentialRampToValueAtTime(f * 0.62, tt + 0.1);
       const b = filt('bandpass', 1100, 1.4), g = G_(0, p); o.connect(b); b.connect(g); envAD(g, tt, 0.008, 0.13, 0.11); o.start(tt); o.stop(tt + 0.17); nz(tt, 0.06, 'bandpass', 1700, 1.2, 0.04, p); } },
@@ -325,9 +328,9 @@ const Snd = (() => {
   const lastPlay = {};
   function tick() {
     if (!ac || ac.state !== 'running') return;
-    const now = ac.currentTime, fam = P.mus && P.on ? resolve() : null;
+    const now = ac.currentTime, fam = P.mus && P.on ? resolve() : null, lead = fam && K.hooks.lead ? K.hooks.lead(fam) : null; // a room's own piece starts when the king walks in
     if (!fam) { if (cur) { fadeOut(cur); cur = null; } }
-    else if (!cur || (cur.fam !== fam && !famList(fam).includes(cur.mood))) { if (cur) fadeOut(cur); const L0 = famList(fam).filter(k => MOODS[k]); cur = startSeq(L0[Math.floor(rnd() * L0.length)] || 'peace', now + (cur ? 0.6 : 0.05)); cur.fam = fam; }
+    else if (!cur || (cur.fam !== fam && (!famList(fam).includes(cur.mood) || (lead && lead !== cur.mood)))) { if (cur) fadeOut(cur); const L0 = famList(fam).filter(k => MOODS[k]); cur = startSeq(lead || L0[Math.floor(rnd() * L0.length)] || 'peace', now + (cur ? 0.6 : 0.05)); cur.fam = fam; }
     else cur.fam = fam;
     const ahead = document.hidden ? 1.6 : 0.45;
     if (cur) { if (cur.t < now - 1) cur.t = now + 0.05; let g = 0; while (cur.t < now + ahead && g++ < 8) cur.t += schedBar(cur, cur.t); }
