@@ -1,6 +1,6 @@
 extends Node
 # Корень: заставка ↔ двор. Без экрана: -- --selftest (двор живёт двое суток, проверки, выход с кодом).
-# В веб-сборке — window.slovo('команда') для скриншот-тестов (court, title, time 21, speed 2, goto 0, talk, next, close, walk 1 0 0.5, state).
+# В веб-сборке — window.slovo('команда') для скриншот-тестов (court, title, help, time 21, day 30, speed 2, goto 0, talk, next, close, walk 1 0 0.5, state).
 const Title = preload("res://scripts/title.gd")
 const Court = preload("res://scripts/court.gd")
 var cur: Node
@@ -41,9 +41,11 @@ func _js_cmd(a: Array) -> void:
 		"title":
 			show_title()
 		"time":
-			Game.minutes = float(p[1]) * 60.0
+			Game.set_hour(float(p[1]))
 		"speed":
 			Game.speed = clampi(int(p[1]), 0, 3)
+		"day":
+			Game.day = maxi(0, int(p[1]))
 		_:
 			if cur and cur.has_method("cmd"):
 				cur.cmd(p)
