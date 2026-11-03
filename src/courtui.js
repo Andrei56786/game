@@ -149,7 +149,7 @@ function courtKeys() {
     if (DLG.open() && !UI.modalOpen()) { DLG.key(k); continue; }
     if (c === 'Escape') { if (UI.win) UI.shut(); else if (!blocked) UI.open({ k: 'menu' }); continue; }
     if (blocked) continue;
-    const winK = { KeyK: 'council', KeyV: 'cmd', KeyF: 'dyn', KeyJ: 'tech', KeyL: 'letters', KeyR: 'realm', KeyN: 'diplo', KeyP: 'proj', KeyO: 'supply', KeyT: 'chron' }[c];
+    const winK = { KeyK: 'council', KeyV: 'cmd', KeyF: 'dyn', KeyJ: 'tech', KeyL: 'letters', KeyR: 'realm', KeyN: 'diplo', KeyP: 'proj', KeyO: 'supply', KeyT: 'chron', KeyI: 'intel' }[c];
     if (winK) { if (UI.win && UI.win.k === winK) UI.shut(); else if (winK === 'diplo') UI.open({ k: 'diplo', t: firstForeign() }); else UI.open({ k: winK }); continue; }
     if (c === 'KeyB') { if (UI.win && UI.win.k === 'book') UI.shut(); else UI.open({ k: 'book', ch: TUT.lastCh() }); continue; }
     if (UI.win) continue;

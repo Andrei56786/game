@@ -1,0 +1,242 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"eval": "UI.win=null; UI.modals=[]; G.speed=0;\nconst a=G.armies.find(x=>x.realm===0&&x.kind==='lord'&&x.alive);\nlet S=null,bd=1e9; for(const s of G.setts){ if(s.ctrl<1||s.ctrl>4||WD.setts[s.id].type==='village') continue; const ws=WD.setts[s.id], d=Math.hypot(ws.x-a.x,ws.y-a.y); if(d<bd){bd=d;S=s;} }\nconst t=S.ctrl; window.__t=t; window.__a=a; window.__S=S; declareWar(t,0,{silent:true});\nconst ru=rulerOf(t); ru.traits=['reckless','wrathful']; ru.intr=3;\nG.court.secrets=G.court.secrets.filter(s=>!(s.k==='spy'&&s.realm===t));\nconst B=belOf(t); B.fooled=0; B.a={}; B.react={};\na.u.spear+=600; a.u.sword+=200; a.food=Math.max(a.food,8000); a.water=waterCap(a); a.morale=80;\n'a '+a.id+' S '+WD.setts[S.id].name+' t '+t+' d '+bd.toFixed(1)+' war '+G.rel[0][t].war+' skept '+skept(t).toFixed(2)+' gar '+Math.round(powerU(S.gar)*(1+S.walls*0.6))+' my '+Math.round(powerU(a.u,a.xp))"
+},
+{
+"expect": "G.rel[0][__t].war && G.rel[__t][0].war && skept(__t)<0.1",
+"label": "война и доверчивый правитель"
+},
+{
+"eval": "const a=__a,S=__S; const st=feintStage(a,S.id); a.x=st%MW+0.5; a.y=Math.floor(st/MW)+0.5; a.path=null; a.mode='camp';\napplyOrder(a,{o:'feint',t:S.id,mode:'intent'},null); cmdArmyTick(a);\nconst ws=WD.setts[S.id]; window.__fd=Math.hypot(a.x-ws.x-0.5,a.y-ws.y-0.5); 'stage d '+__fd.toFixed(1)+' fires '+a.fires+' feint '+JSON.stringify(a.feint)+' cmd '+a.cmd.o+' st '+a.cmd.st+' arr '+a.cmd.arr+' label '+ordLabel(a.cmd)"
+},
+{
+"expect": "__a.fires===1 && __a.feint && __a.feint.s===__S.id && __a.cmd.o==='feint' && __a.cmd.arr===G.day && __fd>2 && __fd<5",
+"label": "ложный марш: костры, стоянка в дне пути от стен"
+},
+{
+"eval": "const t=__t,S=__S,ws=WD.setts[S.id],a=__a; let j=-1; const ang0=Math.atan2(a.y-ws.y-0.5,a.x-ws.x-0.5)+Math.PI;\nfor(let r=4;r<=8&&j<0;r++) for(let k=0;k<16&&j<0;k++){ const an=ang0+(k%2?1:-1)*Math.ceil(k/2)*0.35, x=Math.floor(ws.x+0.5+Math.cos(an)*r), y=Math.floor(ws.y+0.5+Math.sin(an)*r); if(!inMap(x,y)) continue; const q=y*MW+x; if(!(TINFO[WD.ter[q]].cost>0)||settAtTile(q)>=0) continue; if(Math.hypot(x+0.5-a.x,y+0.5-a.y)<5) continue; j=q; }\nconst g=mkChar(t,REALM_DEF[t].key,'general',R,{}); g.traits=['reckless']; g.intr=6;\nconst b=mkArmy(t,'lord',g.id,j%MW,Math.floor(j/MW),{spear:60,levy:80,archer:20}); b.food=3000; b.water=4; b.morale=70; b.ai={task:'idle',t:0}; window.__b=b;\nbelDaily(); const e=belOf(t).a[a.id]; 'b '+b.id+' d '+Math.hypot(b.x-ws.x-0.5,b.y-ws.y-0.5).toFixed(1)+' belief '+JSON.stringify(e)+' truth p '+Math.round(powerU(a.u,a.xp))+' men '+armyMen(a)"
+},
+{
+"expect": "(()=>{const e=G.bel[__t].a[__a.id]; return !!e && e.src==='eye' && e.feint && e.fires && e.p>powerU(__a.u,__a.xp)*1.5 && e.men>armyMen(__a)*1.5;})()",
+"label": "враг видит ложный марш вдвое большим"
+},
+{
+"eval": "const t=__t,a=__a; let n=0; for(;n<12;n++){ delete belOf(t).react[a.id]; belReact(t); if(G.armies.some(x=>x.alive&&x.realm===t&&x.ai&&x.ai.guard&&x.ai.guard.by===a.id)) break; }\nconst gs=G.armies.filter(x=>x.alive&&x.realm===t&&x.ai&&x.ai.guard&&x.ai.guard.by===a.id); window.__g=gs[0];\n'tries '+(n+1)+' guards '+gs.map(x=>x.id+'→'+WD.setts[x.ai.guard.s].name).join(',')+' drew '+(a.feint&&a.feint.drew)+' react '+JSON.stringify(belOf(t).react[a.id])"
+},
+{
+"expect": "!!__g && __g.ai.guard.s===__S.id && __a.feint.drew>=1",
+"label": "правитель поверил: войско послано сторожить крепость"
+},
+{
+"eval": "const g=__g, ws=WD.setts[g.ai.guard.s]; const d0=Math.hypot(g.x-ws.x-0.5,g.y-ws.y-0.5); aiArmy(g); window.__gd=d0; 'guard d '+d0.toFixed(1)+' task '+g.ai.task+' path '+(g.path?g.path.length:0)+' guard '+JSON.stringify(g.ai.guard)"
+},
+{
+"expect": "!!__g.ai.guard && (__gd<=2.2 || (__g.ai.task==='guard' && __g.path && __g.path.length>1))",
+"label": "сторож идёт к крепости, а не бежит"
+},
+{
+"eval": "const a=__a,g=__g; g.x=a.x+1.8; g.y=a.y; g.path=null; feintWatch(); 'seen '+JSON.stringify(a.feint.seen)+' | '+G.dlog.slice(-2).map(e=>e.t).join(' | ')"
+},
+{
+"expect": "__a.feint.seen.includes(__g.id) && G.dlog.some(e=>e.t.includes('Враг поверил ложному маршу'))",
+"label": "донесение: враг поверил"
+},
+{
+"eval": "const a=__a,g=__g,t=__t; g.x=a.x+0.8; g.y=a.y; const f0=belOf(t).fooled; belDaily(); 'fooled '+f0+'→'+belOf(t).fooled+' guard '+JSON.stringify(g.ai.guard)+' feint '+JSON.stringify(a.feint)+' cmd '+a.cmd.o+' fires '+a.fires+' belief '+JSON.stringify(belOf(t).a[a.id])"
+},
+{
+"expect": "belOf(__t).fooled>=1 && !__g.ai.guard && !__a.feint && __a.fires===0 && __a.cmd.o==='hold' && !belOf(__t).a[__a.id].feint && G.dlog.some(e=>e.t.includes('Ложный марш раскрыт'))",
+"label": "разъезд вблизи раскрыл уловку"
+},
+{
+"eval": "const a=__a,g=__g,t=__t,B=belOf(t); g.x=a.x+6; g.y=a.y; delete B.a[a.id]; const r0=threatsNear(g,12).some(x=>x.b===a);\nB.a[a.id]={x:a.x,y:a.y,p:12345,men:900,day:G.day,src:'eye',tgt:-1}; const x1=threatsNear(g,12).find(x=>x.b===a);\nB.a[a.id].day=G.day-2; const r2=threatsNear(g,12).some(x=>x.b===a); B.a[a.id].day=G.day; B.a[a.id].src='rumor'; const r3=threatsNear(g,12).some(x=>x.b===a); B.a[a.id].src='eye';\nwindow.__tn=[r0,!!x1&&x1.p===12345,r2,r3]; JSON.stringify(__tn)"
+},
+{
+"expect": "JSON.stringify(__tn)==='[false,true,false,false]'",
+"label": "полководец видит лишь то, во что верит"
+},
+{
+"eval": "const t=__t; const S2=G.setts.filter(s=>s.ctrl===0&&WD.setts[s.id].type!=='village'&&powerU(s.gar)>0&&!s.siege)[0]; window.__S2=S2;\nG.realms[0].gold+=100; const g0=garSeen(S2,t), p0=realmPower(0,t), gold0=G.realms[0].gold; const ok=placeDummy(S2.id);\nwindow.__dm={ok, g0:Math.round(g0), g1:Math.round(garSeen(S2,t)), p0:Math.round(p0), p1:Math.round(realmPower(0,t)), spent:gold0-G.realms[0].gold};\ndummyDaily(); __dm.kept=!(S2.dumK&&S2.dumK[t]); JSON.stringify(__dm)+' '+WD.setts[S2.id].name"
+},
+{
+"expect": "__dm.ok && __dm.spent===12 && __dm.g1>__dm.g0*1.7 && __dm.p1>__dm.p0 && __dm.kept",
+"label": "чучела: гарнизон кажется почти вдвое больше"
+},
+{
+"eval": "const S2=__S2,t=__t,b=__b,ws=WD.setts[S2.id]; b.x=ws.x+1.5; b.y=ws.y+0.5; b.path=null; const f0=belOf(t).fooled; dummyDaily(); const r1=!!(S2.dumK&&S2.dumK[t]), g1=garSeen(S2,t);\nS2.dumK={}; const r2=startSiege(b,S2.id); const r3=!!S2.dumK[t]; endSiege(b); window.__dr=[r1, Math.abs(g1-powerU(S2.gar))<1e-6, belOf(t).fooled>f0, r2, r3]; JSON.stringify(__dr)+' | '+G.dlog.slice(-2).map(e=>e.t).join(' | ')"
+},
+{
+"expect": "JSON.stringify(__dr)==='[true,true,true,true,true]'",
+"label": "чучела раскрывают разъезд у стен и осада"
+},
+{
+"eval": "const t=__t; for(let x=1;x<5;x++) if(x!==t){ G.rel[t][x].opn=0; G.rel[x][t].opn=0; }\nif(![1,2,3,4].some(x=>x!==t&&alive(x)&&!G.rel[t][x].war&&!G.rel[t][x].ally)){ const x=[1,2,3,4].find(x=>x!==t&&alive(x)); setRel(t,x,'war',0); setRel(t,x,'ally',0); }\nbelOf(t).plot={}; const c={intr:20}; let s='',n=0; while(n<12&&!s.includes('легло на стол')){ s=forgeDone(t,c,1); n++; }\nconst B2=+Object.keys(belOf(t).plot)[0]; window.__fg={n, B2, opn:B2?Math.round(G.rel[t][B2].opn):null, s}; JSON.stringify(__fg)"
+},
+{
+"expect": "__fg.s.includes('легло на стол') && __fg.B2>=1 && __fg.opn<=-24",
+"label": "подложное письмо ссорит соседей"
+},
+{
+"eval": "const t=__t,B=belOf(t); B.a={}; B.rum=null; const p0=belPower(t); const c={intr:20}; let s='',n=0; while(n<15&&!B.rum){ s=rumorDone(t,1.45,c,1); n++; }\nconst p1=belPower(t), r1=B.rum; B.rum=null; n=0; while(n<15&&!B.rum){ s=rumorDone(t,0.6,c,1); n++; }\nwindow.__rm={p0:Math.round(p0), p1:Math.round(p1), r1, p2:Math.round(belPower(t)), r2:B.rum}; JSON.stringify(__rm)"
+},
+{
+"expect": "__rm.r1 && __rm.r1.k==='str' && __rm.r1.f>1.3 && __rm.p1>__rm.p0 && __rm.r2 && __rm.r2.k==='weak' && __rm.p2<__rm.p0",
+"label": "слухи меняют, какой нас видит враг"
+},
+{
+"eval": "G.court.net[__t]=2; const b=__b; b.x=__a.x+9; b.y=__a.y+2; know(b,'eye'); G.know[b.id].day=G.day-3; belDaily(); UI.open({k:'intel'}); UI.tab=0; 'insight '+insight(__t)+' rows '+knownRows().length+' dlog '+G.dlog.length"
+},
+{
+"wait": 500
+},
+{
+"shot": "deceit_know.png"
+},
+{
+"expect": "UI.win && UI.win.k==='intel' && LAST.some(h=>h.id==='tab3')",
+"label": "окно «Разведка и обман» открыто"
+},
+{
+"eval": "UI.tab=1; UI.win.r=__t; 'ok'",
+"out": false
+},
+{
+"wait": 400
+},
+{
+"shot": "deceit_mind.png"
+},
+{
+"eval": "UI.tab=2; 'ok'",
+"out": false
+},
+{
+"wait": 400
+},
+{
+"shot": "deceit_tricks.png"
+},
+{
+"expect": "LAST.some(h=>String(h.id).startsWith('in_dm')) && LAST.some(h=>h.id==='in_cmd')",
+"label": "уловки: чучела и войска короны"
+},
+{
+"eval": "UI.tab=3; 'ok'",
+"out": false
+},
+{
+"wait": 400
+},
+{
+"shot": "deceit_log.png"
+},
+{
+"eval": "UI.open({k:'cmd', sel:__a.id}); 'ok'",
+"out": false
+},
+{
+"wait": 400
+},
+{
+"shot": "deceit_cmd.png"
+},
+{
+"expect": "(()=>{const h=LAST.find(h=>h.id==='cm_ofeint'), r=LAST.find(h=>h.id==='cm_oret'); return !!h && !!r && h.y>r.y;})()",
+"label": "в приказах есть «Ложный марш…» третьим рядом"
+},
+{
+"eval": "UI.win=null; leaveCourt(__a); G.speed=0; UI.modals=[]; const pa=playerArmy(); kingFeign(true); const p1=perceivedPower(pa,__t); pa.feign=0; const p0=perceivedPower(pa,__t); pa.feign=G.day+5;\nwindow.__fr=p1/p0; 'pa '+pa.id+' kind '+pa.kind+' feign '+pa.feign+' ratio '+__fr.toFixed(2)"
+},
+{
+"expect": "playerArmy()===__a && __a.feign===G.day+5 && Math.abs(__fr-0.6)<0.01",
+"label": "притворное отступление: враг считает нас слабее"
+},
+{
+"eval": "const pa=playerArmy(),b=__b,t=__t,B=belOf(t); b.x=pa.x+5; b.y=pa.y; belDaily(); const g=charOf(b.gen); g.traits=['reckless']; g.intr=6; const x1=threatsNear(b,12).find(x=>x.b===pa);\ng.traits=['wise','cunning','cautious']; g.intr=16; const x2=threatsNear(b,12).find(x=>x.b===pa); g.traits=['reckless']; g.intr=6;\nwindow.__ws=[x1&&Math.round(x1.p), x2&&Math.round(x2.p), B.a[pa.id]&&B.a[pa.id].p]; JSON.stringify(__ws)"
+},
+{
+"expect": "__ws[0]>0 && __ws[1]>__ws[0]*1.5",
+"label": "мудрый полководец не верит притворному бегству"
+},
+{
+"eval": "const pa=playerArmy(),b=__b; b.x=pa.x+1.0; b.y=pa.y; b.path=null; b.ai.task='hunt'; b.ai.prey=pa.id; b.lure=0; lureDaily(); lureDaily(); const m0=b.morale, f0=b.fat, n=b.lure; checkEncounters();\nwindow.__lu={n, m0, m1:b.morale, f0, f1:b.fat, feign:pa.feign, modals:UI.modals.length}; JSON.stringify(__lu)+' | '+G.log.slice(-1).map(l=>l.t||l).join('')"
+},
+{
+"expect": "__lu.n===2 && __lu.m1===Math.max(5,__lu.m0-15) && __lu.f1===Math.min(100,__lu.f0+25) && __lu.feign===0 && G.log.slice(-3).some(l=>String(l.t||l).includes('Притворное бегство удалось'))",
+"label": "притворное бегство удалось: преследователь растянул строй"
+},
+{
+"eval": "const b=__b, pa=playerArmy(); b.x=pa.x+7; b.y=pa.y+3; know(b,'eye'); G.know[b.id].day=G.day-2; b.x=pa.x+14; b.y=pa.y+9; computeVision(); const k=G.know[b.id]; for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){ const q=(Math.floor(k.y)+dy)*MW+Math.floor(k.x)+dx; if(q>=0&&q<NT) G.explored[q]=1; }\nFOGDIRTY=1; cam.z=2; const [wx,wy]=MAPR.warpPt(k.x*TS,k.y*TS); centerOn(wx,wy); const [sx,sy]=w2s(wx,wy); window.__gs=[sx,sy]; 'ghost at '+sx+','+sy+' visible '+armyVisible(b)"
+},
+{
+"wait": 500
+},
+{
+"move": [
+320,
+176
+]
+},
+{
+"wait": 400
+},
+{
+"shot": "deceit_ghost.png"
+},
+{
+"expect": "!armyVisible(__b) && LAST.some(h=>h.id==='ghost'+__b.id)",
+"label": "призрак последнего донесения на карте"
+},
+{
+"eval": "cam.z=1; centerArmy(); UI.open({k:'army'}); 'ok'",
+"out": false
+},
+{
+"wait": 400
+},
+{
+"shot": "deceit_army.png"
+},
+{
+"expect": "LAST.some(h=>h.id==='awm_dec')",
+"label": "кнопка «Уловки… (I)» в окне войска"
+},
+{
+"eval": "const h=LAST.find(h=>h.id==='awm_dec'); h.onClick(); 'win '+UI.win.k+' tab '+UI.tab"
+},
+{
+"wait": 400
+},
+{
+"shot": "deceit_tricks2.png"
+},
+{
+"expect": "UI.win.k==='intel' && UI.tab===2 && LAST.some(h=>h.id==='in_fe') && LAST.some(h=>h.id==='in_fg')",
+"label": "уловки войска короля"
+},
+{
+"eval": "const pa=playerArmy(); kingFeint(true); const a1=!!pa.feint&&pa.fires===1; kingFeint(false); const a2=!pa.feint&&pa.fires===0; kingFeign(true); const a3=pa.feign===G.day+5; kingFeign(false); window.__kt=[a1,a2,a3,pa.feign===0]; JSON.stringify(__kt)"
+},
+{
+"expect": "JSON.stringify(__kt)==='[true,true,true,true]'",
+"label": "кнопки уловок короля включают и выключают"
+},
+{
+"eval": "UI.win=null; UI.modals=[]; const pa=playerArmy(); kingFeint(true); const errs=[]; for(let i=0;i<40;i++){ try{ dailyTick(); }catch(e){ errs.push(String(e&&e.stack||e).slice(0,300)); if(errs.length>3) break; } UI.modals=[]; }\nconst B=belOf(__t); window.__d40={errs, day:G.day, bel:Object.keys(B.a).length, know:Object.keys(G.know||{}).length, dlog:(G.dlog||[]).length, fooled:B.fooled}; JSON.stringify(__d40)"
+},
+{
+"expect": "__d40.errs.length===0",
+"label": "40 дней мира без ошибок"
+},
+{
+"eval": "saveGame('dc'); const n0=JSON.stringify(G.bel).length, k0=Object.keys(G.know||{}).length, d0=G.dlog.length, f0=belOf(__t).fooled; loadGame('dc'); window.__sv=[JSON.stringify(G.bel).length===n0, Object.keys(G.know||{}).length===k0, G.dlog.length===d0, belOf(__t).fooled===f0]; localStorage.removeItem('sk3_savedc'); JSON.stringify(__sv)"
+},
+{
+"expect": "JSON.stringify(__sv)==='[true,true,true,true]'",
+"label": "вера, знания и журнал обмана сохраняются"
+}
+]

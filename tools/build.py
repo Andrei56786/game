@@ -8,7 +8,7 @@ VERSION = json.load(open(os.path.join(ROOT, 'package.json'), encoding='utf8'))['
 ORDER = ['engine', 'fontdata', 'audio', 'audio2', 'pix', 'art', 'bfig', 'portrait', 'chars', 'courtart', 'yardart', 'art2', 'fauna', 'fauna2', 'worldgen',
          'render', 'state', 'econ', 'army', 'intel', 'ai', 'battle', 'battlesim', 'captains', 'diplo', 'events', 'ui',
          'screens', 'screens2', 'bscreen', 'bdraw', 'tutorial', 'devsheet', 'courtmap', 'court', 'courtui', 'season', 'dialog',
-         'council', 'audience', 'dynasty', 'research', 'command', 'screens3', 'econui', 'scene', 'season2', 'castle2', 'projects', 'hunt', 'hunt2', 'hurt', 'hunt3', 'feast', 'chapel', 'village', 'folk', 'folktalk', 'folkacts', 'visit', 'visit2', 'visit3', 'help33', 'supply', 'herald', 'march', 'reign', 'reignui', 'study', 'birds', 'granary', 'tips', 'sick', 'sick2', 'sndui', 'music3', 'icons2', 'main']
+         'council', 'audience', 'dynasty', 'research', 'command', 'screens3', 'econui', 'scene', 'season2', 'castle2', 'projects', 'hunt', 'hunt2', 'hurt', 'hunt3', 'feast', 'chapel', 'village', 'folk', 'folktalk', 'folkacts', 'visit', 'visit2', 'visit3', 'help33', 'supply', 'herald', 'march', 'reign', 'reignui', 'study', 'birds', 'granary', 'tips', 'sick', 'sick2', 'sndui', 'music3', 'icons2', 'belief', 'deceit', 'deceitui', 'main']
 # каждый модуль держим меньше ~55 КБ: подключение GitHub принимает не больше 64 КБ за один вызов
 rd = lambda p: open(os.path.join(ROOT, p), encoding='utf8').read()
 mods = [(n + '.js', rd('src/' + n + '.js')) for n in ORDER]
