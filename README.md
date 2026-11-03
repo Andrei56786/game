@@ -16,7 +16,7 @@ python3 tools/build.py out.html   # собрать в другой файл
 Готовые `.exe` (Windows 10/11, 64 бит, без установки) — на странице [Releases → «Слово короля для Windows»](https://github.com/Andrei56786/game/releases/tag/windows); после каждого слияния в `main` их пересобирает GitHub Actions (`.github/workflows/windows.yml`).
 
 - `Slovo-korolya-<версия>.exe` — вся игра в своём окне (Electron, папка `desktop/`). F11 или Alt+Enter — во весь экран; сохранения — в `%APPDATA%\Slovo korolya`. Собрать самому на Windows: `python tools/build.py`, затем в `desktop/` — `npm install` и `npm run win` (→ `desktop/out/`).
-- `Slovo-korolya-Dvor-<версия>-Godot.exe` — первый срез версии на Godot 4.7 (папка `godot/slovo/`): заставка и живой двор. Собрать: `sh godot/slovo/build.sh` (Godot 4.7.2 и шаблоны экспорта — `notes/plan-v4.md`), проверить веб-сборку: `node godot/slovo/test_web.mjs`.
+- `Slovo-korolya-Dvor-<версия>-Godot.exe` — первый срез версии на Godot 4.7 (папка `godot/slovo/`): заставка и живой замок с графикой и людьми из HTML-версии. Собрать: `sh godot/slovo/build.sh` (Godot 4.7.2 и шаблоны экспорта — `notes/plan-v4.md`), проверить веб-сборку: `node godot/slovo/test_web.mjs`.
 
 Файлы не подписаны: если SmartScreen предупредит о неизвестном издателе — «Подробнее» → «Выполнить в любом случае».
 
@@ -29,7 +29,7 @@ python3 tools/build.py out.html   # собрать в другой файл
 | `tests/` | сценарии для `drive.mjs` (`save.json` — сохранение и загрузка): `smoke.json` (300 дней), `econ.json` (год экономики), `econui.json` (окна экономики), `play.json`, `map.json`, `path.json`, сцены v3.3 — `castle.json`, `hunt.json`, `feast.json`, `chapel.json`, `proj.json`, сцены v3.4 — `supply.json` (снабженец и посыльные), `hunt3.json` (оружие, кровавый след, трофеи, белый олень), сцены v3.5 — `hurt.json`, `hurt2.json` (ранение, носилки, постель, дни лечения), `herald.json`, `herald2.json` (объявление войны герольдом), `march.json` (распутица, мороз, броды, сорок дней ополчения), `reign.json` (летопись, эпохи, новая глава), сцены v3.6 — `font.json` (книжный шрифт), `study.json` (знания), `birds.json` (пташки Ока, кандидаты), `granary.json` (амбары), `yardpass.json` (проход во дворе), `huntbow.json` (свой лук, большой лес), `advice.json` (советы при входе), `sick.json` (болезни и лекарь), `music.json` (новые пьесы), `icons.json` (значки), сцена v3.7 — `deceit.json` (вера врага, ложный марш, чучела, слухи, подложное письмо, притворное бегство, призраки на карте, окно «Разведка и обман») и другие |
 | `notes/` | `vyzhimka-chata.md` — подробная выжимка: замысел, что сделано, техника, баланс, дорожная карта; `prilozheniya.md` — приложения к ней; `moduli.md` — модули по порядку сборки; планы `plan-v33.md`, `plan-v36.md`, `plan-v4.md` (графика и перенос на Godot) |
 | `desktop/` | оболочка Electron: браузерная игра как программа для Windows (`main.js` — окно, `icon.mjs` — значок, `prep.mjs` — берёт `dist/index.html`) |
-| `godot/` | `slovo/` — игра на Godot 4.7, срез «Двор» 0.1: заставка, двор 48×34 клетки с донжоном, казармами, конюшней, колодцем и ристалищем; день и ночь (свет факелов и окон), пятеро придворных со своим распорядком и речами, разговоры; самопроверка без экрана (`-- --selftest`) и проверка веб-сборки в Chromium (`test_web.mjs`). `spike/` — первая проба: сборки в веб и Windows, книжный шрифт, свет и частицы |
+| `godot/` | `slovo/` — игра на Godot 4.7, срез «Двор» 0.2: графика и данные выгружаются из HTML-версии (`tools/export.mjs`) — 7 мест замка, 35 человек с распорядком и речами, животные, свет как в HTML, виды года, заставка; самопроверка без экрана (`-- --selftest`) и проверка веб-сборки в Chromium (`test_web.mjs`). `spike/` — первая проба: сборки в веб и Windows, книжный шрифт, свет и частицы |
 
 ## Тесты
 
@@ -41,7 +41,7 @@ node tools/runtests.mjs smoke save                  # только назван�
 node tools/drive.mjs "file://$PWD/dist/index.html#court777" tests/smoke.json   # один сценарий с выводом
 ```
 
-Нужны Node 18+, Python 3 и `playwright` с Chromium. Сценарий не проходит, если упал шаг, не выполнилась проверка `{"expect": …}`, на странице была ошибка или в выводе есть непустой список `"errs"`. На каждый PR и пуш в `main` тесты запускает GitHub Actions (`.github/workflows/tests.yml`), там же собираются и проверяются сборки для Windows (`windows.yml`: Electron на `windows-latest`; Godot — самопроверка двора, веб-сборка в Chromium со снимками дня, сумерек, ночи и разговора). Скриншоты тестов пишутся в `shots/` (в git не хранятся).
+Нужны Node 18+, Python 3 и `playwright` с Chromium. Сценарий не проходит, если упал шаг, не выполнилась проверка `{"expect": …}`, на странице была ошибка или в выводе есть непустой список `"errs"`. На каждый PR и пуш в `main` тесты запускает GitHub Actions (`.github/workflows/tests.yml`), там же собираются и проверяются сборки для Windows (`windows.yml`: Electron на `windows-latest`; Godot — самопроверка двора, веб-сборка в Chromium со снимками заставки, дня, сумерек, ночи, времён года и разговора). Скриншоты тестов пишутся в `shots/` (в git не хранятся).
 
 Одно и то же зерно мира даёт одну и ту же игру: генератор случайностей засевается от зерна, а его состояние хранится в сохранении (`tests/save.json` это проверяет).
 

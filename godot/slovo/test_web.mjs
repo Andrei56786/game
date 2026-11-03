@@ -1,4 +1,4 @@
-// Проверка веб-сборки Godot в Chromium без окна: заставка, двор днём, в сумерках и ночью, разговор, ходьба.
+// Проверка веб-сборки Godot в Chromium без окна: заставка, тронный зал и двор днём, в сумерках и ночью, разговор, ходьба, масштаб.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -34,25 +34,38 @@ try {
   check(!!ready, 'игра загрузилась: ' + (ready || 'нет строки READY за минуту'));
   if (ready) {
     await wait(1500); await shot('title');
-    await cmd('court', 'time 12', 'speed 1'); await wait(1500); await shot('court_day');
+    await cmd('help'); await wait(400); await shot('title_help'); await cmd('help');
+    await cmd('court'); await wait(2500); await cmd('time 12', 'speed 1', 'spot throne_front'); await wait(1500); await shot('keep_day');
     let s = await state();
-    check(s && s.npcs === 5 && s.night === 0, 'двор днём: пять человек на виду, светло');
-    await cmd('time 19.8'); await wait(1200); await shot('court_dusk');
-    await cmd('time 23.5', 'speed 3'); await wait(4000); await shot('court_night');
+    check(s && s.loc === 'keep' && s.npcs >= 30 && s.here >= 4, 'тронный зал днём: ' + JSON.stringify(s));
+    await cmd('spot plaza_n'); await wait(1500); await shot('yard_day');
     s = await state();
-    check(s && s.night === 1 && s.npcs < 5, 'ночь: темно, люди ушли в дома (на виду ' + (s && s.npcs) + ')');
-    await cmd('time 12', 'speed 1'); await wait(3000);
+    check(s && s.loc === 'yard' && s.dark < 0.1 && s.here >= 8 && s.sea === 'th', 'двор днём: светло, люди на виду (' + (s && s.here) + '), оттепель 1-го дня, как в HTML (' + (s && s.sea) + ')');
+    const seas = [];
+    for (const [d, sv, n] of [[30, '', 'yard_summer'], [52, 'au2', 'yard_autumn'], [72, 'w', 'yard_winter']]) {
+      await cmd('day ' + d, 'time 12'); await wait(1500); await shot(n);
+      s = await state(); seas.push(s && s.sea === sv);
+    }
+    check(seas.every(Boolean), 'вид двора меняется по дню года: лето, золотая осень, снег');
+    await cmd('day 0', 'time 12'); await wait(1200);
+    await cmd('time 19.8'); await wait(1200); await shot('yard_dusk');
+    await cmd('time 23.5'); await wait(1500); await shot('yard_night');
+    s = await state();
+    check(s && s.dark > 0.5 && s.asleep >= 12, 'ночь: темно, люди спят или у себя (' + (s && s.asleep) + ')');
+    await cmd('spot throne_front'); await wait(1500); await shot('keep_night');
+    await cmd('time 12', 'spot plaza_n'); await wait(1500);
     const n0 = logs.length;
-    await cmd('goto 1', 'talk'); await wait(600); await shot('court_talk');
+    await cmd('goto grd_gate_l', 'talk'); await wait(1200); await shot('talk');
     s = await state();
-    check(s && s.talk === 1 && logs.slice(n0).some(x => x.startsWith('TALK ')), 'разговор со стражником открылся');
-    await cmd('next', 'next', 'next'); await wait(300);
+    check(s && s.talk && logs.slice(n0).some(x => x.startsWith('TALK ')), 'разговор со стражником открылся');
+    await cmd('next', 'next', 'next', 'next'); await wait(300);
     s = await state();
-    check(s && s.talk === -1, 'разговор закрылся');
+    check(s && !s.talk, 'разговор закрылся');
     const x0 = s.king[0];
     await cmd('walk -1 0 0.5'); await wait(300);
     s = await state();
     check(s && s.king[0] < x0 - 10, 'король идёт влево');
+    await cmd('zoom 1'); await wait(800); await shot('yard_zoom1'); await cmd('zoom 2');
     await cmd('title'); await wait(800);
   }
 } catch (e) { check(false, 'исключение: ' + e); }

@@ -1,868 +1,1197 @@
 extends Node2D
-# Срез «Двор»: двор столицы 48×34 клетки — донжон, казармы, конюшня, колодец, сад, ристалище; король ходит (WASD / стрелки),
-# слуги и придворные живут по распорядку (пути — AStarGrid2D), день и ночь, факелы и окна, разговоры (E), часы и скорость (Пробел, 1–3).
+# Двор «Слова короля»: места, графика, люди и распорядок — из HTML-версии (res://art, tools/export.mjs).
+# Свет как в HTML: карта света (небо + огни + окна + лучи) умножается на сцену, сверху — свечение пламени и окон.
+# Люди живут по расписанию во всех местах сразу и ходят через двери; король — 16×32, вид 320×180 точек (×4).
 signal leave
-const Pix = preload("res://scripts/pix.gd")
-const TS := 16
-const W := 48
-const H := 34
-enum { GRASS, PATH, SAND, WALL, BUILD, WELL, TREE, FLOWER }
-var kind := PackedByteArray()
-var astar := AStarGrid2D.new()
-var world := Node2D.new()
-var king := Sprite2D.new()
-var kframes: Array = []
-var kdir := 0
-var kstep := 0.0
-var npcs: Array[Dictionary] = []
-var cm := CanvasModulate.new()
-var lights: Array[Dictionary] = []
-var glows: Array[Sprite2D] = []
-var halos: Array[Sprite2D] = []
-var halo_tex: Texture2D = Pix.radial(36)
-var light_tex: Texture2D = Pix.radial(176)
-var cam := Camera2D.new()
-var hud := Label.new()
-var hint := Label.new()
-var dlg := PanelContainer.new()
-var dlg_name := Label.new()
-var dlg_text := Label.new()
-var talking := -1
-var line := 0
-var lines: PackedStringArray = []
+const CT := 16
+const DIRS := ["down", "left", "right", "up"]
+const NPC_SPDK := [1.0, 1.0, 1.4, 2.2]
+const ANISP := {"horse": 12.0, "dog": 44.0, "cat": 20.0, "hen": 11.0, "pigeon": 9.0}
+const Hud = preload("res://scripts/hud.gd")
+const People = preload("res://scripts/people.gd")
+
+var D: Dictionary
+var Z := 2
+var loc_id := ""
+var L: Dictionary
+var V: Dictionary
+var sea_key := ""
+var spots := {}
+var grids := {}
+var king := {}
+var npcs: Array = []
+var ani: Array = []
+var parts: Array = []
 var t := 0.0
 var walked := 0.0
+var room := ""
+var room_t := -10.0
+var fade := 0.0
+var fade_t := 0.0
+var fade_fn: Callable
+var last_ha := -1.0
+var cam_tl := Vector2.ZERO
+var sneak := false
+var path: Array = []            # путь короля по щелчку мыши
+var on_arrive: Callable
+var practice_t := -10.0
+var trees: Array = []
+var forge := Vector2.ZERO
+var people: RefCounted
 
-# люди двора: имя, наряд, распорядок (час → место), речи
-const PEOPLE := [
-	{"name": "Сенешаль Освальд", "p": {"body": Color8(60, 110, 70), "hair": Color8(200, 200, 196), "legs": Color8(50, 40, 34)}, "home": "keep",
-	 "plan": [[7, "keep"], [9, "well"], [12, "barracks"], [15, "stables"], [18, "keep"]],
-	 "say": ["Государь, амбары полны на две луны, а страже пора платить жалованье.", "Совет соберётся, когда прикажете. Казначей уже точит перья.", "«Тот, кто знает, когда сражаться, а когда нет, — побеждает»."]},
-	{"name": "Стражник Бран", "p": {"body": Color8(120, 124, 136), "hair": Color8(70, 50, 30), "legs": Color8(70, 60, 50), "hat": "helm"}, "home": "gate", "night": true,
-	 "plan": [[6, "gate"], [8, "door"], [10, "gate"], [13, "door"], [16, "gate"], [19, "door"], [21, "gate"]],
-	 "say": ["У ворот всё тихо, государь.", "Купцы говорят, на дорогах снова шалят разбойники.", "Ночью смотрю в оба: факелы горят до рассвета."]},
-	{"name": "Служанка Эльза", "p": {"body": Color8(70, 96, 170), "hair": Color8(150, 90, 40), "dress": true, "hat": "veil"}, "home": "keep",
-	 "plan": [[6, "well"], [8, "keep"], [11, "garden"], [14, "well"], [17, "keep"]],
-	 "say": ["Воды натаскала, государь, — к обеду всё будет.", "В саду яблони зацвели. Королева любит там гулять.", "Повар просит соли: на рынке она подорожала."]},
-	{"name": "Конюх Тобиас", "p": {"body": Color8(130, 90, 50), "hair": Color8(60, 40, 24), "hat": "hood"}, "home": "stables",
-	 "plan": [[5, "stables"], [9, "yard"], [11, "stables"], [15, "well"], [17, "stables"]],
-	 "say": ["Гнедой захромал, государь, но к охоте поправится.", "Овса до весны хватит, если не созывать знамёна.", "Кони чуют грозу раньше людей."]},
-	{"name": "Ловчий Мартин", "p": {"body": Color8(84, 100, 50), "hair": Color8(110, 70, 36), "legs": Color8(80, 60, 40)}, "home": "barracks",
-	 "plan": [[6, "yard"], [10, "gate"], [13, "yard"], [16, "garden"], [19, "barracks"]],
-	 "say": ["В королевском лесу видели белого оленя!", "Гончие застоялись. Прикажете — к утру будет охота.", "Лук натягивают спиной, а не руками, государь."]},
-]
-var spots := {}
+var layer: Node2D
+var world: Node2D
+var fx0: Node2D
+var fx1: Node2D
+var deco: Array = []
+var objs: Array = []
+var lights: Array = []
+var wins: Array = []
+var glows: Array = []
+var wglows: Array = []
+var beams: Array = []
+var cam := Camera2D.new()
+var lm := SubViewport.new()
+var lm_root := Node2D.new()
+var lm_amb := ColorRect.new()
+var lm_view := Sprite2D.new()
+var king_light: Sprite2D
+var hud: Control
+var vig: TextureRect
+var add_mat := CanvasItemMaterial.new()
+var mul_mat := CanvasItemMaterial.new()
+var bg_tex := {}
 
 func _ready() -> void:
-	_build_map()
-	add_child(_backdrop())
-	add_child(_ground())
-	world.y_sort_enabled = true
-	add_child(world)
-	_props()
-	kframes = Pix.frames({"body": Color8(150, 30, 40), "body2": Color8(110, 20, 30), "hair": Color8(120, 80, 40), "legs": Color8(50, 36, 30), "hat": "crown", "cape": Color8(120, 20, 34)})
-	king.texture = kframes[0][0]
-	king.centered = false
-	king.offset = Vector2(-6, -19)
-	king.position = _px(Vector2i(23, 12))
-	world.add_child(king)
-	_shadow(king)
-	for i in PEOPLE.size():
-		var d: Dictionary = PEOPLE[i]
-		var fr := Pix.frames(d["p"])
-		var s := Sprite2D.new()
-		s.texture = fr[0][0]
-		s.centered = false
-		s.offset = Vector2(-6, -19)
-		var home: Vector2i = spots[d["home"]]
-		s.position = _px(home + Vector2i(i % 3 - 1, 1))
-		world.add_child(s)
-		_shadow(s)
-		npcs.append({"s": s, "fr": fr, "i": i, "path": PackedVector2Array(), "pi": 0, "dir": 0, "step": 0.0, "goal": "", "inside": false, "walked": 0.0})
-	cam.position_smoothing_enabled = true
-	cam.position_smoothing_speed = 6.0
-	cam.limit_left = 0
-	cam.limit_top = -36
-	cam.limit_right = W * TS
-	cam.limit_bottom = H * TS
-	king.add_child(cam)
-	cm.color = Color(1, 1, 1)
-	add_child(cm)
-	_ui()
-	_tick(0.0)
-
-var shadow_tex: Texture2D = Pix.tex(PackedStringArray([".xxxxxxxx.", "xxxxxxxxxx", "xxxxxxxxxx", ".xxxxxxxx."]), {"x": Color(0.08, 0.06, 0.04, 0.3)})
-func _shadow(on: Sprite2D) -> void:
-	var sh := Sprite2D.new()
-	sh.texture = shadow_tex
-	sh.position = Vector2(0, 0)
-	sh.show_behind_parent = true
-	on.add_child(sh)
-
-func _px(c: Vector2i) -> Vector2:
-	return Vector2(c.x * TS + 8, c.y * TS + 12)
-
-func _cell(p: Vector2) -> Vector2i:
-	return Vector2i(clampi(int(p.x / TS), 0, W - 1), clampi(int((p.y - 2) / TS), 0, H - 1))
-
-func _fill(x0: int, y0: int, w: int, h: int, k: int) -> void:
-	for y in range(y0, y0 + h):
-		for x in range(x0, x0 + w):
-			kind[y * W + x] = k
-
-func _k(x: int, y: int) -> int:
-	if x < 0 or y < 0 or x >= W or y >= H:
-		return WALL
-	return kind[y * W + x]
-
-func _build_map() -> void:
-	kind.resize(W * H)
-	kind.fill(GRASS)
-	_fill(0, 0, W, 2, WALL)
-	_fill(0, 0, 2, H, WALL)
-	_fill(W - 2, 0, 2, H, WALL)
-	_fill(0, H - 2, W, 2, WALL)
-	_fill(22, H - 2, 4, 2, PATH)
-	_fill(16, 2, 16, 8, BUILD)      # донжон
-	_fill(3, 22, 8, 5, BUILD)       # казармы
-	_fill(36, 22, 9, 5, BUILD)      # конюшня
-	_fill(22, 10, 4, H - 12, PATH)  # дорога от ворот к донжону
-	_fill(4, 18, 40, 2, PATH)       # поперечная дорога
-	_fill(6, 20, 2, 2, PATH)
-	_fill(40, 20, 2, 2, PATH)
-	_fill(3, 11, 10, 5, SAND)       # ристалище
-	_fill(12, 17, 2, 2, WELL)
-	for i in 70:
-		var x := 2 + int(Game.hash2(i, 11, 3) * (W - 4))
-		var y := 2 + int(Game.hash2(i, 12, 3) * (H - 4))
-		if _k(x, y) == GRASS and Game.hash2(i, 13, 3) < 0.7:
-			kind[y * W + x] = FLOWER
-	var trees := [[35, 11], [38, 12], [41, 11], [44, 13], [36, 15], [40, 15], [43, 16], [3, 4], [6, 3], [10, 5], [13, 3], [35, 4], [39, 6], [43, 4], [3, 29], [8, 30], [14, 29], [32, 29], [38, 30], [44, 28], [17, 24], [30, 24]]
-	for p in trees:
-		if _k(p[0], p[1]) == GRASS or _k(p[0], p[1]) == FLOWER:
-			kind[p[1] * W + p[0]] = TREE
-	spots = {"keep": Vector2i(23, 11), "door": Vector2i(24, 11), "gate": Vector2i(23, H - 3), "well": Vector2i(14, 19), "barracks": Vector2i(7, 28), "stables": Vector2i(41, 28), "garden": Vector2i(39, 13), "yard": Vector2i(8, 16)}
-	astar.region = Rect2i(0, 0, W, H)
-	astar.cell_size = Vector2(TS, TS)
-	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
-	astar.update()
-	for y in H:
-		for x in W:
-			if _solid(_k(x, y)):
-				astar.set_point_solid(Vector2i(x, y), true)
-			elif _k(x, y) == PATH:
-				astar.set_point_weight_scale(Vector2i(x, y), 0.6)
-
-func _solid(k: int) -> bool:
-	return k == WALL or k == BUILD or k == WELL or k == TREE
-
-# земля кусками 8×8 клеток: в Godot на одну картинку действует не больше 16 огней, а факелов и окон больше
-const G0 := Color8(70, 124, 50)
-const G1 := Color8(84, 142, 58)
-const G2 := Color8(98, 156, 64)
-const G3 := Color8(118, 172, 74)
-func _ground() -> Node2D:
-	var root := Node2D.new()
-	root.z_index = -10
-	var gw := W / 3 + 2
-	var lf := PackedFloat32Array()
-	lf.resize(gw * (H / 3 + 2))
-	for i in lf.size():
-		lf[i] = Game.hash2(i % gw, i / gw, 21)
-	for cy in range(0, H, 8):
-		for cx in range(0, W, 8):
-			var cw := mini(8, W - cx)
-			var chh := mini(8, H - cy)
-			var img := Image.create_empty(cw * TS, chh * TS, false, Image.FORMAT_RGBA8)
-			for ty in range(cy, cy + chh):
-				for tx in range(cx, cx + cw):
-					var k := _k(tx, ty)
-					for y in TS:
-						for x in TS:
-							img.set_pixel((tx - cx) * TS + x, (ty - cy) * TS + y, _gpx(k, tx, ty, x, y, lf, gw))
-					_decor(img, k, tx, ty, (tx - cx) * TS, (ty - cy) * TS)
-			var sp := Sprite2D.new()
-			sp.texture = ImageTexture.create_from_image(img)
-			sp.centered = false
-			sp.position = Vector2(cx * TS, cy * TS)
-			root.add_child(sp)
-	return root
-
-# вид земли под предметом: 0 — трава (с цветами, деревьями, колодцем), 1 — камень, 2 — песок
-func _gk(x: int, y: int) -> int:
-	var k := _k(x, y)
-	return 1 if (k == PATH or k == WALL or k == BUILD) else 2 if k == SAND else 0
-
-# лес за северной стеной: виден над стеной и крышей донжона
-func _backdrop() -> Sprite2D:
-	var img := Image.create_empty(W * TS, 48, false, Image.FORMAT_RGBA8)
-	img.fill(Color8(26, 44, 32))
-	for i in 70:
-		var cx := i * 11 + int(Game.hash2(i, 1, 71) * 8.0)
-		var cy := 14 + int(Game.hash2(i, 2, 71) * 16.0)
-		var r := 8 + int(Game.hash2(i, 3, 71) * 6.0)
-		for y in range(cy - r, cy + r + 1):
-			for x in range(cx - r, cx + r + 1):
-				var dx := x - cx
-				var dy := y - cy
-				if x >= 0 and y >= 0 and x < W * TS and y < 48 and dx * dx + dy * dy <= r * r:
-					var lit := dx + dy < -r / 2
-					var c := Color8(66, 108, 62) if lit else Color8(46, 82, 52)
-					if dx * dx + dy * dy > (r - 1) * (r - 1):
-						c = Color8(24, 46, 32)
-					img.set_pixel(x, y, c)
-	var sp := Sprite2D.new()
-	sp.texture = ImageTexture.create_from_image(img)
-	sp.centered = false
-	sp.position = Vector2(0, -48)
-	sp.z_index = -11
-	return sp
-
-func _gpx(k: int, tx: int, ty: int, x: int, y: int, lf: PackedFloat32Array, gw: int) -> Color:
-	var gx := tx * TS + x
-	var gy := ty * TS + y
-	var n := Game.hash2(gx, gy, 5)
-	var g := _gk(tx, ty)
-	var edge := (x == 0 and _gk(tx - 1, ty) != g) or (x == TS - 1 and _gk(tx + 1, ty) != g) or (y == 0 and _gk(tx, ty - 1) != g) or (y == TS - 1 and _gk(tx, ty + 1) != g)
-	if k == PATH or k == WALL or k == BUILD:
-		var row := gy / 5
-		var bx := (gx + (row % 3) * 4) % 7
-		var c := Color8(164, 152, 130) if n > 0.5 else Color8(152, 140, 118)
-		if Game.hash2(gx / 7, row, 8) > 0.8:
-			c = Color8(140, 130, 112)
-		if bx == 0 or gy % 5 == 0:
-			c = Color8(116, 104, 90)
-		if edge:
-			c = Color8(118, 106, 92)
-		return c
-	if k == SAND:
-		var c := Color8(206, 180, 128) if n > 0.35 else Color8(194, 166, 116)
-		if n > 0.94:
-			c = Color8(170, 142, 98)
-		return c.darkened(0.12) if edge else c
-	# трава: крупные пятна (плавный шум по сетке 48 px) + мелкая рябь
-	var fx := gx / 48.0
-	var fy := gy / 48.0
-	var ix := int(fx)
-	var iy := int(fy)
-	var u := smoothstep(0.0, 1.0, fx - ix)
-	var v := smoothstep(0.0, 1.0, fy - iy)
-	var m := lerpf(lerpf(lf[iy * gw + ix], lf[iy * gw + ix + 1], u), lerpf(lf[(iy + 1) * gw + ix], lf[(iy + 1) * gw + ix + 1], u), v)
-	var val := m * 0.72 + n * 0.28
-	var c := G0 if val < 0.3 else G1 if val < 0.52 else G2 if val < 0.76 else G3
-	if edge:
-		c = G0.darkened(0.12)
-	return c
-
-# пучки травы и цветы поверх земли
-func _decor(img: Image, k: int, tx: int, ty: int, ox: int, oy: int) -> void:
-	if k != GRASS and k != FLOWER:
-		return
-	for j in 2:
-		if Game.hash2(tx * 2 + j, ty, 31) < 0.4:
-			var px := ox + 3 + int(Game.hash2(tx, ty * 2 + j, 32) * 10)
-			var py := oy + 4 + int(Game.hash2(tx * 3 + j, ty, 33) * 9)
-			img.set_pixel(px - 1, py - 1, G3)
-			img.set_pixel(px + 1, py - 1, G3)
-			img.set_pixel(px, py - 2, G3.lightened(0.1))
-			img.set_pixel(px, py, G0)
-			img.set_pixel(px - 1, py, G0)
-			img.set_pixel(px + 1, py, G0)
-	if k == FLOWER:
-		var pal := [Color8(244, 226, 96), Color8(236, 126, 156), Color8(246, 244, 236), Color8(150, 140, 230)]
-		for j in 3:
-			var px := ox + 3 + int(Game.hash2(tx + j * 7, ty, 41) * 10)
-			var py := oy + 3 + int(Game.hash2(tx, ty + j * 5, 42) * 10)
-			var pc: Color = pal[(tx * 3 + ty + j) % pal.size()]
-			img.set_pixel(px, py - 1, pc)
-			img.set_pixel(px - 1, py, pc)
-			img.set_pixel(px + 1, py, pc)
-			img.set_pixel(px, py + 1, pc)
-			img.set_pixel(px, py, Color8(250, 200, 70) if pc != pal[0] else Color8(200, 120, 40))
-			img.set_pixel(px, py + 2, G0)
-
-func _stone(img: Image, x0: int, y0: int, w: int, h: int, base: Color) -> void:
-	for y in range(maxi(0, y0), mini(img.get_height(), y0 + h)):
-		for x in range(maxi(0, x0), mini(img.get_width(), x0 + w)):
-			var bx := (x + (6 if ((y - y0) / 5) % 2 else 0)) % 12
-			var c := base if Game.hash2(x, y, 9) > 0.4 else base.darkened(0.08)
-			if bx == 0 or (y - y0) % 5 == 0:
-				c = base.darkened(0.32)
-			img.set_pixel(x, y, c)
-
-func _crenel(img: Image, x0: int, y0: int, w: int, base: Color) -> void:
-	for x in range(x0, x0 + w, 8):
-		_stone(img, x, y0, 5, 6, base)
-
-# прямоугольник с полукруглым верхом (арка двери)
-func _arch(img: Image, x0: int, y0: int, w: int, h: int, c: Color) -> void:
-	var r := w / 2.0
-	for y in h:
-		var inset := 0
-		if y < r:
-			inset = int(r - sqrt(maxf(0.0, r * r - (r - y - 0.5) * (r - y - 0.5))))
-		Pix.rect(img, x0 + inset, y0 + y, w - 2 * inset, 1, c)
-
-func _roof(img: Image, x0: int, y0: int, w: int, h: int, base: Color) -> void:
-	for y in range(y0, y0 + h):
-		for x in range(x0, x0 + w):
-			var c := base if ((x + (y / 4) * 3) % 6) != 0 else base.darkened(0.3)
-			if y % 4 == 3:
-				c = base.darkened(0.2)
-			img.set_pixel(x, y, c)
-
-func _sprite(img: Image, base: Vector2) -> Sprite2D:
-	var s := Sprite2D.new()
-	s.texture = ImageTexture.create_from_image(img)
-	s.centered = false
-	s.offset = Vector2(0, -img.get_height())
-	s.position = base
-	world.add_child(s)
-	return s
-
-func _unshaded(add: bool) -> CanvasItemMaterial:
-	var m := CanvasItemMaterial.new()
-	m.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
-	if add:
-		m.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	return m
-
-# окно, светящееся ночью: стекло с переплётом и мягкий ореол (без PointLight2D — их бережём для факелов)
-func _glow(p: Vector2, w: int, h: int) -> void:
-	var img := Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
-	img.fill(Color8(255, 208, 112))
-	Pix.rect(img, 0, h / 2, w, 1, Color8(190, 130, 60))
-	Pix.rect(img, w / 2, 0, 1, h, Color8(190, 130, 60))
-	var s := Sprite2D.new()
-	s.texture = ImageTexture.create_from_image(img)
-	s.centered = false
-	s.position = p
-	s.z_index = 5
-	s.material = _unshaded(false)
-	s.modulate.a = 0.0
-	add_child(s)
-	glows.append(s)
-	var halo := Sprite2D.new()
-	halo.texture = halo_tex
-	halo.position = p + Vector2(w / 2.0, h / 2.0 + 2.0)
-	halo.modulate = Color(1.0, 0.66, 0.3, 0.0)
-	halo.material = _unshaded(true)
-	halo.z_index = 5
-	add_child(halo)
-	halos.append(halo)
-
-const FLAME := [["..c..", "..c..", ".cac.", ".cac.", "cabac", "cabac", "cabbc", ".ccc."],
-	[".c...", "..c..", ".ca..", ".cac.", "cabac", "cabbc", "cabbc", ".ccc."],
-	["...c.", "..c..", "..ac.", ".cac.", "cabac", "cabbc", "cabac", ".ccc."]]
-var flames: Array = []
-
-func _torch(c: Vector2i) -> void:
-	if flames.is_empty():
-		var pal := {"a": Color8(255, 168, 60), "b": Color8(255, 236, 150), "c": Color8(222, 86, 34)}
-		for f in FLAME:
-			flames.append(Pix.tex(PackedStringArray(f), pal))
-	var img := Image.create_empty(8, 24, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	Pix.rect(img, 1, 22, 6, 2, Color(0, 0, 0, 0.25))
-	Pix.rect(img, 3, 8, 2, 15, Color8(92, 62, 38))
-	Pix.rect(img, 4, 8, 1, 15, Color8(64, 42, 26))
-	Pix.rect(img, 0, 5, 8, 2, Color8(64, 60, 62))
-	Pix.rect(img, 1, 7, 6, 1, Color8(44, 40, 42))
-	Pix.rect(img, 2, 8, 4, 1, Color8(44, 40, 42))
-	var base := Vector2(c.x * TS + 4, c.y * TS + 14)
-	_sprite(img, base)
-	var top := base + Vector2(4, -23)
-	var fl := Sprite2D.new()
-	fl.texture = flames[0]
-	fl.position = top
-	fl.material = _unshaded(false)
-	fl.z_index = 6
-	add_child(fl)
-	var l := PointLight2D.new()
-	l.texture = light_tex
-	l.color = Color(1.0, 0.7, 0.4)
-	l.energy = 0.0
-	l.position = top
-	add_child(l)
-	var p := CPUParticles2D.new()
-	p.position = top + Vector2(0, -3)
-	p.amount = 6
-	p.lifetime = 0.8
-	p.direction = Vector2(0, -1)
-	p.spread = 18
-	p.initial_velocity_min = 6
-	p.initial_velocity_max = 14
-	p.gravity = Vector2(0, -4)
-	p.color = Color(1.0, 0.66, 0.24)
-	var mat := CanvasItemMaterial.new()
-	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
-	p.material = mat
-	p.z_index = 6
-	add_child(p)
-	lights.append({"l": l, "e": 1.15, "ph": c.x * 1.7 + c.y, "f": fl, "p": p})
-
-func _props() -> void:
-	var stone := Color8(150, 146, 138)
-	# стены по краю: верхняя (за донжоном), боковые и нижняя с воротами
-	var top := Image.create_empty(W * TS, 40, false, Image.FORMAT_RGBA8)
-	top.fill(Color(0, 0, 0, 0))
-	_stone(top, 0, 8, W * TS, 32, stone.darkened(0.1))
-	_crenel(top, 0, 2, W * TS, stone.darkened(0.1))
-	_sprite(top, Vector2(0, 2 * TS))
-	for side in [0, W - 2]:
-		var img := Image.create_empty(2 * TS, (H - 2) * TS, false, Image.FORMAT_RGBA8)
-		_stone(img, 0, 0, 2 * TS, (H - 2) * TS, stone.darkened(0.18))
-		_sprite(img, Vector2(side * TS, (H - 2) * TS))
-	for part in [[0, 22], [26, W - 26]]:
-		var img := Image.create_empty(part[1] * TS, 44, false, Image.FORMAT_RGBA8)
-		img.fill(Color(0, 0, 0, 0))
-		_stone(img, 0, 8, part[1] * TS, 36, stone)
-		_crenel(img, 0, 2, part[1] * TS, stone)
-		_sprite(img, Vector2(part[0] * TS, H * TS))
-	var gate := Image.create_empty(4 * TS, 60, false, Image.FORMAT_RGBA8)
-	gate.fill(Color(0, 0, 0, 0))
-	_stone(gate, 0, 0, 8, 60, stone.darkened(0.05))
-	_stone(gate, 4 * TS - 8, 0, 8, 60, stone.darkened(0.05))
-	_stone(gate, 0, 0, 4 * TS, 10, stone.darkened(0.05))
-	_sprite(gate, Vector2(22 * TS, H * TS))
-	# донжон: шиферная крыша зала, стена с дорожкой и зубцами, две башни, арка двери, знамёна; окна ночью светятся
-	var kw := 16 * TS
-	var kh := 8 * TS + 56
-	var keep := Image.create_empty(kw, kh, false, Image.FORMAT_RGBA8)
-	keep.fill(Color(0, 0, 0, 0))
-	var slate := Color8(80, 76, 104)
-	_roof(keep, 40, 6, kw - 80, 52, slate)
-	Pix.rect(keep, 40, 4, kw - 80, 3, slate.lightened(0.25))
-	var wt := 60
-	_stone(keep, 0, wt, kw, kh - wt, stone)
-	Pix.rect(keep, 0, wt, kw, 5, stone.lightened(0.14))
-	_crenel(keep, 0, wt - 6, kw, stone.lightened(0.05))
-	Pix.rect(keep, 0, wt + 5, kw, 2, stone.darkened(0.42))
-	for tx in [0, kw - 44]:
-		_stone(keep, tx, 30, 44, kh - 30, stone.lightened(0.04))
-		Pix.rect(keep, tx, 30, 44, 5, stone.lightened(0.2))
-		_crenel(keep, tx + 1, 24, 44, stone.lightened(0.08))
-		Pix.rect(keep, tx, 35, 44, 2, stone.darkened(0.38))
-		Pix.rect(keep, tx + (42 if tx == 0 else 0), 37, 2, kh - 37, stone.darkened(0.4))
-		Pix.rect(keep, tx + 21, 104, 3, 12, Color8(34, 30, 36))
-	Pix.rect(keep, 0, kh - 6, kw, 6, stone.darkened(0.2))
-	Pix.rect(keep, 0, kh - 6, kw, 1, stone.darkened(0.35))
-	var kbase := Vector2(16 * TS, 10 * TS)
-	var ktop := kbase.y - kh
-	var wins := [[18, 64], [kw - 26, 64], [56, 84], [80, 84], [kw - 88, 84], [kw - 64, 84], [56, 122], [80, 122], [kw - 88, 122], [kw - 64, 122]]
-	for wv in wins:
-		var wx: int = wv[0]
-		var wy: int = wv[1]
-		Pix.rect(keep, wx - 1, wy - 1, 10, 14, stone.lightened(0.18))
-		Pix.rect(keep, wx, wy, 8, 12, Color8(34, 38, 58))
-		keep.set_pixel(wx, wy, stone.lightened(0.18))
-		keep.set_pixel(wx + 7, wy, stone.lightened(0.18))
-		keep.set_pixel(wx + 2, wy + 2, Color8(92, 104, 136))
-		Pix.rect(keep, wx - 2, wy + 12, 12, 2, stone.lightened(0.3))
-		_glow(Vector2(16 * TS + wx + 1, ktop + wy + 1), 6, 10)
-	var dx := kw / 2 - 16
-	var dy := kh - 48
-	_arch(keep, dx - 5, dy - 7, 42, 55, stone.lightened(0.22))
-	_arch(keep, dx - 2, dy - 4, 36, 52, stone.darkened(0.3))
-	_arch(keep, dx, dy - 2, 32, 50, Color8(104, 64, 34))
-	for i in range(dx + 3, dx + 32, 5):
-		Pix.rect(keep, i, dy + 8, 1, 40, Color8(78, 48, 26))
-	Pix.rect(keep, dx + 15, dy - 2, 2, 50, Color8(62, 38, 20))
-	Pix.rect(keep, dx, dy + 14, 32, 2, Color8(54, 50, 54))
-	Pix.rect(keep, dx, dy + 34, 32, 2, Color8(54, 50, 54))
-	Pix.rect(keep, dx + 11, dy + 24, 2, 3, Color8(210, 176, 84))
-	Pix.rect(keep, dx + 19, dy + 24, 2, 3, Color8(210, 176, 84))
-	for bx in [dx - 22, dx + 42]:
-		var by := wt + 36
-		var red := Color8(152, 30, 42)
-		var gold := Color8(214, 172, 74)
-		Pix.rect(keep, bx - 2, by - 2, 16, 2, Color8(96, 70, 40))
-		Pix.rect(keep, bx, by, 12, 26, red)
-		Pix.rect(keep, bx + 9, by, 3, 26, red.darkened(0.2))
-		for i in 4:
-			Pix.rect(keep, bx, by + 26 + i, 5 - i, 1, red)
-			Pix.rect(keep, bx + 7 + i, by + 26 + i, 5 - i, 1, red.darkened(0.2))
-		Pix.rect(keep, bx, by, 12, 1, gold)
-		Pix.rect(keep, bx + 3, by + 11, 6, 3, gold)
-		Pix.rect(keep, bx + 3, by + 8, 1, 3, gold)
-		Pix.rect(keep, bx + 5, by + 7, 2, 4, gold)
-		Pix.rect(keep, bx + 8, by + 8, 1, 3, gold)
-	for y in kh:
-		for x in range(kw - 72, kw):
-			var pc := keep.get_pixel(x, y)
-			if pc.a > 0.0:
-				keep.set_pixel(x, y, pc.darkened(0.12 * float(x - (kw - 72)) / 72.0))
-	_sprite(keep, kbase)
-	# казармы и конюшня
-	for b in [[3, 22, 8, 5, Color8(150, 70, 50), "barracks"], [36, 22, 9, 5, Color8(120, 90, 50), "stables"]]:
-		var bw: int = b[2] * TS
-		var bh: int = b[3] * TS + 30
-		var img := Image.create_empty(bw, bh, false, Image.FORMAT_RGBA8)
-		img.fill(Color(0, 0, 0, 0))
-		_stone(img, 0, bh - 44, bw, 44, Color8(170, 150, 120))
-		_roof(img, 0, 0, bw, bh - 40, b[4])
-		Pix.rect(img, bw / 2 - 8, bh - 26, 16, 26, Color8(90, 56, 30))
-		var base := Vector2(b[0] * TS, (b[1] + b[3]) * TS)
-		var top_y := base.y - bh
-		for wx in [10, bw - 18]:
-			Pix.rect(img, wx, bh - 32, 8, 10, Color8(36, 40, 60))
-			_glow(Vector2(b[0] * TS + wx + 1, top_y + bh - 31), 6, 8)
-		_sprite(img, base)
-	# колодец
-	var well := Image.create_empty(32, 40, false, Image.FORMAT_RGBA8)
-	well.fill(Color(0, 0, 0, 0))
-	_stone(well, 2, 22, 28, 18, Color8(160, 156, 150))
-	Pix.rect(well, 6, 22, 20, 4, Color8(40, 70, 110))
-	Pix.rect(well, 3, 4, 3, 20, Color8(100, 70, 40))
-	Pix.rect(well, 26, 4, 3, 20, Color8(100, 70, 40))
-	_roof(well, 0, 0, 32, 8, Color8(140, 60, 40))
-	_sprite(well, Vector2(12 * TS, 19 * TS))
-	# деревья
-	for y in H:
-		for x in W:
-			if _k(x, y) == TREE:
-				_sprite(_tree(x * 7 + y), Vector2(x * TS - 8, (y + 1) * TS))
-	# соломенное чучело на ристалище
-	var dm := Image.create_empty(12, 24, false, Image.FORMAT_RGBA8)
-	dm.fill(Color(0, 0, 0, 0))
-	Pix.rect(dm, 5, 6, 2, 18, Color8(100, 70, 40))
-	Pix.rect(dm, 1, 8, 10, 2, Color8(100, 70, 40))
-	Pix.rect(dm, 3, 2, 6, 6, Color8(210, 180, 100))
-	Pix.rect(dm, 3, 10, 6, 8, Color8(200, 170, 90))
-	_sprite(dm, Vector2(7 * TS, 13 * TS))
-	for c in [Vector2i(21, 13), Vector2i(26, 13), Vector2i(21, 22), Vector2i(26, 22), Vector2i(21, 30), Vector2i(26, 30), Vector2i(9, 27), Vector2i(39, 27), Vector2i(14, 16)]:
-		_torch(c)
-
-func _tree(seed: int) -> Image:
-	var img := Image.create_empty(32, 44, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	Pix.rect(img, 6, 40, 20, 4, Color(0, 0, 0, 0.25))
-	Pix.rect(img, 14, 26, 4, 16, Color8(96, 64, 38))
-	var g1 := Color8(46, 104, 50)
-	var g2 := Color8(70, 136, 60)
-	for y in 30:
-		for x in 32:
-			var dx := x - 16
-			var dy := y - 15
-			var r := 13.0 + 2.0 * sin(float(x + seed) * 0.9) * cos(float(y) * 0.7)
-			if dx * dx + dy * dy * 1.2 < r * r:
-				var n := Game.hash2(x + seed * 31, y, 4)
-				img.set_pixel(x, y, g2 if (dx + dy < -4 and n > 0.3) else g1 if n > 0.15 else g1.darkened(0.25))
-	var out := Color8(30, 66, 38)
-	var edge: Array[Vector2i] = []
-	for y in 31:
-		for x in 32:
-			if img.get_pixel(x, y).a == 0.0:
-				for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-					var q: Vector2i = Vector2i(x, y) + o
-					if q.x >= 0 and q.y >= 0 and q.x < 32 and q.y < 30 and img.get_pixel(q.x, q.y).a > 0.0 and img.get_pixel(q.x, q.y) != Color8(96, 64, 38):
-						edge.append(Vector2i(x, y))
-						break
-	for e in edge:
-		img.set_pixel(e.x, e.y, out)
-	for i in 5:
-		var hx := 8 + int(Game.hash2(seed, i, 51) * 10)
-		var hy := 6 + int(Game.hash2(i, seed, 52) * 8)
-		if img.get_pixel(hx, hy).a > 0.0:
-			img.set_pixel(hx, hy, Color8(132, 186, 90))
-	return img
-
-func _ui() -> void:
+	D = Art.D
+	add_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	mul_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
+	for id in D["order"]:
+		var Ld: Dictionary = D["locs"][id]
+		Ld["id"] = id
+		for nm in Ld["spots"]:
+			var sp: Dictionary = Ld["spots"][nm]
+			sp["loc"] = id
+			sp["name"] = nm
+			if not spots.has(nm):
+				spots[nm] = sp
+		grids[id] = _grid(Ld)
+	people = People.new(self)
+	var K: Dictionary = D["king"]
+	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
+	var sp0: Dictionary = spots["throne_front"]
+	king["loc"] = sp0["loc"]
+	king["x"] = float(sp0["x"])
+	king["y"] = float(sp0["y"])
+	king["dir"] = sp0["dir"]
+	for p in D["people"]:
+		npcs.append(people.make(p))
+	for a in D["animals"]:
+		var r: Array = a["r"]
+		ani.append({"kind": a["kind"], "loc": a["loc"], "r": r, "x": float(a["x"]), "y": float(a["y"]), "f": a["f"], "tx": 0.0, "ty": 0.0, "t": randf() * 3.0, "flip": randf() < 0.5, "moving": false, "run": false, "fly": 0.0, "h": 0.0, "vx": 0.0, "vy": 0.0, "fc": 0.0, "peck": false, "node": null})
+	cam.anchor_mode = Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT
+	add_child(cam)
+	cam.make_current()
+	lm.disable_3d = true
+	lm.transparent_bg = false
+	lm.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	lm.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR
+	add_child(lm)
+	lm.add_child(lm_amb)
+	lm.add_child(lm_root)
+	lm_view.centered = false
+	lm_view.texture = lm.get_texture()
+	lm_view.material = mul_mat
+	lm_view.z_index = 50
 	var ui := CanvasLayer.new()
+	ui.layer = 5
 	add_child(ui)
-	var f: Font = Game.font
-	for l in [hud, hint]:
-		l.add_theme_font_override("font", f)
-		l.add_theme_font_size_override("font_size", 12)
-		l.add_theme_color_override("font_color", Color8(244, 232, 200))
-		l.add_theme_color_override("font_shadow_color", Color8(20, 14, 10))
-		l.add_theme_constant_override("shadow_offset_x", 1)
-		l.add_theme_constant_override("shadow_offset_y", 1)
-	var bar := StyleBoxFlat.new()
-	bar.bg_color = Color8(26, 19, 14, 178)
-	bar.set_corner_radius_all(3)
-	bar.content_margin_left = 6
-	bar.content_margin_right = 6
-	bar.content_margin_top = 1
-	bar.content_margin_bottom = 2
-	for pair in [[hud, Control.PRESET_TOP_LEFT], [hint, Control.PRESET_BOTTOM_LEFT]]:
-		var pc := PanelContainer.new()
-		pc.add_theme_stylebox_override("panel", bar)
-		pc.add_child(pair[0])
-		ui.add_child(pc)
-		pc.set_anchors_and_offsets_preset(pair[1], Control.PRESET_MODE_MINSIZE, 4)
-		if pair[1] == Control.PRESET_BOTTOM_LEFT:
-			pc.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	hint.text = "WASD — идти · E — говорить · Пробел — пауза · 1–3 — скорость · Esc — выйти"
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color8(34, 26, 20, 236)
-	sb.border_color = Color8(201, 160, 96)
-	sb.set_border_width_all(1)
-	sb.set_content_margin_all(8)
-	dlg.add_theme_stylebox_override("panel", sb)
-	dlg.position = Vector2(60, 262)
-	dlg.size = Vector2(520, 76)
-	var v := VBoxContainer.new()
-	dlg.add_child(v)
-	for l in [dlg_name, dlg_text]:
-		l.add_theme_font_override("font", f)
-		v.add_child(l)
-	dlg_name.add_theme_font_size_override("font_size", 13)
-	dlg_name.add_theme_color_override("font_color", Color8(242, 210, 120))
-	dlg_text.add_theme_font_size_override("font_size", 13)
-	dlg_text.add_theme_color_override("font_color", Color8(244, 236, 214))
-	dlg_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	dlg_text.custom_minimum_size = Vector2(500, 36)
-	dlg.visible = false
-	ui.add_child(dlg)
+	vig = TextureRect.new()
+	vig.texture = _vignette()
+	vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vig.modulate.a = 0.0
+	ui.add_child(vig)
+	var ui2 := CanvasLayer.new()
+	ui2.layer = 10
+	add_child(ui2)
+	hud = Hud.new()
+	hud.court = self
+	ui2.add_child(hud)
+	if Game.frac == 0.0:
+		Game.set_hour(7.5)
+	people.snap(true)
+	last_ha = Game.day * 24.0 + Game.hour_abs()
+	go_loc(king["loc"])
+	snap_cam()
 
-func _process(d: float) -> void:
-	_tick(d)
+func _grid(Ld: Dictionary) -> AStarGrid2D:
+	var g := AStarGrid2D.new()
+	var w: int = Ld["w"]
+	var h: int = Ld["h"]
+	g.region = Rect2i(0, 0, w, h)
+	g.cell_size = Vector2(CT, CT)
+	g.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	g.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	g.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	g.update()
+	var s: String = Ld["solid"]
+	for y in h:
+		for x in w:
+			if s.unicode_at(y * w + x) == 49:
+				g.set_point_solid(Vector2i(x, y), true)
+	return g
 
-func _tick(d: float) -> void:
-	t += d
-	if talking < 0 and Game.speed > 0:   # пауза (Пробел) и разговор останавливают двор
-		Game.advance(d)
-		var dir := Vector2(Input.get_axis("ui_left", "ui_right"), Input.get_axis("ui_up", "ui_down"))
-		if Input.is_physical_key_pressed(KEY_A):
-			dir.x -= 1
-		if Input.is_physical_key_pressed(KEY_D):
-			dir.x += 1
-		if Input.is_physical_key_pressed(KEY_W):
-			dir.y -= 1
-		if Input.is_physical_key_pressed(KEY_S):
-			dir.y += 1
-		move_king(dir, d)
-		for n in npcs:
-			_npc(n, d)
-	_light()
-	hud.text = Game.clock_text() + ("  · пауза" if Game.speed == 0 else "  · скорость " + str(Game.speed))
+func solid_at(id: String, tx: int, ty: int) -> bool:
+	var Ld: Dictionary = D["locs"][id]
+	var w: int = Ld["w"]
+	if tx < 0 or ty < 0 or tx >= w or ty >= int(Ld["h"]):
+		return true
+	return (Ld["solid"] as String).unicode_at(ty * w + tx) == 49
 
-func move_king(dir: Vector2, d: float) -> void:
-	if dir.length() < 0.1:
-		kstep = 0.0
-		king.texture = kframes[kdir][0]
-		return
-	dir = dir.normalized()
-	kdir = (3 if dir.x > 0 else 2) if absf(dir.x) > absf(dir.y) else (0 if dir.y > 0 else 1)
-	var sp := 64.0 * d
-	for ax in [Vector2(dir.x, 0), Vector2(0, dir.y)]:
-		var np: Vector2 = king.position + ax * sp
-		if _free(np):
-			king.position = np
-	kstep += d * 8.0
-	king.texture = kframes[kdir][int(kstep) % 4]
-
-func _free(p: Vector2) -> bool:
-	for o in [Vector2(-4, -2), Vector2(4, -2), Vector2(-4, 1), Vector2(4, 1)]:
-		var q: Vector2 = p + o
-		if q.x < 0 or q.y < 0 or q.x >= W * TS or q.y >= H * TS:
-			return false
-		var c := Vector2i(int(q.x / TS), int(q.y / TS))
-		if _solid(_k(c.x, c.y)):
+func can_stand(x: float, y: float) -> bool:
+	for o in [Vector2(-5, -4), Vector2(5, -4), Vector2(-5, 1), Vector2(5, 1)]:
+		if solid_at(loc_id, floori((x + o.x) / CT), floori((y + o.y) / CT)):
 			return false
 	return true
 
-func _goal_now(i: int) -> String:
-	var d: Dictionary = PEOPLE[i]
-	var h := Game.hour()
-	var g: String = d["home"]
-	if (h < 5.0 or h >= 21.5) and not d.get("night", false):
-		return "inside"
-	for pl in d["plan"]:
-		if h >= float(pl[0]):
-			g = pl[1]
-	return g
+func near_free(id: String, tx: int, ty: int) -> Vector2i:
+	if not solid_at(id, tx, ty):
+		return Vector2i(tx, ty)
+	for r in range(1, 4):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if not solid_at(id, tx + dx, ty + dy):
+					return Vector2i(tx + dx, ty + dy)
+	return Vector2i(tx, ty)
 
-func _npc(n: Dictionary, d: float) -> void:
-	var i: int = n["i"]
-	var s: Sprite2D = n["s"]
-	var g := _goal_now(i)
-	if g != n["goal"]:
-		n["goal"] = g
-		var tgt: Vector2i = spots[PEOPLE[i]["home"] if g == "inside" else g]
-		tgt += Vector2i(i % 3 - 1, i % 2)
-		if astar.is_in_boundsv(tgt) and astar.is_point_solid(tgt):
-			tgt = spots[PEOPLE[i]["home"] if g == "inside" else g]
-		n["path"] = astar.get_point_path(_cell(s.position), tgt)
-		n["pi"] = 1
-		if n["inside"] and g != "inside":
-			n["inside"] = false
-			s.visible = true
-	var path: PackedVector2Array = n["path"]
-	var pi: int = n["pi"]
-	if pi < path.size():
-		var to := path[pi] + Vector2(8, 12)
-		var v := to - s.position
-		var stp := 30.0 * d * maxf(1.0, Game.SPEEDS[Game.speed])
-		var mv := minf(v.length(), stp)
-		if v.length() > 0.01:
-			n["dir"] = (3 if v.x > 0 else 2) if absf(v.x) > absf(v.y) else (0 if v.y > 0 else 1)
-		if v.length() <= stp:
-			s.position = to
-			n["pi"] = pi + 1
-		else:
-			s.position += v.normalized() * stp
-		n["walked"] = float(n["walked"]) + mv
-		walked += mv
-		n["step"] = float(n["step"]) + d * 7.0
-		s.texture = n["fr"][n["dir"]][int(n["step"]) % 4]
+# путь A* по клеткам (8 сторон, без срезания углов); цель может быть занятой, как в HTML
+func find_path(id: String, a: Vector2i, b: Vector2i) -> Variant:
+	if a == b:
+		return []
+	var g: AStarGrid2D = grids[id]
+	if not g.is_in_boundsv(a) or not g.is_in_boundsv(b):
+		return null
+	var sa := g.is_point_solid(a)
+	var sb := g.is_point_solid(b)
+	g.set_point_solid(a, false)
+	g.set_point_solid(b, false)
+	var p := g.get_id_path(a, b)
+	g.set_point_solid(a, sa)
+	g.set_point_solid(b, sb)
+	if p.is_empty():
+		return null
+	var out: Array = []
+	for i in range(1, p.size()):
+		out.append(p[i])
+	return out
+
+# вид наружного места по дню года, как seaVarOf в HTML: th оттепель · sp цветение · '' лето · au1–au3 осень · w снег
+func season_key() -> String:
+	var days: Array = L.get("days", [])
+	if days.is_empty():
+		return ""
+	var y: int = days.size()
+	return String(days[((Game.day % y) + y) % y])
+
+func room_name(tx: int, ty: int) -> String:
+	for r in L["rooms"]:
+		if tx >= r[0] and tx <= r[2] and ty >= r[1] and ty <= r[3]:
+			return r[4]
+	return L["name"]
+
+# ---------- постройка места ----------
+func _bg(path_: String) -> Texture2D:
+	if not bg_tex.has(path_):
+		bg_tex[path_] = load("res://art/" + path_)
+	return bg_tex[path_]
+
+func go_loc(id: String) -> void:
+	if lm_view.get_parent():
+		lm_view.get_parent().remove_child(lm_view)
+	if layer:
+		layer.queue_free()
+	for c in lm_root.get_children():
+		c.queue_free()
+	for n in npcs:
+		n["node"] = null
+	for a in ani:
+		a["node"] = null
+	king["node"] = null
+	deco.clear()
+	objs.clear()
+	lights.clear()
+	wins.clear()
+	glows.clear()
+	wglows.clear()
+	beams.clear()
+	parts.clear()
+	trees.clear()
+	loc_id = id
+	L = D["locs"][id]
+	sea_key = season_key()
+	V = L["var"].get(sea_key, L["var"].values()[0])
+	forge = Vector2(L["forge"][0], L["forge"][1]) if L.has("forge") else Vector2.ZERO
+	layer = Node2D.new()
+	add_child(layer)
+	move_child(layer, 0)
+	var back := ColorRect.new()
+	back.color = Color8(26, 36, 24) if L["out"] else Color8(12, 10, 16)
+	back.position = Vector2(-1000, -1000)
+	back.size = Vector2(int(L["w"]) * CT + 2000, int(L["h"]) * CT + 2000)
+	layer.add_child(back)
+	var bg := Sprite2D.new()
+	bg.centered = false
+	bg.texture = _bg(V["bg"])
+	layer.add_child(bg)
+	for e in V["deco"]:
+		var s := Art.sprite(e["f"][0])
+		s.position = Vector2(e["x"], e["y"])
+		layer.add_child(s)
+		deco.append([s, e])
+	fx0 = Node2D.new()
+	fx0.draw.connect(_draw_parts.bind(0))
+	layer.add_child(fx0)
+	world = Node2D.new()
+	world.y_sort_enabled = true
+	layer.add_child(world)
+	for e in V["objs"]:
+		var s := Art.sprite(e["f"][0])
+		s.position = Vector2(e["x"], e["sy"])
+		s.offset = Vector2(0, float(e["y"]) - float(e["sy"]))
+		world.add_child(s)
+		if (e["f"] as Array).size() > 1:
+			objs.append([s, e])
+		if e.has("tree"):
+			var sz := Art.size(e["f"][0])
+			trees.append(Vector3(float(e["x"]) + sz.x / 2.0, float(e["y"]) + sz.y * 0.35, sz.x * 0.4))
+	layer.add_child(lm_view)
+	var glow := Node2D.new()
+	glow.z_index = 60
+	layer.add_child(glow)
+	for l in L["lights"]:
+		var s := _light_spr(Art.hexc(l["col"]))
+		lm_root.add_child(s)
+		lights.append([s, l])
+		if l.has("fl"):
+			var g := _light_spr(Art.hexc(l["col"]))
+			g.position = Vector2(l["x"], l["y"])
+			g.scale = Vector2.ONE * (18.0 / 64.0)
+			glow.add_child(g)
+			glows.append([g, l])
+	for w in L["wins"]:
+		var s := _light_spr(Color8(255, 176, 80))
+		s.position = Vector2(w[0], w[1])
+		s.scale = Vector2.ONE * ((32.0 if int(w[2]) else 22.0) / 64.0)
+		lm_root.add_child(s)
+		wins.append([s, w])
+		var g := _light_spr(Color8(255, 192, 96))
+		g.position = Vector2(w[0], w[1])
+		g.scale = Vector2.ONE * (10.0 / 64.0)
+		glow.add_child(g)
+		wglows.append([g, w])
+	if not L["out"]:
+		for b in L["beams"]:
+			var p1 := Polygon2D.new()
+			p1.material = add_mat
+			lm_root.add_child(p1)
+			var p2 := Polygon2D.new()
+			p2.material = add_mat
+			glow.add_child(p2)
+			beams.append([p1, p2, float(b[0]), float(b[1])])
+		king_light = _light_spr(Color8(255, 240, 216))
+		king_light.scale = Vector2.ONE * (60.0 / 64.0)
+		lm_root.add_child(king_light)
 	else:
-		s.texture = n["fr"][n["dir"]][0]
-		if g == "inside" and not n["inside"]:
-			n["inside"] = true
-			s.visible = false
+		king_light = null
+	fx1 = Node2D.new()
+	fx1.material = add_mat
+	fx1.draw.connect(_draw_parts.bind(1))
+	glow.add_child(fx1)
+	_sync_nodes()
+	room = ""
+	_room_check()
 
+func _light_spr(c: Color) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = Art.light_tex
+	s.material = add_mat
+	s.modulate = c
+	return s
+
+func _vignette() -> Texture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.56, 1.0])
+	g.colors = PackedColorArray([Color8(8, 6, 20, 0), Color8(8, 6, 20, 0), Color8(8, 6, 20, 255)])
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.width = 320
+	gt.height = 180
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.08, 0.5)
+	return gt
+
+# ---------- люди и звери на экране ----------
+func _walker(n: Dictionary) -> void:
+	var nd := Node2D.new()
+	var sh := Art.sprite(D["shadow"])
+	nd.add_child(sh)
+	var body := Art.sprite(n["sheet"][0][0])
+	nd.add_child(body)
+	world.add_child(nd)
+	n["node"] = nd
+	n["sh"] = sh
+	n["body"] = body
+
+func sort_key(n: Dictionary) -> float:
+	if n.get("lie", false):
+		return float(n["y"]) + 40.0
+	if n.get("sit") != null:
+		return float(n["y"]) + (-2.0 if n["sit"]["dir"] == "up" else 12.0)
+	return float(n["y"])
+
+func _update_walker(n: Dictionary) -> void:
+	var nd: Node2D = n["node"]
+	var body: Sprite2D = n["body"]
+	var sh: Sprite2D = n["sh"]
+	var rx := roundf(n["x"])
+	var ry := roundf(n["y"])
+	var np := Vector2(rx, roundf(sort_key(n)))
+	nd.position = np
+	var lie: bool = n.get("lie", false)
+	var sit = n.get("sit")
+	var moving: bool = n.get("moving", false) or n.get("path") != null
+	var fi := 0
+	if sit == null and not lie and moving:
+		fi = int(float(n["f"]) / 7.0) % 4
+	var dir: String = "down" if lie else n["dir"]
+	var idx: int = n["sheet"][maxi(0, DIRS.find(dir))][fi]
+	var x := rx - 8.0
+	var y := ry - 31.0
+	if lie:
+		Art.set_frame(body, idx, 13)
+		body.position = Vector2(x, ry - 20.0) - np
+		sh.visible = false
+	elif sit != null:
+		if sit["dir"] == "up":
+			Art.set_frame(body, idx)
+			body.position = Vector2(x, y + 3.0) - np
+		else:
+			Art.set_frame(body, idx, 26)
+			body.position = Vector2(x, y + 4.0) - np
+		sh.visible = false
+	else:
+		Art.set_frame(body, idx)
+		body.position = Vector2(x, y) - np
+		sh.visible = true
+		sh.position = Vector2(x + 2.0, ry - 2.0) - np
+	body.modulate.a = 0.75 if (n == king and sneak and moving) else 1.0
+
+func _animal(a: Dictionary) -> void:
+	var nd := Node2D.new()
+	var big := Art.size(a["f"][0]).x > 20.0
+	var sh := Art.sprite(D["shadowBig"] if big else D["shadowSmall"])
+	sh.position = Vector2(-11.0 if big else -4.5, -2.0)
+	nd.add_child(sh)
+	var body := Art.sprite(a["f"][0])
+	nd.add_child(body)
+	world.add_child(nd)
+	a["node"] = nd
+	a["body"] = body
+
+func _update_animal(a: Dictionary) -> void:
+	var nd: Node2D = a["node"]
+	var body: Sprite2D = a["body"]
+	var moving: bool = a["moving"] or a["fly"] > 0.0 or a["h"] > 0.0
+	var fr := 0
+	if moving:
+		fr = int(a["fc"] / (3.0 if a["kind"] == "pigeon" else 5.0)) % 2
+	elif a["peck"]:
+		fr = 1
+	var i: int = a["f"][fr]
+	Art.set_frame(body, i)
+	var sz := Art.size(i)
+	body.flip_h = a["flip"]
+	nd.position = Vector2(roundf(a["x"]), roundf(a["y"]))
+	body.position = Vector2(-floorf(sz.x / 2.0), -sz.y - roundf(a["h"]))
+
+func _sync_nodes() -> void:
+	for n in npcs:
+		var show: bool = n["loc"] == loc_id and not n["away"]
+		if show and n["node"] == null:
+			_walker(n)
+		elif not show and n["node"] != null:
+			(n["node"] as Node).queue_free()
+			n["node"] = null
+		if n["node"] != null:
+			_update_walker(n)
+	if king["node"] == null:
+		_walker(king)
+	_update_walker(king)
+	for a in ani:
+		if a["loc"] == loc_id:
+			if a["node"] == null:
+				_animal(a)
+			_update_animal(a)
+
+# ---------- ход времени ----------
+func blocked() -> bool:
+	return hud.dlg_open() or fade > 0.0
+
+func _process(d: float) -> void:
+	_tick(minf(d, 0.05))
+
+func _tick(dt: float) -> void:
+	t += dt
+	var run: bool = not hud.dlg_open() and fade == 0.0
+	if run:
+		var s0 := sea_key
+		Game.advance(dt)
+		if L["out"] and season_key() != s0:
+			go_loc(loc_id)
+	var ha := Game.day * 24.0 + Game.hour_abs()
+	if last_ha >= 0.0 and ha - last_ha > 0.75:
+		people.snap(false)
+	last_ha = ha
+	if run:
+		var k: float = NPC_SPDK[Game.speed]
+		for n in npcs:
+			people.sched_tick(n)
+			people.update(n, dt * k)
+		_ani_update(dt)
+		_parts_update(dt)
+		_player_update(dt)
+	else:
+		king["moving"] = false
+	_cam_update(dt)
+	if fade > 0.0:
+		var ph := (t - fade_t) / 0.22
+		if ph >= 1.0 and fade_fn.is_valid():
+			var f := fade_fn
+			fade_fn = Callable()
+			f.call()
+		fade = 0.0 if ph >= 2.0 else maxf(0.001, ph)
+	_sync_nodes()
+	for p in objs:
+		var s: Sprite2D = p[0]
+		var e: Dictionary = p[1]
+		var fr: Array = e["f"]
+		var i := 0
+		if e.has("gate"):
+			i = _gate_open(e)
+		else:
+			i = int(floorf(t * float(e["fps"]) + float(e["ph"]))) % fr.size()
+		Art.set_frame(s, fr[i])
+	var night := Game.is_night()
+	for p in deco:
+		var s: Sprite2D = p[0]
+		var e: Dictionary = p[1]
+		var fr: Array = e["f"]
+		if e.has("night"):
+			Art.set_frame(s, e["night"] if night else fr[0])
+		elif fr.size() > 1:
+			Art.set_frame(s, fr[int(floorf(t * float(e["fps"]) + float(e["ph"]))) % fr.size()])
+		elif e.has("bob"):
+			s.position.y = float(e["y"]) + (1.0 if int(floorf(t * 3.0 + float(e["ph"]))) % 4 == 2 else 0.0)
+	_light()
+	fx0.queue_redraw()
+	fx1.queue_redraw()
+	hud.queue_redraw()
+
+func _gate_open(e: Dictionary) -> int:
+	var w := Art.size(e["f"][0]).x
+	var cx := float(e["x"]) + w / 2.0
+	var cy := float(e["sy"]) - 4.0
+	var r := w / 2.0 + 12.0
+	var near := func(n: Dictionary) -> bool: return absf(float(n["x"]) - cx) < r and absf(float(n["y"]) - cy) < 20.0
+	if near.call(king):
+		return 1
+	for n in npcs:
+		if n["loc"] == loc_id and not n["away"] and near.call(n):
+			return 1
+	return 0
+
+# ---------- свет (как courtRender в HTML) ----------
 func _light() -> void:
-	var nt := Game.night()
-	var c := Color(1, 1, 1).lerp(Color(0.26, 0.29, 0.48), nt)
-	if nt > 0.0 and nt < 1.0:
-		c = c.lerp(Color(1.0, 0.7, 0.52), 0.4 * sin(nt * PI))
-	cm.color = c
-	for L in lights:
-		var l: PointLight2D = L["l"]
-		var ph: float = L["ph"]
-		l.energy = float(L["e"]) * nt * (1.0 + 0.12 * sin(t * 10.0 + ph) + 0.06 * sin(t * 23.0 + ph * 2.0))
-		l.visible = nt > 0.02
-		if L.has("f"):
-			var fl: Sprite2D = L["f"]
-			fl.visible = nt > 0.05
-			fl.texture = flames[int(t * 9.0 + ph) % flames.size()]
-			(L["p"] as CPUParticles2D).emitting = nt > 0.05
-	for gsp in glows:
-		gsp.modulate.a = 0.95 * nt
-	for hs in halos:
-		hs.modulate.a = 0.4 * nt
+	var h := Game.hour_abs()
+	var amb: Vector3 = Game.ambient_out(h) if L["out"] else Game.ambient_in(h)
+	if float(L["dark"]) > 0.0:
+		amb *= float(L["dark"])
+	var vw := 640.0 / Z + 2.0
+	var vh := 360.0 / Z + 2.0
+	var org := cam_tl.floor()
+	if lm.size != Vector2i(int(vw), int(vh)):
+		lm.size = Vector2i(int(vw), int(vh))
+	lm.canvas_transform = Transform2D(0.0, -org)
+	lm_amb.position = org
+	lm_amb.size = Vector2(vw, vh)
+	lm_amb.color = Color(minf(255.0, amb.x) / 255.0, minf(255.0, amb.y) / 255.0, minf(255.0, amb.z) / 255.0)
+	lm_view.position = org
+	var dark := clampf(1.0 - minf(amb.x, minf(amb.y, amb.z)) / 255.0, 0.0, 1.0)
+	var dk := Game.day_k()
+	var night := Game.is_night()
+	var out: bool = L["out"]
+	for p in lights:
+		var s: Sprite2D = p[0]
+		var l: Dictionary = p[1]
+		if l.has("night") and dark < 0.3:
+			s.visible = false
+			continue
+		s.visible = true
+		var fl: float = l.get("fl", 0.0)
+		var lx: float = l["x"]
+		var ly: float = l["y"]
+		var fk := 1.0 - fl * 0.5 + fl * 0.5 * sin(t * 11.0 + lx * 0.37) * sin(t * 4.3 + ly) if fl > 0.0 else 1.0
+		s.position = Vector2(lx, ly)
+		s.scale = Vector2.ONE * (float(l["r"]) * fk * 2.0 / 64.0)
+		s.modulate.a = clampf(float(l["a"]) * (clampf(dark * 1.5, 0.0, 1.0) if out else 0.45 + dark * 0.8) * fk, 0.0, 1.0)
+	for p in wins:
+		var s: Sprite2D = p[0]
+		var w: Array = p[1]
+		s.visible = dark > 0.35
+		s.modulate.a = clampf((dark - 0.35) * 2.0, 0.0, 0.9) * (0.85 + 0.15 * sin(t * 2.0 + float(w[0])))
+	for p in wglows:
+		var s: Sprite2D = p[0]
+		s.visible = dark > 0.35
+		s.modulate.a = clampf((dark - 0.35) * 1.5, 0.0, 0.55)
+	for p in glows:
+		var s: Sprite2D = p[0]
+		var l: Dictionary = p[1]
+		s.visible = not (l.has("night") and dark < 0.3)
+		s.modulate.a = (0.16 + dark * 0.22) * (0.85 + 0.15 * sin(t * 13.0 + float(l["x"])))
+	var sdx := (12.5 - h) * 3.0
+	for b in beams:
+		var p1: Polygon2D = b[0]
+		var p2: Polygon2D = b[1]
+		var bx: float = b[2]
+		var by: float = b[3]
+		var pts := PackedVector2Array([Vector2(bx - 7, by), Vector2(bx + 7, by), Vector2(bx + 9 + sdx, by + 62), Vector2(bx - 9 + sdx, by + 62)])
+		p1.polygon = pts
+		p2.polygon = pts
+		if dk > 0.05:
+			p1.visible = true
+			p1.color = Color8(255, 236, 190, int(255 * 0.32 * dk))
+			p2.visible = true
+			p2.color = Color8(255, 240, 200, int(255 * 0.07 * dk))
+		elif night:
+			p1.visible = true
+			p1.color = Color8(120, 140, 220, int(255 * 0.18))
+			p2.visible = false
+		else:
+			p1.visible = false
+			p2.visible = false
+	if king_light:
+		king_light.position = Vector2(king["x"], float(king["y"]) - 16.0)
+		king_light.modulate.a = 0.15 + dark * 0.2
+	vig.modulate.a = (dark - 0.2) * 0.6 if out and dark > 0.2 else 0.0
+	hud.dark = dark
 
+# ---------- король ----------
+func _player_update(dt: float) -> void:
+	var P := king
+	var dx := 0.0
+	var dy := 0.0
+	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
+		dx -= 1
+	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
+		dx += 1
+	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
+		dy -= 1
+	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
+		dy += 1
+	sneak = Input.is_physical_key_pressed(KEY_SHIFT)
+	if dx != 0.0 or dy != 0.0:
+		path = []
+		on_arrive = Callable()
+		if P["sit"] != null:
+			stand_up()
+	elif not path.is_empty():
+		var c: Vector2i = path[0]
+		var gx := c.x * CT + 8.0
+		var gy := c.y * CT + 11.0
+		var e := Vector2(gx - P["x"], gy - P["y"])
+		if e.length() < 2.0:
+			path.pop_front()
+			if path.is_empty() and on_arrive.is_valid():
+				var f := on_arrive
+				on_arrive = Callable()
+				f.call()
+		else:
+			dx = e.x / e.length()
+			dy = e.y / e.length()
+	move_king(dx, dy, dt)
+
+func move_king(dx: float, dy: float, dt: float) -> void:
+	var P := king
+	if P["sit"] != null:
+		P["moving"] = false
+		return
+	if dx != 0.0 or dy != 0.0:
+		var n := Vector2(dx, dy).length()
+		var sp := (34.0 if sneak else 80.0) * dt
+		var vx := dx / n * sp
+		var vy := dy / n * sp
+		var x0: float = P["x"]
+		var y0: float = P["y"]
+		if can_stand(x0 + vx, y0):
+			P["x"] = x0 + vx
+		if can_stand(P["x"], y0 + vy):
+			P["y"] = y0 + vy
+		walked += Vector2(float(P["x"]) - x0, float(P["y"]) - y0).length()
+		P["f"] = float(P["f"]) + sp
+		P["dir"] = ("right" if dx > 0 else "left") if absf(dx) > absf(dy) else ("down" if dy > 0 else "up")
+		P["moving"] = true
+		if not sneak and L["out"] and randf() < dt * 0.6:
+			parts.append({"k": "dust", "x": float(P["x"]) + randf_range(-3, 3), "y": P["y"], "vx": 0.0, "vy": -4.0, "t": 0.0, "life": 0.5})
+	else:
+		P["moving"] = false
+	var tx := floori(float(P["x"]) / CT)
+	var ty := floori((float(P["y"]) - 2.0) / CT)
+	for d in L["doors"]:
+		if tx >= int(d["x0"]) and tx <= int(d["x1"]) and ty >= int(d["y0"]) and ty <= int(d["y1"]):
+			go_through(d)
+			break
+	_room_check()
+
+func _room_check() -> void:
+	var rn := room_name(floori(float(king["x"]) / CT), floori((float(king["y"]) - 2.0) / CT))
+	if rn != room:
+		room = rn
+		room_t = t
+
+func go_through(d: Dictionary) -> void:
+	if fade > 0.0:
+		return
+	path = []
+	fade_to(func() -> void:
+		king["x"] = float(d["ax"])
+		king["y"] = float(d["ay"])
+		king["dir"] = d["dir"]
+		go_loc(d["to"])
+		snap_cam()
+		print("LOC ", d["to"]))
+
+func fade_to(f: Callable) -> void:
+	fade = 0.001
+	fade_t = t
+	fade_fn = f
+
+func sit_at(sp: Dictionary) -> void:
+	king["x"] = float(sp.get("sx", sp["x"]))
+	king["y"] = float(sp.get("sy", sp["y"]))
+	king["dir"] = sp["dir"]
+	king["sit"] = sp
+	king["lie"] = bool(sp.get("lie", false))
+	path = []
+
+func stand_up() -> void:
+	var sp = king["sit"]
+	if sp == null:
+		return
+	king["sit"] = null
+	king["lie"] = false
+	var c := near_free(loc_id, floori(float(sp["x"]) / CT), floori(float(sp["y"]) / CT) + (1 if sp["dir"] == "down" else 0))
+	if sp == spots.get("throne"):
+		c = Vector2i(23, 7)
+	if sp == spots.get("seat_king"):
+		c = Vector2i(38, 9)
+	king["x"] = c.x * CT + 8.0
+	king["y"] = c.y * CT + 11.0
+
+# ---------- камера (camTarget/camUpdate в HTML) ----------
+func _cam_target() -> Vector2:
+	var vw := 640.0 / Z
+	var vh := (360.0 - 19.0) / Z
+	var x: float = float(king["x"]) - vw / 2.0
+	var y: float = float(king["y"]) - 16.0 - vh / 2.0 - 19.0 / Z
+	var mw := float(L["w"]) * CT
+	var mh := float(L["h"]) * CT
+	x = (mw - vw) / 2.0 if mw < vw else clampf(x, 0.0, mw - vw)
+	y = mh / 2.0 - (360.0 + 19.0) / (2.0 * Z) if mh < vh else clampf(y, -19.0 / Z, maxf(0.0, mh - 360.0 / Z))
+	return Vector2(x, y)
+
+func snap_cam() -> void:
+	cam_tl = _cam_target()
+	cam.zoom = Vector2(Z, Z)
+	cam.position = cam_tl
+
+func _cam_update(dt: float) -> void:
+	var tg := _cam_target()
+	cam_tl += (tg - cam_tl) * (1.0 - exp(-dt * 7.0))
+	if absf(tg.x - cam_tl.x) < 0.05:
+		cam_tl.x = tg.x
+	if absf(tg.y - cam_tl.y) < 0.05:
+		cam_tl.y = tg.y
+	cam.zoom = Vector2(Z, Z)
+	cam.position = cam_tl
+
+func w2s(p: Vector2) -> Vector2:
+	return (p - cam_tl) * Z
+
+# ---------- животные (aniUpdate в HTML) ----------
+func _line_free(x0: float, y0: float, x1: float, y1: float) -> bool:
+	var n := maxi(1, ceili(Vector2(x1 - x0, y1 - y0).length() / 6.0))
+	for i in range(1, n + 1):
+		if solid_at(loc_id, floori((x0 + (x1 - x0) * i / n) / CT), floori((y0 + (y1 - y0) * i / n) / CT)):
+			return false
+	return true
+
+func _ani_update(dt: float) -> void:
+	var P := king
+	for a in ani:
+		if a["loc"] != loc_id:
+			continue
+		var pd := Vector2(float(P["x"]) - a["x"], float(P["y"]) - a["y"]).length()
+		var r: Array = a["r"]
+		if a["kind"] == "pigeon":
+			if a["fly"] > 0.0:
+				a["fly"] -= dt
+				a["x"] += a["vx"] * dt
+				a["y"] += a["vy"] * dt
+				a["h"] = minf(34.0, a["h"] + 46.0 * dt)
+				a["fc"] += dt * 40.0
+				continue
+			if a["h"] > 0.0:
+				a["h"] = maxf(0.0, a["h"] - 24.0 * dt)
+				a["fc"] += dt * 40.0
+				a["x"] = clampf(a["x"], r[0] * CT, (r[2] + 1) * CT)
+				a["y"] = clampf(a["y"], r[1] * CT, (r[3] + 1) * CT)
+				if a["h"] > 0.0:
+					continue
+			if pd < 30.0 and P["moving"] and not sneak:
+				var an := atan2(a["y"] - float(P["y"]), a["x"] - float(P["x"])) + randf_range(-0.7, 0.7)
+				a["fly"] = randf_range(0.7, 1.3)
+				a["vx"] = cos(an) * 64.0
+				a["vy"] = sin(an) * 40.0 - 12.0
+				a["h"] = 1.0
+				a["flip"] = a["vx"] > 0.0
+				a["moving"] = false
+				continue
+		if a["moving"]:
+			var dxy := Vector2(a["tx"] - a["x"], a["ty"] - a["y"])
+			var sp: float = ANISP[a["kind"]] * (2.3 if a["run"] else 1.0) * dt
+			if dxy.length() <= sp:
+				a["x"] = a["tx"]
+				a["y"] = a["ty"]
+				a["moving"] = false
+				a["run"] = false
+				a["t"] = randf_range(1.5, 9.0 if a["kind"] == "horse" else 12.0 if a["kind"] == "cat" else 5.0)
+			else:
+				a["x"] += dxy.x / dxy.length() * sp
+				a["y"] += dxy.y / dxy.length() * sp
+				if absf(dxy.x) > 0.5:
+					a["flip"] = dxy.x > 0.0
+				a["fc"] += sp
+			continue
+		a["t"] -= dt
+		a["peck"] = (a["kind"] == "hen" or a["kind"] == "pigeon") and sin(t * 6.0 + a["x"] * 0.7) > 0.7
+		if a["kind"] == "dog" and pd < 96.0 and pd > 30.0 and P["moving"] and randf() < dt * 1.2:
+			var tx: float = float(P["x"]) + randf_range(-18, 18)
+			var ty: float = float(P["y"]) + randf_range(-4, 12)
+			if not solid_at(loc_id, floori(tx / CT), floori(ty / CT)) and _line_free(a["x"], a["y"], tx, ty):
+				a["tx"] = tx
+				a["ty"] = ty
+				a["moving"] = true
+				a["run"] = true
+				continue
+		if a["t"] < 0.0:
+			for k in 5:
+				var tx: float = (r[0] + randf() * (r[2] - r[0] + 1)) * CT
+				var ty: float = (r[1] + randf() * (r[3] - r[1] + 1)) * CT
+				if not solid_at(loc_id, floori(tx / CT), floori(ty / CT)) and _line_free(a["x"], a["y"], tx, ty):
+					a["tx"] = tx
+					a["ty"] = ty
+					a["moving"] = true
+					break
+			a["t"] = randf_range(1.0, 4.0)
+
+# ---------- частицы (partsUpdate/drawParts в HTML) ----------
+func _parts_update(dt: float) -> void:
+	var night := Game.is_night()
+	var sea := Game.season()
+	var wx := 0.6
+	if L["out"]:
+		for s in L["smoke"]:
+			if randf() < dt * 2.4:
+				parts.append({"k": "smoke", "x": float(s[0]) + randf_range(-1, 1), "y": float(s[1]), "vx": wx * 5.0 + randf_range(-1.5, 1.5), "vy": -randf_range(7, 11), "t": 0.0, "life": randf_range(2.6, 4.2), "r": randf_range(1.2, 2.2)})
+		if forge != Vector2.ZERO and randf() < dt * 5.0:
+			parts.append({"k": "spark", "x": forge.x + randf_range(-5, 5), "y": forge.y + randf_range(-3, 3), "vx": randf_range(-14, 14), "vy": -randf_range(16, 34), "t": 0.0, "life": randf_range(0.3, 0.7)})
+		if night and sea < 3:
+			var nf := 0
+			for p in parts:
+				if p["k"] == "fly":
+					nf += 1
+			if nf < 12 and randf() < dt * 3.0:
+				parts.append({"k": "fly", "x": randf_range(37, 47) * CT, "y": randf_range(4, 15) * CT, "vx": 0.0, "vy": 0.0, "t": 0.0, "life": randf_range(6, 12), "ph": randf() * 6.0})
+		if sea == 2 or sea == 0:
+			for tr in trees:
+				if randf() < dt * (0.5 if sea == 2 else 0.25):
+					var cols := ["#c86a28", "#e0a030", "#a8401c", "#d08a30"] if sea == 2 else ["#f4d0e0", "#ffffff", "#f0b8d0"]
+					parts.append({"k": "leaf" if sea == 2 else "petal", "x": tr.x + randf_range(-tr.z, tr.z), "y": tr.y + randf_range(-6, 6), "vx": wx * 4.0 + randf_range(-3, 3), "vy": randf_range(5, 9), "t": 0.0, "life": randf_range(3, 5), "ph": randf() * 6.0, "gy": tr.y + randf_range(20, 40), "c": Color.html(cols[randi() % cols.size()])})
+	elif not night and not L["beams"].is_empty():
+		for b in L["beams"]:
+			if randf() < dt * 1.2:
+				parts.append({"k": "mote", "x": float(b[0]) + randf_range(-6, 16), "y": float(b[1]) + randf_range(8, 50), "vx": randf_range(-1, 1), "vy": randf_range(-1.5, 0.5), "t": 0.0, "life": randf_range(3, 6)})
+	var i := parts.size() - 1
+	while i >= 0:
+		var p: Dictionary = parts[i]
+		p["t"] += dt
+		if p["t"] > p["life"]:
+			parts.remove_at(i)
+			i -= 1
+			continue
+		match p["k"]:
+			"smoke":
+				p["x"] += p["vx"] * dt
+				p["y"] += p["vy"] * dt
+				p["r"] += dt * 1.3
+				p["vx"] += wx * dt * 1.5
+			"spark":
+				p["x"] += p["vx"] * dt
+				p["y"] += p["vy"] * dt
+				p["vy"] += 60.0 * dt
+			"fly":
+				p["ph"] += dt
+				p["vx"] += (sin(p["ph"] * 1.7) * 8.0 - p["vx"]) * dt
+				p["vy"] += (cos(p["ph"] * 1.3) * 6.0 - p["vy"]) * dt
+				p["x"] += p["vx"] * dt
+				p["y"] += p["vy"] * dt
+			"leaf", "petal":
+				if p["y"] < p["gy"]:
+					p["ph"] += dt * 3.0
+					p["x"] += (p["vx"] + sin(p["ph"]) * 6.0) * dt
+					p["y"] += p["vy"] * dt
+			_:
+				p["x"] += p["vx"] * dt
+				p["y"] += p["vy"] * dt
+		i -= 1
+	if parts.size() > 400:
+		parts = parts.slice(parts.size() - 400)
+
+func _draw_parts(layer_i: int) -> void:
+	var n: Node2D = fx0 if layer_i == 0 else fx1
+	for p in parts:
+		var a: float = 1.0 - p["t"] / p["life"]
+		var x := roundf(p["x"])
+		var y := roundf(p["y"])
+		var k: String = p["k"]
+		if layer_i == 0:
+			if k == "smoke":
+				var r: float = p["r"]
+				n.draw_rect(Rect2(roundf(p["x"] - r), roundf(p["y"] - r), roundf(r * 2.0), roundf(r * 2.0)), Color8(138, 132, 144, int(255 * 0.35 * a)))
+				n.draw_rect(Rect2(roundf(p["x"] - r + 1.0), roundf(p["y"] - r), roundf(r), roundf(r)), Color8(200, 194, 204, int(255 * 0.25 * a)))
+			elif k == "dust" or k == "puff":
+				n.draw_rect(Rect2(x, y, 2, 1), Color8(200, 184, 152, int(255 * 0.4 * a)))
+			elif k == "leaf" or k == "petal":
+				var c: Color = p["c"]
+				c.a = minf(1.0, a * 3.0)
+				n.draw_rect(Rect2(x, y, 2 if (k == "leaf" and sin(p["ph"]) > 0.0) else 1, 1), c)
+		else:
+			if k == "spark":
+				n.draw_rect(Rect2(x, y, 1, 1), Color8(255, 224, 128, int(255 * a)) if a > 0.5 else Color8(255, 128, 48, int(255 * a)))
+			elif k == "fly":
+				var b: float = (0.5 + 0.5 * sin(p["ph"] * 4.0)) * minf(1.0, minf(p["t"], p["life"] - p["t"]))
+				n.draw_texture_rect(Art.light_tex, Rect2(x - 4, y - 4, 8, 8), false, Color(0.85, 1.0, 0.44, b * 0.5))
+				n.draw_rect(Rect2(x, y, 1, 1), Color(0.94, 1.0, 0.63, b))
+			elif k == "mote":
+				n.draw_rect(Rect2(x, y, 1, 1), Color(1.0, 0.96, 0.82, 0.5 * minf(1.0, minf(p["t"], a * 2.0))))
+
+# ---------- кто рядом: люди и действия (nearestTarget в HTML) ----------
+func nearest_target() -> Dictionary:
+	var P := king
+	var fx: float = float(P["x"]) + {"left": -8.0, "right": 8.0}.get(P["dir"], 0.0)
+	var fy: float = float(P["y"]) - 6.0 + {"up": -8.0, "down": 6.0}.get(P["dir"], 0.0)
+	var best := {}
+	var bd := 1e9
+	for n in npcs:
+		if n["loc"] != loc_id or n["away"] or (n["lines"] as Array).is_empty():
+			continue
+		var d := Vector2(float(n["x"]) - fx, float(n["y"]) - 6.0 - fy).length()
+		if d < 24.0 and d < bd:
+			bd = d
+			best = {"n": n}
+	for a in L["acts"]:
+		if a["auto"]:
+			continue
+		var d := Vector2(float(a["x"]) - float(P["x"]), float(a["y"]) - float(P["y"]) + 4.0).length()
+		if d < float(a["r"]) and d * 0.9 < bd:
+			bd = d * 0.9
+			best = {"a": a}
+	return best
+
+func interact(tg: Dictionary) -> void:
+	if tg.has("n"):
+		talk_to(tg["n"])
+	elif tg.has("a"):
+		do_act(tg["a"])
+
+func talk_to(n: Dictionary) -> void:
+	if king["sit"] != null and n.get("seat", "") == "":
+		stand_up()
+	if n.get("sit") == null and n.get("path") == null:
+		var v := Vector2(float(king["x"]) - n["x"], float(king["y"]) - n["y"])
+		n["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
+	var ls: Array = n["lines"]
+	var line: String = ls[randi() % ls.size()]
+	if n.has("staff"):
+		people.say(n, line, 4.0)
+	hud.say(n, line)
+	print("TALK ", n["name"])
+
+const KITCHEN := ["Из кухни тянет луком, дымом и свежим хлебом. Повариха гремит котлами.", "На кухне ощипывают кур. Кто-то напевает старую песню о походе на север.", "Поварята при виде короля роняют половник."]
+const WELL := ["Глубокий колодец. Ведро скрипит на вороте.", "Вода в колодце сладкая — замок выдержит долгую осаду."]
+func do_act(a: Dictionary) -> void:
+	match a["id"]:
+		"throne":
+			sit_at(spots["throne"])
+		"council":
+			sit_at(spots["seat_king"])
+		"bed":
+			var h := Game.hour_abs()
+			if h >= 18.5 or h < 6.0:
+				hud.toast("Король ложится спать…")
+				sleep_until(6.5 + (24.0 if h >= 6.0 else 0.0))
+			else:
+				sleep_until(h + 2.0)
+				hud.toast("Король отдыхает пару часов.")
+		"kitchen":
+			hud.say(null, KITCHEN[randi() % KITCHEN.size()])
+		"well":
+			hud.say(null, WELL[randi() % WELL.size()])
+		"smithy":
+			hud.say(null, "Кузнец бьёт молотом по раскалённой полосе. Наконечники копий, подковы, гвозди — кузня работает на войско.")
+		"fountain":
+			hud.say(null, "Вода в фонтане холодная и прозрачная. На дне блестят монеты — придворные бросают их на счастье.")
+		"dummy":
+			if t - practice_t > 1.2:
+				practice_t = t
+				king["dir"] = "up"
+				parts.append({"k": "puff", "x": float(a["x"]), "y": float(a["y"]) - 10.0, "vx": 0.0, "vy": -6.0, "t": 0.0, "life": 0.6})
+				hud.toast("Упражнение с мечом. Солдаты одобрительно гудят.")
+		_:
+			hud.toast(String(a["label"]) + " — пока только в полной игре (HTML).")
+
+func sleep_until(ha: float) -> void:
+	fade_to(func() -> void:
+		if ha >= 29.0:
+			Game.day += 1
+			ha -= 24.0
+		Game.frac = clampf((ha - 5.0) / 24.0, 0.0, 0.9999)
+		people.snap(false)
+		last_ha = Game.day * 24.0 + Game.hour_abs())
+
+# щелчок мышью: идти туда; по человеку или предмету — подойти и заговорить/сделать
+func click(sp: Vector2) -> void:
+	if blocked():
+		return
+	var w := cam_tl + sp / Z
+	for n in npcs:
+		if n["loc"] != loc_id or n["away"] or (n["lines"] as Array).is_empty():
+			continue
+		if w.x > float(n["x"]) - 8.0 and w.x < float(n["x"]) + 8.0 and w.y > float(n["y"]) - 30.0 and w.y < float(n["y"]) + 2.0:
+			_walk_to(Vector2(n["x"], n["y"]), func() -> void: talk_to(n), 26.0)
+			return
+	for a in L["acts"]:
+		if not a["auto"] and Vector2(float(a["x"]) - w.x, float(a["y"]) - w.y).length() < maxf(14.0, float(a["r"]) * 0.7):
+			_walk_to(Vector2(a["x"], a["y"]), func() -> void: do_act(a), float(a["r"]) + 4.0)
+			return
+	_walk_to(w, Callable(), 0.0)
+
+func _walk_to(w: Vector2, then: Callable, near: float) -> void:
+	if near > 0.0 and w.distance_to(Vector2(king["x"], king["y"])) < near:
+		then.call()
+		return
+	if king["sit"] != null:
+		stand_up()
+	var b := near_free(loc_id, floori(w.x / CT), floori(w.y / CT))
+	var p = find_path(loc_id, Vector2i(floori(float(king["x"]) / CT), floori((float(king["y"]) - 2.0) / CT)), b)
+	if p == null:
+		hud.toast("Туда не пройти.")
+		return
+	path = p
+	on_arrive = then
+
+# ---------- клавиши ----------
 func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventMouseButton and e.pressed:
+		if e.button_index == MOUSE_BUTTON_LEFT:
+			if hud.dlg_open():
+				hud.advance()
+			else:
+				click(hud.get_local_mouse_position())
+		elif e.button_index == MOUSE_BUTTON_RIGHT:
+			path = []
+		elif e.button_index == MOUSE_BUTTON_WHEEL_UP and not hud.dlg_open():
+			Z = 2
+		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN and not hud.dlg_open():
+			Z = 1
+		return
 	if not (e is InputEventKey and e.pressed and not e.echo):
 		return
 	var k: int = e.physical_keycode
-	if talking >= 0:
-		if k == KEY_E or k == KEY_ENTER or k == KEY_SPACE:
-			next_line()
+	if hud.dlg_open():
+		if k == KEY_E or k == KEY_ENTER or k == KEY_SPACE or k == KEY_KP_ENTER:
+			hud.advance()
 		elif k == KEY_ESCAPE:
-			close_talk()
+			hud.close_dlg()
 		return
 	match k:
-		KEY_E, KEY_ENTER:
-			try_talk()
+		KEY_E, KEY_ENTER, KEY_KP_ENTER:
+			var tg := nearest_target()
+			if not tg.is_empty():
+				interact(tg)
+			elif king["sit"] != null:
+				stand_up()
 		KEY_SPACE:
 			Game.speed = 0 if Game.speed > 0 else 1
+		KEY_0:
+			Game.speed = 0
 		KEY_1, KEY_2, KEY_3:
 			Game.speed = k - KEY_0
+		KEY_Z:
+			Z = 1 if Z == 2 else 2
+			snap_cam()
+		KEY_H, KEY_F1:
+			hud.help = not hud.help
+			hud.help_auto = false
 		KEY_ESCAPE:
 			leave.emit()
 
-func nearest(r: float) -> int:
-	var best := -1
-	var bd := r
+# ---------- команды для тестов веб-сборки (window.slovo('…')) ----------
+func npc_by(s: String) -> Dictionary:
+	if s.is_valid_int():
+		return npcs[int(s)]
 	for n in npcs:
-		var s: Sprite2D = n["s"]
-		if not s.visible:
-			continue
-		var dd := s.position.distance_to(king.position)
-		if dd < bd:
-			bd = dd
-			best = n["i"]
-	return best
+		if n["key"] == s:
+			return n
+	return {}
 
-func try_talk() -> bool:
-	var i := nearest(28.0)
-	if i < 0:
-		return false
-	talking = i
-	var d: Dictionary = PEOPLE[i]
-	var say: Array = d["say"]
-	var h := int(Game.hour())
-	lines = PackedStringArray([say[h % say.size()], say[(h + 1) % say.size()]])
-	line = 0
-	dlg_name.text = d["name"]
-	dlg_text.text = lines[0]
-	dlg.visible = true
-	var s: Sprite2D = npcs[i]["s"]
-	var v := king.position - s.position
-	npcs[i]["dir"] = (3 if v.x > 0 else 2) if absf(v.x) > absf(v.y) else (0 if v.y > 0 else 1)
-	s.texture = npcs[i]["fr"][npcs[i]["dir"]][0]
-	print("TALK ", d["name"])
-	return true
-
-func next_line() -> void:
-	line += 1
-	if line >= lines.size():
-		close_talk()
-	else:
-		dlg_text.text = lines[line]
-
-func close_talk() -> void:
-	talking = -1
-	dlg.visible = false
-
-# команды для скриншот-тестов веб-сборки (window.slovo('…'))
 func cmd(p: PackedStringArray) -> void:
 	match p[0]:
 		"goto":
-			var s: Sprite2D = npcs[int(p[1])]["s"]
+			var n := npc_by(p[1])
+			if n.is_empty():
+				return
+			if n["loc"] != loc_id:
+				go_loc(n["loc"])
+			if n["away"]:
+				n["away"] = false
+			stand_up()
 			for o in [Vector2(0, 14), Vector2(14, 0), Vector2(-14, 0), Vector2(0, -14)]:
-				if _free(s.position + o):
-					king.position = s.position + o
+				var q: Vector2 = Vector2(n["x"], n["y"]) + o
+				if can_stand(q.x, q.y):
+					king["x"] = q.x
+					king["y"] = q.y
 					break
-			cam.reset_smoothing()
+			var v := Vector2(n["x"], n["y"]) - Vector2(king["x"], king["y"])
+			king["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
+			snap_cam()
+		"spot":
+			var sp: Dictionary = spots.get(p[1], {})
+			if sp.is_empty():
+				return
+			stand_up()
+			if sp["loc"] != loc_id:
+				go_loc(sp["loc"])
+			king["x"] = float(sp["x"])
+			king["y"] = float(sp["y"])
+			king["dir"] = sp["dir"]
+			snap_cam()
 		"talk":
-			try_talk()
+			var tg := nearest_target()
+			if tg.has("n"):
+				interact(tg)
+		"act":
+			var tg := nearest_target()
+			if tg.has("a"):
+				interact(tg)
 		"next":
-			next_line()
+			hud.advance()
 		"close":
-			close_talk()
+			hud.close_dlg()
 		"walk":
 			for i in int(float(p[3]) * 60.0):
-				move_king(Vector2(float(p[1]), float(p[2])), 1.0 / 60.0)
+				move_king(float(p[1]), float(p[2]), 1.0 / 60.0)
+			king["moving"] = false
+		"zoom":
+			Z = clampi(int(p[1]), 1, 2)
+			snap_cam()
 		"state":
 			print("STATE ", JSON.stringify(state()))
 
 func state() -> Dictionary:
-	var vis := 0
+	var here := 0
+	var away := 0
 	for n in npcs:
-		if (n["s"] as Sprite2D).visible:
-			vis += 1
-	return {"day": Game.day, "min": int(Game.minutes), "king": [int(king.position.x), int(king.position.y)], "dir": kdir, "talk": talking, "npcs": vis, "walked": int(walked), "night": snappedf(Game.night(), 0.01)}
+		if n["loc"] == loc_id and not n["away"]:
+			here += 1
+		if n["away"] or n.get("lie", false):
+			away += 1
+	return {"day": Game.day, "hour": snappedf(Game.hour(), 0.01), "loc": loc_id, "room": room, "king": [int(king["x"]), int(king["y"])], "dir": king["dir"], "sit": king["sit"] != null, "talk": hud.dlg_open(), "here": here, "asleep": away, "npcs": npcs.size(), "walked": int(walked), "dark": snappedf(hud.dark, 0.01), "zoom": Z, "fade": fade > 0.0, "sea": sea_key}
 
-# самопроверка без экрана: двое суток двора, ходьба короля, стены держат, разговор открывается и закрывается
+# самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается
 func selftest() -> bool:
-	var ok := true
+	var ok: bool = Art.ok and D["locs"].size() >= 7 and npcs.size() >= 30
+	print("selftest: мест ", D["locs"].size(), ", людей ", npcs.size(), ", животных ", ani.size(), ", спрайтов ", (D["spr"] as Array).size())
 	Game.speed = 3
-	var hid := 0
-	for i in 2400:
-		_tick(0.1)
-		if i == 1200:
+	var locs0 := {}
+	for n in npcs:
+		locs0[n["key"]] = n["loc"]
+	var moved := {}
+	var asleep := 0
+	var w0 := {}
+	for n in npcs:
+		w0[n["key"]] = 0.0
+	for i in 1300:
+		var before := {}
+		for n in npcs:
+			before[n["key"]] = [n["loc"], Vector2(n["x"], n["y"])]
+		_tick(0.05)
+		for n in npcs:
+			if n["loc"] != locs0[n["key"]]:
+				moved[n["key"]] = true
+			var b: Array = before[n["key"]]
+			if n["loc"] == b[0]:
+				w0[n["key"]] += Vector2(n["x"], n["y"]).distance_to(b[1])
+		if absf(Game.hour_abs() - 26.0) < 0.02:
+			asleep = 0
 			for n in npcs:
-				if not (n["s"] as Sprite2D).visible:
-					hid += 1
-	var movers := 0
-	for n in npcs:
-		if float(n["walked"]) > 200.0:
-			movers += 1
-	print("selftest: day ", Game.day, " walked ", int(walked), " movers ", movers, "/", npcs.size(), " ночью внутри ", hid)
-	ok = ok and Game.day >= 2 and movers == npcs.size() and hid >= 3
+				if n["away"] or n.get("lie", false):
+					asleep += 1
+	var walkers := 0
+	for k in w0:
+		if w0[k] > 150.0:
+			walkers += 1
+	print("selftest: день ", Game.day, " ", Game.clock_text(), ", сменили место ", moved.size(), ", ходили ", walkers, ", ночью спят ", asleep)
+	ok = ok and Game.day >= 1 and moved.size() >= 10 and walkers >= 12 and asleep >= 12
 	Game.speed = 1
-	king.position = _px(Vector2i(23, 20))
-	var x0 := king.position.x
+	Game.set_hour(12.0)
+	people.snap(false)
+	cmd(PackedStringArray(["spot", "throne_front"]))
+	var x0: float = king["x"]
 	for i in 60:
-		move_king(Vector2.RIGHT, 1.0 / 60.0)
-	ok = ok and king.position.x > x0 + 40
-	king.position = _px(Vector2i(23, 11))
-	for i in 120:
-		move_king(Vector2.UP, 1.0 / 60.0)
-	ok = ok and king.position.y > 10 * TS
-	print("selftest: king ", king.position, " (стена донжона держит: ", king.position.y > 10 * TS, ")")
-	Game.minutes = 12.0 * 60.0
-	for n in npcs:
-		(n["s"] as Sprite2D).visible = true
-	cmd(PackedStringArray(["goto", "0"]))
-	ok = ok and try_talk() and dlg.visible
-	next_line()
-	next_line()
-	ok = ok and not dlg.visible and talking == -1
-	print("selftest: ", JSON.stringify(state()))
+		move_king(1, 0, 1.0 / 60.0)
+	ok = ok and float(king["x"]) > x0 + 40.0
+	cmd(PackedStringArray(["spot", "throne_front"]))
+	for i in 180:
+		move_king(0, -1, 1.0 / 60.0)
+	var wall: bool = float(king["y"]) > 60.0
+	print("selftest: король ", Vector2(king["x"], king["y"]), " (стены держат: ", wall, ")")
+	ok = ok and wall
+	cmd(PackedStringArray(["spot", "keep_door"]))
+	for i in 200:
+		_tick(1.0 / 60.0)
+		if loc_id == "keep" and fade == 0.0:
+			break
+	print("selftest: дверь в замок → ", loc_id)
+	ok = ok and loc_id == "keep"
+	var g := npc_by("grd_gate_l")
+	cmd(PackedStringArray(["goto", "grd_gate_l"]))
+	cmd(PackedStringArray(["talk"]))
+	var talked: bool = hud.dlg_open()
+	for i in 4:
+		hud.advance()
+	ok = ok and talked and not hud.dlg_open() and loc_id == g["loc"]
+	print("selftest: разговор ", talked, " → ", JSON.stringify(state()))
 	return ok

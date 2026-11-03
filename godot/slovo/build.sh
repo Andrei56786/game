@@ -1,9 +1,11 @@
 #!/bin/sh
-# «Слово короля» на Godot: шрифт из src/fontdata.js → импорт → проверка без экрана → сборки в веб и Windows (build/web, build/win).
+# «Слово короля» на Godot: графика и данные двора из HTML-версии (tools/export.mjs → art/), шрифт из src/fontdata.js →
+# импорт → проверка без экрана → сборки в веб и Windows (build/web, build/win). Нужны python3, node и playwright (Chromium).
 # GODOT — путь к Godot 4.7.2 (шаблоны экспорта — notes/plan-v4.md). Только проверка: sh build.sh test
 set -e
 cd "$(dirname "$0")"
 G=${GODOT:-/data/tools/godot/Godot_v4.7.2-stable_linux.x86_64}
+(cd ../.. && python3 tools/build.py >/dev/null && node godot/slovo/tools/export.mjs)
 node -e "const f=require('fs'),s=f.readFileSync('../../src/fontdata.js','utf8');f.writeFileSync('slovo_serif.woff',Buffer.from(s.match(/VF_DATA = '([^']+)'/)[1],'base64'))"
 mkdir -p build/web build/win && touch build/.gdignore
 "$G" --headless --import --path . >/dev/null 2>&1 || true
