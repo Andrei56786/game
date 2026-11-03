@@ -203,60 +203,74 @@ function supOrderFromWin(D) { const C = G.court; if (!C || C.errand) return; con
   if (n) { errandStart(n, 'prep', D, supS().dest); UI.shut(); } else { quartOrder(npcByKey('srv_quart'), D, supS().dest); C.errand.by = 'srv_quart'; UI.toast('Приказ ушёл к снабженцу: обоз на ' + dn(D) + '.'); } }
 function supStatus() { const C = G.court, E = C && C.errand; if (!E) return '';
   return E.st === 'go' ? (E.k === 'call' ? 'посыльный зовёт снабженца' : 'посыльный несёт приказ: обоз на ' + dn(E.days)) : E.st === 'prep' ? (errNow() < E.ts ? 'приказ в пути' : 'грузят обоз на ' + dn(E.days) + ': ' + Math.round(errProg(E) * 100) + '%') : E.k === 'call' ? 'снабженец идёт к королю' : 'обоз готов — посыльный идёт с докладом'; }
-// ---------- the window (O): the forces, the length of the campaign, the quartermaster's switches ----------
+// ---------- the window (O): the forces, the length of the campaign, the quartermaster's switches — icons and bars; the details live in the tips ----------
+Object.assign(ICONS, { wagon: '.www.|wwwww|nnnnn|.k.k.|.....', chk: '....h|...h.|h.h..|.h...|.....' });
+function supBar(x, y, w, v, D, ic, val, lv, tip, id, mx) { // icon · a bar of what there is against the target (the light tick) · the value
+  spr(ic, x, y); const bx = x + 8, bw = w - 44, sc = mx || Math.max(D * 1.25, v, 1);
+  bar(bx, y + 1, bw, 5, v / sc, lv === 2 ? '#7fb04c' : lv === 1 ? '#e0a630' : lv === 0 ? '#c0353f' : '#8a7a68');
+  if (D > 0 && !mx) rect(bx + 1 + Math.round((bw - 2) * clamp(D / sc, 0, 1)), y - 1, 1, 9, '#fff2c8');
+  txt(val, x + w, y, lv === 2 ? UIC.good : lv === 1 ? UIC.warn : lv === 0 ? UIC.bad : '#c8b898', { al: 'r', f: 's' }); hit(x, y - 2, w, 10, { id, tip }); }
+function supTog(id, x, y, w, on, label, tip, fx) { rect(x, y, 9, 9, PAL.o); rect(x + 1, y + 1, 7, 7, on ? '#3a5a2a' : '#22170f'); if (on) spr('i_chk', x + 2, y + 2);
+  txt(label, x + 13, y + 1, on ? PAL.w : '#a89880', { f: 's' }); hit(x, y - 1, w, 11, { id, cursor: true, tip, onClick: fx }); }
 WIN_EXT.supply = function (w) { const X = 14, Y = 21, WW = 612, HH = 326, o = supS(), r = G.realms[G.player.realm], C = G.court, pa = playerArmy(), E = C && C.errand;
   winFrame(X, Y, WW, HH, 'Снабжение и обоз', false); let y = Y + 22; const st = supStatus();
-  txt('Снабженец Готфрид' + (pa ? ' едет с обозом' : ' — у амбара во дворе') + (st ? ': ' + st : ''), X + 16, y, st ? PAL.y : PAL.w, { f: 's' });
-  txt('Казна: ' + fmt(Math.floor(r.gold)) + ' зол.', X + WW - 22, y, P3.lab, { al: 'r', f: 's' }); y += 11;
-  if (E && E.st === 'prep') bar(X + 16, y, 290, 6, errProg(E), '#e0a630'); y += 9;
-  // left: the forces
-  const LX = X + 10, LW = 300; let ly = y; txt('Силы и припасы', LX + 4, ly, P3.hi); ly += 12; const F = supForces();
-  for (const f of F) { rect(LX, ly, LW, 58, 'rgba(0,0,0,0.22)'); strokeR(LX, ly, LW, 58, '#6a4a2a');
-    if (!f.a) { txt(f.n, LX + 6, ly + 4, PAL.w); para('Соберётся при выезде: 22 человека и еда на две недели. Приказ снабженцу снарядит и свиту.', LX + 6, ly + 17, LW - 12, UIC.dim, { f: 's', lh: 9 }); ly += 62; continue; }
+  spr('i_wagon', X + 16, y); txt('Снабженец Готфрид' + (pa ? ' — с войском' : ' — у амбара') + (st ? ': ' + st : ''), X + 25, y, st ? PAL.y : '#c8b898', { f: 's' });
+  spr('i_gold', X + WW - 62, y); txt(fmt(Math.floor(r.gold)), X + WW - 22, y, PAL.y, { al: 'r', f: 's' }); hit(X + WW - 64, y - 2, 46, 10, { id: 'sup_gold', tip: 'Казна, золото' });
+  y += 10; if (E && E.st === 'prep') bar(X + 16, y, 290, 5, errProg(E), '#e0a630'); y += 7;
+  // left: a card for each force
+  const LX = X + 10, LW = 300; let ly = y; const F = supForces();
+  for (const f of F) { const hh = !f.a ? 28 : f.who ? 59 : 50; rect(LX, ly, LW, hh, 'rgba(0,0,0,0.22)'); strokeR(LX, ly, LW, hh, '#6a4a2a');
+    if (!f.a) { txt(f.n, LX + 6, ly + 4, PAL.w); txt('соберётся при выезде: 22 человека, еда на 2 недели', LX + 6, ly + 16, UIC.dim, { f: 's' }); ly += hh + 4; continue; }
     const a = f.a, d = supDaysOf(a), D = pa ? supTarget(a) : o.days, wd = pa ? waterDay(a) : { full: 1, d: 0, s: 'у столицы вода рядом' }, lv = v => v >= D - 0.5 ? 2 : v >= Math.min(3, D) ? 1 : 0;
-    const ttl = f.n + ' · ' + voin(armyMen(a)); let rt = 'цель ' + dn(D); if (f.who && tw(ttl) + tw(f.who + ' · ' + rt, { f: 's' }) + 18 <= LW) rt = f.who + ' · ' + rt;
-    txt(ttl, LX + 6, ly + 4, PAL.w); txt(rt, LX + LW - 6, ly + 5, P3.lab, { al: 'r', f: 's' }); if (f.who) hit(LX, ly, LW, 14, { id: 'sw' + f.n, tip: 'Командует ' + f.who + '. Если король возглавит это войско, свита вольётся в него вместе с обозом.' });
-    const cell = (i, lab, val, ok, tip) => { const cx = LX + 6 + (i % 3) * 98, cy = ly + 16 + Math.floor(i / 3) * 20; txt(lab, cx, cy, P3.lab, { f: 's' }); txt(val, cx, cy + 9, ok === 2 ? UIC.good : ok === 1 ? UIC.warn : ok === 0 ? UIC.bad : PAL.w, { f: 's' }); hit(cx, cy, 94, 19, { id: 'sc' + i + f.n, tip }); };
-    cell(0, 'Еда', fmt(a.food) + ' · ' + dn(Math.floor(d.food)), lv(d.food), 'Каждый ест 1 в день — раненые и больные тоже. Человек несёт 3, повозка — 400.');
-    const h = supHorses(a); cell(1, 'Фураж', h ? fmt(a.fodder) + ' · ' + dn(Math.min(99, Math.floor(d.fodder))) : 'коней нет', h ? lv(d.fodder) : 3, 'Коней, вьючных и упряжных: ' + h + '. Трава даёт часть корма, зимой — ничего.');
-    const wl = wd.full || wd.d >= 0 ? null : a.water / -wd.d; cell(2, 'Вода', Math.round(a.water) + ' из ' + waterCap(a) + (wl !== null ? ' · ≈' + dn(Math.floor(wl)) : ''), wl === null || wl >= 3 ? 2 : wl >= 1.5 ? 1 : 0, 'Сегодня: ' + wd.s + '.');
-    const rn = rangedN(a.u); cell(3, 'Стрелы', rn ? fmt(a.arrows) + ' · по ' + Math.floor(a.arrows / rn) : 'стрелков нет', rn ? (a.arrows >= rn * 25 ? 2 : a.arrows >= rn * 10 ? 1 : 0) : 3, 'Стрелку в поход — колчан с запасом: 30 стрел.');
-    cell(4, 'Повозки', (a.wagons || 0) + ' (до ' + supWagMax(a) + ')', 3, 'Повозка везёт 400. Больше повозок — медленнее марш, поэтому снабженец берёт не больше ' + supWagMax(a) + '.');
-    const ld = armyLoad(a) / Math.max(1, armyCap(a)); cell(5, 'Груз', Math.round(ld * 100) + '% вместимости', ld > 0.98 ? 1 : 3, 'Люди несут по 3, повозки — по 400.');
-    ly += 62; }
-  if (pa) { const wd = waterDay(pa), wt = supWaterTile(pa), m = supMarketNear(pa), men = Math.max(1, armyMen(pa)), wf = pa.wagons ? Math.min(0.35, pa.wagons / (men / 100 + 1) * 0.06) : 0, ln = [];
-    ln.push('Вода сегодня: ' + (wd.full ? 'бочки полны' : wd.d >= 0 ? 'не убывает' : '−' + (-wd.d).toFixed(1) + ' в день') + ' — ' + wd.s + '.');
-    if (!wd.full) ln.push('Ближайшая вода: ' + (wt >= 0 ? kmDir(pa, wt % MW + 0.5, ((wt / MW) | 0) + 0.5) : 'не видно') + '.');
-    if (m) ln.push('Ближайший рынок: ' + m.name + ', ' + kmDir(pa, m.x + 0.5, m.y + 0.5) + '.');
-    if (pa.path && pa.pi < pa.path.length - 1 && o.route) { const md = pathDays(pa, pa.path, pa.pi); if (isFinite(md)) ln.push('В пути: ≈' + dn(Math.max(1, Math.round(md))) + ' дороги — снабженец держит запас на ' + dn(supTarget(pa)) + '.'); }
-    ln.push(wf > 0.005 ? 'Повозки замедляют марш на ' + Math.round(wf * 100) + '%.' : 'Обоз не замедляет марш.');
-    let yy = ly + 2; for (const s of ln) yy += para(s, LX + 4, yy, LW - 8, '#e8dcc0', { f: 's', lh: 9 }) + 2; }
+    txt(f.n, LX + 6, ly + 4, PAL.w); const nw = tw(f.n); spr('i_men', LX + 10 + nw, ly + 5); txt(fmt(armyMen(a)), LX + 17 + nw, ly + 5, '#c8b898', { f: 's' }); hit(LX + 8 + nw, ly + 2, 40, 10, { id: 'sm' + f.n, tip: voin(armyMen(a)) });
+    txt('цель ' + dn(D), LX + LW - 6, ly + 5, P3.lab, { al: 'r', f: 's' }); hit(LX + LW - 70, ly + 2, 66, 10, { id: 'st' + f.n, tip: ['Цель обоза: на ' + dn(D), 'Светлая черта на полосах — эта цель.'] });
+    let yy = ly + 16; if (f.who) { txt('ведёт ' + f.who, LX + 6, yy, UIC.dim, { f: 's' }); hit(LX + 4, yy - 2, LW - 8, 10, { id: 'sw' + f.n, tip: 'Если король возглавит это войско, свита вольётся в него вместе с обозом.' }); yy += 9; }
+    const cw = (LW - 20) / 2, c2 = LX + 14 + cw, h = supHorses(a), rn = rangedN(a.u), wl = wd.full || wd.d >= 0 ? null : a.water / -wd.d, ld = armyLoad(a) / Math.max(1, armyCap(a));
+    supBar(LX + 6, yy, cw, d.food, D, 'i_food', dn(Math.floor(d.food)), lv(d.food), ['Еда: ' + fmt(a.food), 'Каждый ест 1 в день — раненые и больные тоже. Человек несёт 3, повозка — 400.'], 'sb0' + f.n);
+    supBar(c2, yy, cw, h ? Math.min(99, d.fodder) : 0, h ? D : 0, 'i_fodder', h ? dn(Math.min(99, Math.floor(d.fodder))) : 'коней нет', h ? lv(d.fodder) : 3, ['Фураж: ' + fmt(a.fodder), 'Коней, вьючных и упряжных: ' + h + '. Трава даёт часть корма, зимой — ничего.'], 'sb1' + f.n); yy += 11;
+    supBar(LX + 6, yy, cw, a.water, 0, 'i_water', Math.round(a.water) + '/' + waterCap(a), wl === null || wl >= 3 ? 2 : wl >= 1.5 ? 1 : 0, ['Вода: бочки ' + Math.round(a.water) + ' из ' + waterCap(a) + (wl !== null ? ' — хватит ≈ на ' + dn(Math.floor(wl)) : ''), 'Сегодня: ' + wd.s + '.'], 'sb2' + f.n, Math.max(1, waterCap(a)));
+    supBar(c2, yy, cw, rn ? a.arrows / rn : 0, rn ? 30 : 0, 'i_arrows', rn ? 'по ' + Math.floor(a.arrows / rn) : 'стрелков нет', rn ? (a.arrows >= rn * 25 ? 2 : a.arrows >= rn * 10 ? 1 : 0) : 3, ['Стрелы: ' + fmt(a.arrows) + (rn ? ', по ' + Math.floor(a.arrows / rn) + ' на стрелка' : ''), 'Стрелку в поход — колчан с запасом: 30 стрел.'], 'sb3' + f.n); yy += 11;
+    supBar(LX + 6, yy, cw, a.wagons || 0, 0, 'i_wagon', (a.wagons || 0) + '/' + supWagMax(a), 3, ['Повозки: ' + (a.wagons || 0) + ' (не больше ' + supWagMax(a) + ')', 'Повозка везёт 400. Больше повозок — медленнее марш.'], 'sb4' + f.n, Math.max(1, supWagMax(a)));
+    supBar(c2, yy, cw, ld, 0, 'i_weap', Math.round(ld * 100) + '%', ld > 0.98 ? 1 : 3, ['Груз: ' + Math.round(ld * 100) + '% вместимости', 'Люди несут по 3, повозки — по 400.'], 'sb5' + f.n, 1);
+    ly += hh + 4; }
+  const line = (ic, s, col, tip, id) => { spr(ic, LX + 4, ly); const n = para(s, LX + 13, ly, LW - 16, col || '#e8dcc0', { f: 's', lh: 9 }); if (tip) hit(LX + 2, ly - 2, LW - 4, n + 2, { id, tip }); ly += n + 3; };
+  if (pa) { const wd = waterDay(pa), wt = supWaterTile(pa), m = supMarketNear(pa), men = Math.max(1, armyMen(pa)), wf = pa.wagons ? Math.min(0.35, pa.wagons / (men / 100 + 1) * 0.06) : 0;
+    line('i_water', wd.full ? wd.s.charAt(0).toUpperCase() + wd.s.slice(1) : (wd.d >= 0 ? 'Вода не убывает: ' : 'Вода −' + (-wd.d).toFixed(1) + ' в день: ') + wd.s);
+    if (!wd.full) line('i_water', 'Ближайшая вода: ' + (wt >= 0 ? kmDir(pa, wt % MW + 0.5, ((wt / MW) | 0) + 0.5) : 'не видно'));
+    if (m) line('i_gold', 'Рынок: ' + m.name + ', ' + kmDir(pa, m.x + 0.5, m.y + 0.5));
+    if (pa.path && pa.pi < pa.path.length - 1 && o.route) { const md = pathDays(pa, pa.path, pa.pi); if (isFinite(md)) line('i_hourglass', 'В пути ≈' + dn(Math.max(1, Math.round(md))) + ' — запас держим на ' + dn(supTarget(pa))); }
+    if (wf > 0.005) line('i_wagon', 'Обоз замедляет марш на ' + Math.round(wf * 100) + '%'); }
   if (!pa && C) { const S = G.setts[G.realms[G.player.realm].capital], cap = S.id; let fo = 0, fd = 0, ar = 0; for (const f of F) { const a = f.a || { u: { sword: 8, knight: 4, horse: 4, archer: 6 }, food: 300, fodder: 0, arrows: 0, wagons: 1, horses: 0 }; const q = supWant(a, o.days); fo += q.food; fd += q.fodder; ar += q.arrows; }
     const gr = Math.min(fo, Math.max(0, Math.floor((C.grain || 0) - 400))), cost = (buyCost(S, 'food', Math.max(0, fo - gr)) + buyCost(S, 'fodder', fd) + buyCost(S, 'arrows', ar)) * PRICE_K(cap);
-    const ls = []; if (fo) ls.push('еды ' + fmt(fo) + (gr ? ' (' + fmt(gr) + ' даст амбар)' : '')); if (fd) ls.push('фуража ' + fmt(fd)); if (ar) ls.push('стрел ' + fmt(ar));
-    para(ls.length ? 'На ' + dn(o.days) + ' не хватает: ' + ls.join(', ') + '. На рынке столицы это ≈' + Math.round(cost) + ' зол. (и повозки, если не влезет).' : 'Припасов на ' + dn(o.days) + ' хватает.', LX + 4, ly + 2, LW - 8, ls.length ? '#e8dcc0' : UIC.good, { f: 's', lh: 9 });
-    if (!G.visit) para('Приказ можно отдать и голосом: любой слуга (паж, служанка, посыльные Мирко и Ода, повариха, конюх, садовник, кузнец) отнесёт его снабженцу к амбару и вернётся с докладом.', LX + 4, ly + 26, LW - 8, UIC.dim, { f: 's', lh: 9 }); }
+    const ls = []; if (fo) ls.push('еда ' + fmt(fo) + (gr ? ' (амбар даст ' + fmt(gr) + ')' : '')); if (fd) ls.push('фураж ' + fmt(fd)); if (ls.length && ar) ls.push('стрелы ' + fmt(ar)); else if (ar) ls.push('стрелы ' + fmt(ar));
+    if (ls.length) line('i_gold', 'На ' + dn(o.days) + ' не хватает: ' + ls.join(', ') + ' — на рынке ≈' + Math.round(cost) + ' зол.', '#e8dcc0', 'Снабженец докупит на рынке столицы (и возьмёт повозки, если не влезет).', 'sup_lack');
+    else line('i_star', 'Припасов на ' + dn(o.days) + ' хватает', UIC.good); }
   // right: the campaign
-  const RX = X + 322, RW = WW - 334; let ry = y; txt('Поход', RX, ry, P3.hi); ry += 12;
-  txt('Обоз на:', RX, ry + 3, PAL.w, { f: 's' }); SUP_DAYS.forEach((d, i) => btn('sd' + d, RX + 46 + i * 58, ry, 54, 13, { label: dn(d), style: o.days === d && o.dest < 0 ? 'wood' : 'dark', active: o.days === d && o.dest < 0, onClick: () => { o.days = d; o.dest = -1; } })); ry += 17;
-  txt('…или скажите, куда идём, — снабженец посчитает сам:', RX, ry, P3.lab, { f: 's' }); ry += 10; const L = supDests();
-  if (!L.length) { txt('Ни войны, ни чужих столиц — назовите число дней.', RX, ry, UIC.dim, { f: 's' }); ry += 14; }
-  L.forEach((e, i) => { const sel = o.dest === e.sid; btn('sdst' + i, RX, ry, RW, 13, { label: e.n + ' (' + realmName(e.r) + (e.foe ? ', война' : '') + ') — ≈' + dn(e.march) + ' пути → ' + dn(e.D), style: sel ? 'wood' : 'dark', active: sel, tip: e.foe ? 'Дорога туда, неделя под стенами и запас на обратный путь по чужой земле.' : 'Дорога и три дня запаса.', onClick: () => { o.days = e.D; o.dest = e.sid; } }); ry += 14; });
-  ry += 4; const sw = (id, on, label, tip, fx) => { btn(id, RX, ry, RW, 13, { label: label + ': ' + (on ? 'да' : 'нет'), style: on ? 'wood' : 'dark', tip, onClick: fx }); ry += 15; };
-  sw('ss_on', o.on, 'Сам докупать в походе', 'В каждом своём или нейтральном городе — до цели. Во вражеских городах с нами не торгуют.', () => { o.on = o.on ? 0 : 1; });
-  sw('ss_rt', o.route, 'Когда войско идёт — считать по дороге', 'Цель = оставшиеся дни пути ×1,3 + 3, а перед вражеским городом ещё +7 на осаду. Стоим — цель по числу дней.', () => { o.route = o.route ? 0 : 1; });
-  sw('ss_wg', o.wag, 'Брать повозки, если груз не влезает', 'Не больше, чем позволяет скорость марша.', () => { o.wag = o.wag ? 0 : 1; });
-  btn('ss_res', RX, ry, RW, 13, { label: 'Не тратить казну ниже ' + o.res + ' зол.', style: 'dark', tip: 'Щёлкните, чтобы сменить: ' + SUP_RES.join(' / ') + ' зол.', onClick: () => { o.res = SUP_RES[(SUP_RES.indexOf(o.res) + 1) % SUP_RES.length]; } }); ry += 19;
+  const RX = X + 322, RW = WW - 334; let ry = y; txt('На сколько дней', RX, ry, P3.lab, { f: 's' }); ry += 10; const sw0 = Math.floor((RW - 6) / 4);
+  SUP_DAYS.forEach((d, i) => btn('sd' + d, RX + i * (sw0 + 2), ry, sw0, 13, { label: dn(d), style: o.days === d && o.dest < 0 ? 'wood' : 'dark', active: o.days === d && o.dest < 0, onClick: () => { o.days = d; o.dest = -1; } })); ry += 18;
+  txt('Или куда идём', RX, ry, P3.lab, { f: 's' }); ry += 10; const L = supDests();
+  if (!L.length) { txt('ни войны, ни чужих столиц рядом', RX, ry, UIC.dim, { f: 's' }); ry += 14; }
+  L.forEach((e, i) => { const sel = o.dest === e.sid, capd = e.D < e.march + 3, id = 'sdst' + i;
+    btn(id, RX, ry, RW, 13, { label: '', style: sel ? 'wood' : 'dark', active: sel, tip: [e.n + ' · ' + realmName(e.r) + (e.foe ? ' · война' : ''), 'Дорога ≈' + dn(e.march) + '.', capd ? 'Больше чем на 40 дней обоз не собрать — остальное докупать в пути.' : e.foe ? 'Обоз: дорога туда, неделя под стенами и обратный путь по чужой земле.' : 'Обоз: дорога и три дня запаса.'], onClick: () => { o.days = e.D; o.dest = e.sid; } });
+    spr('shield' + e.r, RX + 3, ry + 2); if (e.foe) spr('i_sword', RX + 13, ry + 4); const nm = e.n.length > 17 ? e.n.slice(0, 16) + '…' : e.n; txt(nm, RX + 22, ry + 3, hov(id) || sel ? '#fff2c8' : PAL.w, { f: 's' });
+    txt(e.march + ' дн. пути', RX + RW - 78, ry + 3, '#c8b898', { al: 'r', f: 's' }); spr('i_wagon', RX + RW - 72, ry + 4); txt(e.D + (capd ? ' макс.' : ' дн.'), RX + RW - 5, ry + 3, capd ? UIC.warn : '#c8b898', { al: 'r', f: 's' }); ry += 15; });
+  ry += 4; const tg = (id, on, label, tip, fx) => { supTog(id, RX, ry, RW, on, label, tip, fx); ry += 13; };
+  tg('ss_on', o.on, 'Докупать в пути', 'В каждом своём или нейтральном городе — до цели. Во вражеских городах с нами не торгуют.', () => { o.on = o.on ? 0 : 1; });
+  tg('ss_rt', o.route, 'Считать по дороге', 'Когда войско идёт: оставшиеся дни пути ×1,3 + 3, а перед вражеским городом ещё +7 на осаду. Стоим — цель по числу дней.', () => { o.route = o.route ? 0 : 1; });
+  tg('ss_wg', o.wag, 'Брать повозки, если не влезает', 'Не больше, чем позволяет скорость марша.', () => { o.wag = o.wag ? 0 : 1; });
+  txt('Казна не ниже', RX, ry + 3, '#c8b898', { f: 's' }); const rw = Math.floor((RW - 74) / SUP_RES.length);
+  SUP_RES.forEach((v, i) => btn('ss_r' + v, RX + 72 + i * rw, ry, rw - 2, 12, { label: '' + v, style: o.res === v ? 'wood' : 'dark', active: o.res === v, tip: 'Снабженец не тратит казну ниже ' + v + ' зол.', onClick: () => { o.res = v; } })); ry += 18;
   if (pa) { const sid = settNear(pa.x, pa.y, 1.2), S = sid >= 0 ? G.setts[sid] : null, can = !!S && !hostile(G.player.realm, S.ctrl) && !S.siege;
-    btn('ss_buy', RX, ry, RW / 2 - 2, 15, { label: 'Пополнить здесь', style: can ? 'wood' : 'dark', disabled: !can, tip: can ? 'Докупить на рынке «' + WD.setts[sid].name + '» — на ' + dn(supTarget(pa)) : 'Нужен свой или нейтральный город рядом.', onClick: () => { const t = supTopUp(pa, sid, true); if (t) UI.toast(t.length > 96 ? t.slice(0, 94) + '…' : t); } });
+    btn('ss_buy', RX, ry, RW / 2 - 2, 15, { label: 'Пополнить здесь', ic: 'i_gold', style: can ? 'wood' : 'dark', disabled: !can, tip: can ? 'Докупить на рынке «' + WD.setts[sid].name + '» — на ' + dn(supTarget(pa)) : 'Нужен свой или нейтральный город рядом.', onClick: () => { const t = supTopUp(pa, sid, true); if (t) UI.toast(t.length > 96 ? t.slice(0, 94) + '…' : t); } });
     const wt = supWaterTile(pa), wd = waterDay(pa), canW = wt >= 0 && !wd.full;
-    btn('ss_wat', RX + RW / 2 + 2, ry, RW / 2 - 2, 15, { label: 'Вести к воде', style: canW ? 'wood' : 'dark', disabled: !canW, tip: canW ? 'Ближайшая вода — ' + kmDir(pa, wt % MW + 0.5, ((wt / MW) | 0) + 0.5) + '.' : wd.full ? 'Вода рядом — бочки полны.' : 'Поблизости воды не видно.', onClick: () => { if (orderMove(wt)) { UI.shut(); UI.toast('Войско идёт к воде.'); } } }); }
+    btn('ss_wat', RX + RW / 2 + 2, ry, RW / 2 - 2, 15, { label: 'К воде', ic: 'i_water', style: canW ? 'wood' : 'dark', disabled: !canW, tip: canW ? 'Ближайшая вода — ' + kmDir(pa, wt % MW + 0.5, ((wt / MW) | 0) + 0.5) + '.' : wd.full ? 'Вода рядом — бочки полны.' : 'Поблизости воды не видно.', onClick: () => { if (orderMove(wt)) { UI.shut(); UI.toast('Войско идёт к воде.'); } } }); }
   else if (C) { const busy = !!E, home = !G.visit;
-    btn('ss_go', RX, ry, RW, 15, { label: busy ? 'Идёт: ' + supStatus() : 'Отдать приказ: обоз на ' + dn(o.days), style: busy || !home ? 'dark' : 'wood', disabled: busy || !home, tip: home ? 'Ближайший слуга отнесёт приказ снабженцу, а когда обоз будет готов, придёт с докладом. Можно и самому подойти к любому слуге или к снабженцу у амбара.' : 'Вы в гостях — приказ можно отдать дома.', onClick: () => supOrderFromWin(o.days) }); }
+    btn('ss_go', RX, ry, RW, 15, { label: busy ? 'Идёт: ' + supStatus() : 'Приказ: обоз на ' + dn(o.days), ic: busy ? null : 'i_seal', style: busy || !home ? 'dark' : 'wood', disabled: busy || !home, tip: home ? ['Ближайший слуга отнесёт приказ снабженцу и вернётся с докладом.', 'Можно и голосом: любой слуга во дворце или сам снабженец у амбара.'] : 'Вы в гостях — приказ можно отдать дома.', onClick: () => supOrderFromWin(o.days) }); }
   // the last report
-  const by = Y + HH - 44; rect(X + 8, by, WW - 16, 36, 'rgba(0,0,0,0.22)'); strokeR(X + 8, by, WW - 16, 36, '#6a4a2a');
-  txt('Последний доклад' + (o.last && o.lastDay >= 0 ? ' · ' + dateStr(o.lastDay) : ''), X + 16, by + 3, P3.lab, { f: 's' });
-  wrap(o.last || 'Пока докладывать нечего. Подойдите к любому слуге или к снабженцу у амбара — или отдайте приказ здесь.', WW - 32, { f: 's' }).slice(0, 3).forEach((l, i) => txt(l, X + 16, by + 12 + i * 8, '#e8dcc0', { f: 's' })); };
+  const by = Y + HH - 36; rect(X + 8, by, WW - 16, 28, 'rgba(0,0,0,0.22)'); strokeR(X + 8, by, WW - 16, 28, '#6a4a2a'); spr('i_scroll', X + 14, by + 4);
+  txt('Доклад' + (o.last && o.lastDay >= 0 ? ' · ' + dateStr(o.lastDay) : ''), X + 24, by + 4, P3.lab, { f: 's' });
+  const RL = wrap(o.last || 'Пока докладывать нечего.', WW - 40, { f: 's' }); RL.slice(0, 2).forEach((l, i) => txt(i === 1 && RL.length > 2 ? l.slice(0, -1) + '…' : l, X + 24, by + 12 + i * 8, '#e8dcc0', { f: 's' }));
+  if (RL.length > 2) hit(X + 8, by, WW - 16, 28, { id: 'sup_rep', tip: RL.join(' ') }); };
 REFS.push({ s: 'Снабжение', t: 'Снабженец, обоз и поручения', b: () => 'Снабженец Готфрид живёт при амбаре во дворе. Он считает еду, фураж, стрелы, воду и повозки и сам их докупает. Окно снабжения — клавиша O (и кнопка на верхней панели).\n' +
   '• Как приказать. Подойдите к любому слуге — пажу, служанке, посыльным Мирко и Оде, поварихе, конюху, садовнику, кузнецу — и дайте поручение «к снабженцу — собрать обоз в поход». Слуга побежит к амбару, снабженец соберёт обоз (час-другой, дольше для большого войска и долгого похода), и слуга вернётся с докладом. Можно поговорить со снабженцем самому или отдать приказ в окне O.\n' +
   '• Длина похода. Назовите число дней (7, 14, 21, 30) или скажите, куда идёте: снабженец посчитает дорогу, неделю на осаду и запас на обратный путь.\n' +
