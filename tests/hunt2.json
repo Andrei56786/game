@@ -13,8 +13,11 @@
 "eval": "const L=LOCS.forest, c=L.clearings[1]; const [tx,ty]=nearFree(L,c[0]-8,c[1]); __go('forest',tx,ty); COURT.npcs.filter(n=>n.follow).forEach(n=>{n.x=COURT.p.x-16;n.y=COURT.p.y+8;n.loc='forest';}); COURT.ani.filter(a=>a.game===2).forEach(a=>{a.x=COURT.p.x+10;a.y=COURT.p.y+4;}); window.__tr=[]; window.__iv=setInterval(()=>{ const HU=COURT.hunt; if(!HU) return; const q=HU.quarry, P=COURT.p; __tr.push(clockStr()+' q='+(q?gk(q)+':'+q.st+'@'+Math.round(Math.hypot(q.x-P.x,q.y-P.y)):'-')+' h='+COURT.ani.filter(a=>a.game===2).map(a=>a.st[0]+Math.round(Math.hypot(a.x-P.x,a.y-P.y))).join(',')+' fol='+COURT.npcs.filter(n=>n.follow).map(n=>Math.round(Math.hypot(n.x-P.x,n.y-P.y))).join(',')); }, 1500); 'tracking'"
 },
 {
-"waitFor": "COURT.hunt && COURT.hunt.quarry && COURT.hunt.quarry.st==='bay'",
-"timeout": 45000
+"eval": "(()=>{ const HU=COURT.hunt, L=LOCS.forest, P=COURT.p; COURT.sneak=0; window.__run=(n,cb)=>{ for (let i=0;i<n;i++) { for (const f of UPD_EXT) f(1/60); if (cb && cb(i)) return i; } return -1; }; const hs=COURT.ani.filter(a=>a.game===2&&a.loc==='forest'); for (const h of hs) { h.st='heel'; h.q=null; h.rest=0; h.pth=null; } const dk=a=>Math.hypot(a.x-P.x,a.y-P.y); const q=COURT.ani.filter(a=>a.loc==='forest'&&a.game===1&&a.kind==='deer'&&a.st!=='dead'&&a!==HU.hart).sort((a,b)=>dk(a)-dk(b))[0]; if (!q) return 'no deer'; const [tx,ty]=nearFree(L,Math.floor(P.x/CT)+6,Math.floor(P.y/CT)); q.x=tx*CT+8; q.y=ty*CT+10; q.st='graze'; q.moving=0; q.free=0; q.calm=0; q.stk=0; q.ft=0; HU.quarry=q; const ride=()=>{ if (dk(q)<=300) return; const h=hs.filter(h=>h.q===q).sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]; if (!h) return; const d=Math.hypot(h.x-q.x,h.y-q.y)||1, [rx,ry]=nearFree(L,Math.floor((h.x+(h.x-q.x)/d*120)/CT),Math.floor((h.y+(h.y-q.y)/d*120)/CT)); P.x=rx*CT+8; P.y=ry*CT+12; COURT.path=null; }; const i=__run(3600, j=>{ if (q.st==='bay') return true; if (!HU.quarry) { for (const h of hs) if (h.st==='heel') h.rest=0; HU.quarry=q; } if (j%30===0) ride(); if (j%90===0) __tr.push('sim '+(j/60).toFixed(1)+'s q='+gk(q)+':'+q.st+'@'+Math.round(dk(q))+' h='+hs.map(h=>h.st[0]+Math.round(Math.hypot(h.x-q.x,h.y-q.y))).join(',')); return false; }); snapCam(); return 'quarry '+gk(q)+':'+q.st+(i>=0?' after '+i+' frames ('+(i/60).toFixed(1)+' s)':' — not at bay after 60 s')+', king at '+Math.round(dk(q)); })()"
+},
+{
+"expect": "COURT.hunt && COURT.hunt.quarry && COURT.hunt.quarry.st==='bay'",
+"label": "гончие поставили оленя на бай"
 },
 {
 "eval": "const HU=COURT.hunt, q=HU.quarry; if (q && q.st!=='dead') { const L=LOCS.forest; const [tx,ty]=nearFree(L,Math.floor(q.x/CT)-4,Math.floor(q.y/CT)); __go('forest',tx,ty); 'moved near quarry ' + gk(q) + ':' + q.st } else 'no quarry'"
