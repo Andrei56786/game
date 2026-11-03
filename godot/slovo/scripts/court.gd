@@ -3,6 +3,7 @@ extends Node2D
 # Свет как в HTML: карта света (небо + огни + окна + лучи) умножается на сцену, сверху — свечение пламени и окон.
 # Люди живут по расписанию во всех местах сразу и ходят через двери; король — 16×32, вид 320×180 точек (×4).
 signal leave
+signal to_map
 const CT := 16
 const DIRS := ["down", "left", "right", "up"]
 const NPC_SPDK := [1.0, 1.0, 1.4, 2.2]
@@ -1055,6 +1056,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		KEY_H, KEY_F1:
 			hud.help = not hud.help
 			hud.help_auto = false
+		KEY_TAB:
+			to_map.emit()
 		KEY_ESCAPE:
 			leave.emit()
 
