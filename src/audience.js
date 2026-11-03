@@ -6,7 +6,7 @@ function provUnrest(sid, v) { const p = WD.setts[sid].prov; G.provs[p].unrest = 
 const PETS = [
   { k: 'harvest', w: 3, role: 'peasant', mk: () => { const S = rndOwn('village'); return S && { s: S.id, text: 'Государь! В деревне ' + WD.setts[S.id].name + ' град побил рожь. Детям есть нечего. Смилуйтесь — простите подать в этом сезоне!' }; },
     ch: p => [{ t: 'Простить подать (−20 зол.)', good: 2, fx: () => { G.realms[0].gold -= 20; provUnrest(p.s, -15); prestige(2); } },
-      { t: 'Выдать зерно из амбаров (−150 мер)', good: 3, ok: () => G.court.grain >= 150, why: 'мало зерна', fx: () => { G.court.grain -= 150; provUnrest(p.s, -22); prestige(3); } },
+      { t: 'Выдать зерно из амбаров (−400 мер)', good: 3, ok: () => G.court.grain >= 400, why: 'мало зерна', fx: () => { G.court.grain -= 400; provUnrest(p.s, -22); prestige(3); } },
       { t: 'Отказать: подать платят все', good: 0, fx: () => { provUnrest(p.s, 10); prestige(-1); } }] },
   { k: 'bandits', w: 2, role: 'merchant', mk: () => { const S = rndOwn(); return S && { s: S.id, text: 'Ваше величество, на тракте у ' + WD.setts[S.id].name + ' разбойники грабят обозы. Третий караван за месяц! Торговля встанет.' }; },
     ch: p => [{ t: 'Назначить награду за их головы (−30 зол.)', good: 2, fx: () => { G.realms[0].gold -= 30; const b = G.armies.filter(a => a.alive && a.kind === 'bandit').sort((a, b) => Math.hypot(a.x - WD.setts[p.s].x, a.y - WD.setts[p.s].y) - Math.hypot(b.x - WD.setts[p.s].x, b.y - WD.setts[p.s].y))[0]; if (b) takeU(b.u, Math.ceil(armyMen(b) * 0.6)); G.setts[p.s].prosp = Math.min(100, G.setts[p.s].prosp + 4); } },
@@ -110,7 +110,7 @@ function callCouncil() { const why = canCallCouncil(); if (why) { UI.toast(why +
   if (typeof Snd !== 'undefined') Snd.sfx('bell'); UI.shut();
   const P = COURT.p, seated = P && P.sit === LOCS.keep.spots.seat_king; if (seated && pr.come.length) C.waitKing = 1;
   const t = (pr.come.length ? 'Паж побежал по замку: «Срочный совет!» Придут: ' + pr.come.map(e => lowFirst(e.s.n)).join(', ') + '.' : 'Звать некого: никого из советников нет в замке.')
-    + (pr.away.length ? ' В отъезде: ' + pr.away.map(e => lowFirst(e.s.n) + ' (' + e.c.name + ')').join(', ') + '.' : '') + (pr.vac.length ? ' Пустуют места: ' + pr.vac.map(s => lowFirst(s.n)).join(', ') + '.' : '')
+    + (pr.away.length ? ' В отъезде: ' + pr.away.map(e => lowFirst(e.s.n) + ' (' + e.c.name + ')').join(', ') + '.' : '') + sickNote(pr) + (pr.vac.length ? ' Пустуют места: ' + pr.vac.map(s => lowFirst(s.n)).join(', ') + '.' : '')
     + (pr.come.length ? (seated ? ' Король ждёт во главе стола — совет начнётся, как только все сядут.' : ' Они сойдутся в зал совета в течение часа. Если король не придёт за два часа — разойдутся.') : '') + (night && pr.come.length ? ' Ночной сбор: советники недовольны (верность −2).' : '');
   const ch = !seated && pr.come.length ? [{ t: 'Идти в зал совета и сесть во главе стола', fx: () => goCouncilSeat() }, { t: 'Позже', fx: () => { } }] : null;
   DLG.say(null, t, { name: 'Экстренный сбор совета', choices: ch, esc: ch ? 1 : undefined }); if (typeof TUT !== 'undefined') TUT.ev('callcouncil'); return true; }
@@ -131,7 +131,7 @@ function councilSit() { const C = G.court;
   DLG.say(null, 'Зал совета пуст. Малый совет собирается раз в неделю — по четвергам в 9:30. Ближайший: ' + dateStr(nd) + ' (' + inDays(nd - G.day) + ').' + (why ? ' ' + why + '.' : ' Можно созвать советников срочно — или просто раздать поручения.'), { choices: ch, esc: ch.length - 1 }); }
 function runMeeting() { const C = G.court; C.meetDone = G.day; C.waitKing = 0; const L = [], pr = councilPresence();
   for (const e of pr.come) { const rep = seatReport(e.s.k); if (rep) L.push({ who: e.n, text: rep }); e.c.loy = clamp((e.c.loy || 50) + 0.5, 0, 100); }
-  const notes = []; if (pr.away.length) notes.push('В отъезде: ' + pr.away.map(e => lowFirst(e.s.n)).join(', ') + '.'); if (pr.vac.length) notes.push('Пустуют места: ' + pr.vac.map(s => s.n).join(', ') + '.');
+  const notes = []; if (pr.away.length) notes.push('В отъезде: ' + pr.away.map(e => lowFirst(e.s.n)).join(', ') + '.'); if (sickNote(pr)) notes.push(sickNote(pr).trim()); if (pr.vac.length) notes.push('Пустуют места: ' + pr.vac.map(s => s.n).join(', ') + '.');
   L.push({ who: null, text: 'Доклады выслушаны. ' + (notes.length ? notes.join(' ') + ' ' : '') + 'Что прикажет государь?', choices: [{ t: 'Раздать поручения', fx: () => UI.open({ k: 'council' }) }, { t: 'Распустить совет', fx: () => { } }], esc: 1, onEnd: () => { for (const n of COURT.npcs) if (n.seat && n.override) { n.override.until = 28.95; n.override.hold = 1; } C.meetCall = null; C.meetHold = G.day; } }); // nobody rises before the king
   DLG.seq(L); if (typeof TUT !== 'undefined') TUT.ev('meeting'); }
 function talkSeat(n) { const c = n.c, k = n.seat, C = G.court; const loy = c.loy || 50;
@@ -201,7 +201,7 @@ function gossipLine(n) { const C = G.court, k = n.staff; if (!R.chance(0.65)) re
   const plot = C.secrets.find(s => s.k === 'plot' && !s.known); if (plot && (k === 'gardener' || k === 'stable') && R.chance(0.6)) return 'Ночью у фонтана опять шептались. Один — в плаще, лица не видно…';
   if (C.secrets.some(s => s.k === 'spy' && !s.known) && k === 'guard' && R.chance(0.5)) return 'Кто-то ночью ходил у кабинета Ока. Не наш — шаги лёгкие.';
   if (C.secrets.some(s => s.k === 'love' && !s.known) && k === 'cook' && R.chance(0.5)) return 'Конюх наш что-то по ночам не спит… Влюбился, не иначе!';
-  if ((C.grain || 0) < 300 && k === 'cook') return 'Зерна в амбаре — кот наплакал, государь. Случись осада — беда.';
+  if ((C.grain || 0) < Math.max(600, granRes() / 2) && k === 'cook') return 'Зерна в амбаре — кот наплакал, государь. Случись осада — беда.';
   const war = warsOf(0); if (war.length && (k === 'soldier' || k === 'soldier2' || k === 'master')) return 'Говорят, ' + REALM_DEF[war[0]].name + ' собирает войско. Мы готовы, государь!';
   const badH = G.houses.find(H0 => H0.alive && H0.loy < 30); if (badH && (k === 'master' || k === 'merchant')) return 'Люди дома ' + badH.name + ' косо смотрят на ваших стражников. Не к добру это.';
   const q = charOf(charOf(G.player.char).spouse); if (q && q.preg && k === 'maid') return 'Королева нынче бледна по утрам… Ой, простите, я ничего не говорила!';
