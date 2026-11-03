@@ -1,8 +1,10 @@
 extends CanvasLayer
 ## Экран карты королевства — перенос main.js/render.js (drawMapBase, drawChunks, камера): обзорная карта и куски полной
 ## детализации от MapGPU, границы и державы цветом, масштабы 1/8…2 (колесо, Q/E), перетаскивание мышью, WASD и стрелки.
-## Поверх — поселения, подписи, мини-карта и верхняя строка (map_hud.gd). Вид года — по дню (MapGPU.set_day): обзор
-## перекрашивается сразу, видимые куски — по два за кадр. Время на карте пока не идёт.
+## Поверх — поселения, войска, подписи, мини-карта и верхняя строка (map_hud.gd). Вид года — по дню (MapGPU.set_day): обзор
+## перекрашивается сразу, видимые куски — по два за кадр. Королевство — Sim.G (новая игра при первом открытии карты):
+## туман войны (map_show_fog: тень над невидимым, бумага над неразведанным), владельцы — по поселениям. Время на карте
+## пока не идёт.
 signal leave
 const MapHud = preload("res://scripts/world/map_hud.gd")
 const ZOOMS := [0.125, 0.25, 0.5, 1.0, 2.0]
@@ -18,6 +20,14 @@ var cam := Vector3(WPW / 2.0, WPH / 2.0, 1.0)
 var mode := "ter"
 var base: ColorRect
 var wash: ColorRect
+var fogv: ColorRect        # тень над разведанным, но невидимым сейчас
+var fogp: ColorRect        # бумага над неразведанным (над поселениями и войсками, как в HTML)
+var objs: Control          # подписи, поселения, войска (map_hud.gd, part = "objs")
+var exp_img: Image
+var vis_img: Image
+var exp_tex: ImageTexture
+var vis_tex: ImageTexture
+var fog_t := -1.0
 var chn: Node2D
 var pool: Array[Sprite2D] = []
 var ch_mat: ShaderMaterial
@@ -44,9 +54,51 @@ func _ready() -> void:
 	wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wash.visible = false
 	add_child(wash)
+	fogv = _fog_rect(0)
+	objs = MapHud.new()
+	objs.mv = self
+	objs.part = "objs"
+	add_child(objs)
+	fogp = _fog_rect(1)
 	hud = MapHud.new()
 	hud.mv = self
 	add_child(hud)
+
+func _fog_rect(layer: int) -> ColorRect:
+	var r := ColorRect.new()
+	r.size = Vector2(SW, SH)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.visible = false
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/map_show_fog.gdshader")
+	m.set_shader_parameter("layer", layer)
+	r.material = m
+	add_child(r)
+	return r
+
+## маски тумана из G.explored и G.vis (по точке на клетку) → текстуры слоёв и мини-карты (rebuildFog)
+func _fog_update() -> void:
+	var g := Sim.G
+	exp_img = Image.create_from_data(WorldData.MW, WorldData.MH, false, Image.FORMAT_R8, g.explored)
+	vis_img = Image.create_from_data(WorldData.MW, WorldData.MH, false, Image.FORMAT_R8, g.vis)
+	if exp_tex == null:
+		exp_tex = ImageTexture.create_from_image(exp_img)
+		vis_tex = ImageTexture.create_from_image(vis_img)
+		for r in [fogv, fogp]:
+			(r.material as ShaderMaterial).set_shader_parameter("exp_tex", exp_tex)
+			(r.material as ShaderMaterial).set_shader_parameter("vis_tex", vis_tex)
+		G.set_fog(exp_tex)
+	else:
+		exp_tex.update(exp_img)
+		vis_tex.update(vis_img)
+		G.fog_changed()
+	Sim.fog_dirty = 0
+	fog_t = Time.get_ticks_msec() / 1000.0
+
+## державы на карте — по поселениям-столицам провинций (refreshPolitics: G.setts[seat].ctrl)
+func _politics() -> void:
+	for P: Dictionary in G.W.provs:
+		G.set_prov_owner(P.id, int(Sim.G.setts[P.seat].ctrl))
 
 func _setup() -> void:
 	on = true
@@ -66,6 +118,9 @@ func _setup() -> void:
 	sw.resize(G.W.setts.size())
 	for s: Dictionary in G.W.setts:
 		sw[s.id] = G.tile_center(s.i)
+	if not Sim.G.is_empty():
+		_fog_update()
+		_politics()
 	if not centered:
 		center_capital()
 
@@ -137,6 +192,14 @@ func _process(dt: float) -> void:
 	wash.visible = mode == "pol" and z >= 0.5
 	if wash.visible:
 		(wash.material as ShaderMaterial).set_shader_parameter("cam", cam)
+	var fog := exp_tex != null and not Sim.G.is_empty() and not JS.t(Sim.G.mapOpen)
+	if fog and Sim.fog_dirty and Time.get_ticks_msec() / 1000.0 - fog_t > 0.15:
+		_fog_update()
+	for r in [fogv, fogp]:
+		r.visible = fog
+		if fog:
+			(r.material as ShaderMaterial).set_shader_parameter("cam", cam)
+	objs.queue_redraw()
 	if z >= 0.5:
 		_chunks()
 	else:
@@ -274,7 +337,8 @@ func _unhandled_input(e: InputEvent) -> void:
 func cmd(p: PackedStringArray) -> void:
 	match p[0]:
 		"cam":
-			cam = Vector3(float(p[1]), float(p[2]), float(p[3]) if p.size() > 3 else cam.z)
+			var cz := float(p[3]) if p.size() > 3 else cam.z
+			cam = Vector3(float(p[1]), float(p[2]), cz if ZOOMS.has(cz) else cam.z)
 			clamp_cam()
 		"zoom":
 			zoom_at(int(p[1]), Vector2(SW / 2.0, SH / 2.0))
@@ -282,6 +346,28 @@ func cmd(p: PackedStringArray) -> void:
 			set_mode(p[1] if p.size() > 1 else ("ter" if mode == "pol" else "pol"))
 		"capital":
 			center_capital()
+		"army":
+			# к войску: номер или вид (lord, ai, bandit, caravan) — первое видимое
+			for a: Dictionary in Sim.G.get("armies", []):
+				if not JS.t(a.alive) or not SimIntel.armyVisible(a):
+					continue
+				var k := String(a.kind)
+				if p[1] == JS.s(a.id) or (p[1] == k and (k != "lord" or a.realm == 0.0)) or (p[1] == "ai" and k == "lord" and a.realm != 0.0):
+					var q := G.warp_pt(a.x * WorldData.TS, a.y * WorldData.TS)
+					cam.x = q.x
+					cam.y = q.y
+					clamp_cam()
+					break
+		"reveal":
+			# для проверок: вся карта разведана и видна (как G.explored.fill(1); G.vis.fill(2) в HTML)
+			if not Sim.G.is_empty():
+				var ex: PackedByteArray = Sim.G.explored
+				var vs: PackedByteArray = Sim.G.vis
+				ex.fill(1)
+				vs.fill(2)
+				Sim.G.explored = ex
+				Sim.G.vis = vs
+				Sim.fog_dirty = 1
 		"sett":
 			for s: Dictionary in G.W.setts:
 				if String(s.name) == " ".join(p.slice(1)) or str(s.id) == p[1]:
@@ -313,4 +399,18 @@ func cmd(p: PackedStringArray) -> void:
 func state() -> Dictionary:
 	return {"ok": G != null and G.ok, "stage": G.stage if G else "", "ms": G.ms if G else {}, "cam": [snappedf(cam.x, 0.1), snappedf(cam.y, 0.1), cam.z], "mode": mode,
 		"chunks": G.chunks.size() if G else 0, "built": G.nbuilt if G else 0, "cms": snappedf(G.cms, 0.01) if G else 0.0, "prof": G.prof if G else {}, "vis": vis,
-		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s()}
+		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s(), "realm": _realm_state()}
+
+func _realm_state() -> Dictionary:
+	if Sim.G.is_empty():
+		return {}
+	var bv := SimText.bar_vals()
+	var vis := 0
+	var kinds := {}
+	for a: Dictionary in Sim.G.armies:
+		if JS.t(a.alive) and SimIntel.armyVisible(a):
+			vis += 1
+			var k := String(a.kind) + ("" if String(a.kind) != "lord" or a.realm == 0.0 else "_ai")
+			kinds[k] = int(kinds.get(k, 0)) + 1
+	return {"gold": roundi(bv.gold), "net": snappedf(bv.net, 0.01), "chars": Sim.G.chars.size(), "armies": Sim.G.armies.size(), "seen": vis, "kinds": kinds, "drawn": objs.n_armies,
+		"explored": (Sim.G.explored as PackedByteArray).count(1), "fog": fogp.visible, "weather": String(Sim.G.weather.k)}
