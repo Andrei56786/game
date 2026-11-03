@@ -1,0 +1,153 @@
+// Экспорт графики и данных двора из HTML-версии (dist/index.html) для Godot → godot/slovo/art/ (генерируется, в git не хранится).
+// Запуск из корня репозитория: python3 tools/build.py && node godot/slovo/tools/export.mjs
+// Берёт то, что рисует сама игра: фоны локаций (по сезонам), спрайты предметов, людей 16×32 и животных, портреты,
+// пиксельные шрифты (BMFont), а также карту проходимости, двери, места, огни, окна, расписания и реплики.
+import { chromium } from 'playwright';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const here = path.dirname(fileURLToPath(import.meta.url)), root = path.resolve(here, '../../..'), out = path.resolve(here, '../art');
+const html = path.join(root, 'dist/index.html');
+if (!fs.existsSync(html)) { console.error('нет dist/index.html — сначала python3 tools/build.py'); process.exit(1); }
+const exe = process.env.CHROMIUM || ['/usr/local/bin/chromium'].find(p => fs.existsSync(p));
+const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const errs = [];
+page.on('pageerror', e => errs.push(e.message));
+await page.goto('file://' + html + '#court777');
+await page.waitForFunction(() => window.T && window.T.ev("typeof SCREEN !== 'undefined' && SCREEN === 'court' && !!G && !!COURT.p"), null, { timeout: 120000, polling: 500 });
+
+// всё ниже выполняется внутри игры (window.T.ev видит её переменные)
+function pageExport() {
+  const spr = [], idx = new Map(), files = {};
+  const add = c => { if (!c) return -1; let i = idx.get(c); if (i === undefined) { i = spr.length; spr.push(c); idx.set(c, i); } return i; };
+  const png = c => c.toDataURL('image/png').slice(22);
+  const r1 = v => Math.round(v * 1000) / 1000;
+  const day0 = G.day, frac0 = G.frac;
+  // сезоны: вид наружного места по дню года (seaVarOf: оттепель, цветение, лето, три осени, снег) — как в HTML
+  const objOut = (o, deco) => {
+    if (o.show && !o.show()) return null;
+    const e = { f: [], x: o.x, y: o.y, sy: o.sy !== undefined ? o.sy : o.y + (o.h || 0) };
+    if (o.fr) { e.gate = 1; for (let f = 0; f < 2; f++) e.f.push(add(objSprite(o.k, o.o, f))); }
+    else for (let f = 0; f < Math.max(1, o.anim || 0); f++) e.f.push(add(objSprite(o.k, o.o, f)));
+    if (o.anim > 1) { e.fps = o.fps || 6; e.ph = r1(o.x * (deco ? 0.13 : 0.11)); }
+    if (deco && o.k === 'window') e.night = add(objSprite('window', WIN_NIGHT, 0));
+    if (o.k === 'oak' || o.k === 'fruit') e.tree = 1;
+    return e;
+  };
+  const res = { ver: 2, CT, year: DAYS_YEAR, day: day0, hour: r1(hourAbs()), locs: {}, order: Object.keys(LOCS) };
+  for (const id in LOCS) {
+    const L = LOCS[id];
+    const o = { name: L.name, w: L.w, h: L.h, out: L.out ? 1 : 0, dark: L.dark || 0, solid: Array.from(L.solid).join(''), var: {}, days: [] };
+    const vars = L.out ? Array.from({ length: DAYS_YEAR }, (_, d) => d) : [day0];
+    for (const d of vars) {
+      if (L.out) { G.day = d; G.frac = 0.3; if (L.sk !== seaKeyOf(L)) bakeLoc(L); }
+      const sv = L.out ? (L.sv || '') : '';
+      if (L.out) o.days.push(sv);
+      if (o.var[sv]) continue;
+      SEAV = sv;
+      try {
+        const bg = 'bg_' + id + (sv ? '_' + sv : '') + '.png'; files[bg] = png(L.cv);
+        const v = { bg, objs: [], deco: [] };
+        for (const e of L.objs) { const x = objOut(e, 0); if (x) v.objs.push(x); }
+        for (const e of L.deco) { const x = objOut(e, 1); if (x) v.deco.push(x); }
+        if (L.hbSlots && G.houses) { let i = 0; for (const H0 of G.houses) { if (!H0.alive || i >= L.hbSlots.length) continue; const [tx, ty] = L.hbSlots[i++]; const s = objSprite('housebanner', { house: H0.her, ck: 'hb' + H0.id }, 0); v.deco.push({ f: [add(s)], x: tx * CT + 8 - (s.width >> 1), y: (ty + 1) * CT - s.height - 2, sy: (ty + 1) * CT, bob: 1, ph: tx }); } }
+        o.var[sv] = v;
+      } finally { SEAV = ''; }
+    }
+    if (L.out) { G.day = day0; G.frac = frac0; bakeLoc(L); }
+    o.lights = L.lights.map(l => { const q = { x: l.x + (l.dx || 0), y: l.y + (l.dy || 0), r: l.r, col: l.col, a: l.a }; if (l.fl) q.fl = l.fl; if (l.night) q.night = 1; return q; });
+    o.wins = L.wins.map(w => [w.x, w.y, w.big ? 1 : 0]);
+    o.beams = L.beams || [];
+    o.smoke = L.smoke.map(s => [s.x, s.y]);
+    const fo = L.objs.find(q => q.k === 'bld' && q.o && q.o.kind === 'forge'); if (fo) o.forge = [fo.x + 26, fo.sy - 12];
+    o.doors = L.doors.map(d => ({ x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, to: d.to, ax: d.ax, ay: d.ay, dir: d.dir, label: d.label || '' }));
+    o.spots = {}; for (const k in L.spots) { const s = L.spots[k], q = { x: s.x, y: s.y, dir: s.dir }; for (const f of ['sit', 'lie', 'away', 'sx', 'sy']) if (s[f] !== undefined && s[f] !== null && typeof s[f] !== 'object' && typeof s[f] !== 'function') q[f] = s[f]; o.spots[k] = q; }
+    o.acts = L.acts.filter(a => !a.show || a.show()).map(a => ({ id: a.id, x: a.x, y: a.y, r: a.r, label: a.label || '', auto: a.auto ? 1 : 0 }));
+    o.rooms = L.rooms;
+    res.locs[id] = o;
+  }
+  // люди: лист 4 стороны × 4 шага (16×32), портрет 48×48, расписание, реплики
+  const sheet = c => DIRS.map(d => [0, 1, 2, 3].map(f => add(walkerSprite(c, d, f))));
+  const port = c => { try { const p = portrait(c); return p ? add(p) : -1; } catch (e) { return -1; } };
+  const talkLines = n => { const got = []; for (let k = 0; k < 4; k++) { try { DLG.q = []; DLG.cur = null; UI.win = null; talkTo(n); const d = DLG.cur; if (d) { const t = d.pages.map(p => p.join(' ')).join(' ').trim(); if (t && !got.includes(t)) got.push(t); } } catch (e) { } } DLG.q = []; DLG.cur = null; UI.win = null; return got; };
+  res.people = COURT.npcs.filter(n => !n.visitor).map(n => {
+    const q = { key: n.key, name: npcTitle(n), sub: npcSub(n) || '', role: n.c.role || '', spd: n.spd, home: n.home || '', sheet: sheet(n.c), port: port(n.c), loc: n.loc, x: Math.round(n.x), y: Math.round(n.y), dir: n.dir, away: n.away ? 1 : 0 };
+    if (n.sched) q.sched = n.sched; if (n.bed) q.bed = n.bed; if (n.staff) q.staff = n.staff; if (n.post) q.post = n.post; if (n.seat) q.seat = n.seat; if (n.fam) q.fam = 1; if (n.c.fem) q.fem = 1; if (n.c.age < 12) q.kid = 1;
+    q.lines = n.staff ? (STAFF_LINES[n.staff] || STAFF_LINES.guard).slice() : talkLines(n);
+    return q;
+  });
+  const P = COURT.p, kc = P.c;
+  res.king = { name: (kc.title ? kc.title + ' ' : '') + kc.name, short: kc.name, sheet: sheet(kc), port: port(kc), loc: COURT.loc, x: P.x, y: P.y, dir: P.dir };
+  // животные двора
+  const AK = { horse: 1, dog: 1, cat: 1, hen: 1, pigeon: 1 };
+  res.animals = COURT.ani.filter(a => AK[a.kind]).map(a => ({ kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), f: [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))] }));
+  res.anisp = ANISP;
+  res.shadow = add(shadowSpr(12));
+  res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9));
+  // значки верхней строки
+  const WIC = ['i_star', 'i_sun', 'i_moon', 'i_cloud', 'i_fog', 'i_rain', 'i_snow', 'i_storm', 'i_wind'];
+  res.icons = {}; for (const k of ['shield0', 'i_gold', 'i_men', 'i_food', ...WIC, 'i_seal', 'i_scroll', 'i_book', 'i_pause', 'i_play1', 'i_play2', 'i_play3']) if (SPR[k]) res.icons[k] = [add(SPR[k]), typeof hiIc === 'function' && hiIc(k) ? 1 : 0];
+  // чёткие значки книжного шрифта (icons2.js, hiCanvas): растр под масштаб окна V = 2, 3, 4 точки экрана на точку игры;
+  // bar — значок у чисел верхней строки (sprBar, ×1.4), btn — на кнопке скорости (btn с ic: до ×1.6)
+  res.hi = {};
+  if (typeof hiCanvas === 'function') for (const k in res.icons) { const base = k.slice(2), s = SPR[k]; if (k.slice(0, 2) !== 'i_' || !HI[base]) continue;
+    const q = {}, uses = { bar: 1.4, btn: Math.min(1.6, Math.max(1, (14 - 5) / Math.max(s.width, s.height))) };
+    for (const u in uses) { const sc = uses[u]; q[u] = { sc }; for (const V of [2, 3, 4]) { const e = hiCanvas(base, Math.round(V * sc * 100) / 100, ''); q[u][V] = [add(e.c), e.pad]; } }
+    res.hi[k] = q; }
+  try { res.weather = weatherOf(); } catch (e) { res.weather = { n: '', ic: 'sun' }; }
+  res.dateStr = dateStr(G.day); res.realm = G.realms[0].name || '';
+  res.gold = Math.round(bookGold ? bookGold() : G.realms[0].gold); res.grain = Math.round(G.court.grain || 0);
+  res.net = r1((G.realms[0].inc || 0) - (G.realms[0].exp || 0));
+  try { res.men = G.armies.filter(a => a.alive && a.realm === 0 && a.kind === 'lord').reduce((s, a) => s + armyMen(a), 0); } catch (e) { res.men = 0; }
+  // пиксельные шрифты (как в HTML): атлас и метрики глифов
+  res.fonts = {};
+  for (const fk of ['m', 's']) { const F = FONTS[fk], at = fontAtlas(F, '#ffffff'), m = {}; for (const ch in F.map) m[ch] = [F.map[ch].x, F.map[ch].w];
+    files['font_' + fk + '.png'] = png(at); res.fonts[fk] = { hgt: F.hgt, cap: F.cap, sp: fk === 'm' ? 4 : 3, w: at.width, map: m, upper: fk === 's' ? 1 : 0, lat: LAT }; }
+  // заставка: закат, замок на холме, горы (mkTitleBG в HTML), 640×360
+  files['title_bg.png'] = png(mkTitleBG());
+  res.pal = {}; for (const k of ['o', 'k', 'w', 'y', 'Y', 'T', 'B', 'C', 'P', 'M', 'L']) res.pal[k] = PAL[k];
+  res.uic = Object.assign({}, UIC);
+  // пергамент окна разговора (как DLG в HTML): 608×122
+  { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, 640, 130); panelParch(0, 0, 608, 122); const c = document.createElement('canvas'); c.width = 608; c.height = 122; c.getContext('2d').drawImage(cv, 0, 0, 608, 122, 0, 0, 608, 122); files['ui_parch.png'] = png(c); }
+  // атлас спрайтов: полки по высоте, страницы 2048×2048
+  const order = spr.map((c, i) => i).sort((a, b) => spr[b].height - spr[a].height || spr[b].width - spr[a].width);
+  const PW = 2048, PH = 2048, rects = new Array(spr.length), pages = [];
+  let pg = null, x = 0, y = 0, sh = 0;
+  const newPage = () => { pg = document.createElement('canvas'); pg.width = PW; pg.height = PH; pages.push(pg); x = 0; y = 0; sh = 0; };
+  newPage();
+  for (const i of order) { const c = spr[i], w = c.width, h = c.height;
+    if (x + w > PW) { x = 0; y += sh + 1; sh = 0; }
+    if (y + h > PH) newPage();
+    pg.getContext('2d').drawImage(c, x, y); rects[i] = [pages.length - 1, x, y, w, h]; x += w + 1; sh = Math.max(sh, h); }
+  pages.forEach((p, i) => { // обрезать пустой низ последней страницы
+    let hh = PH; if (i === pages.length - 1) hh = Math.min(PH, y + sh + 1); const c = document.createElement('canvas'); c.width = PW; c.height = hh; c.getContext('2d').drawImage(p, 0, 0); files['spr' + i + '.png'] = png(c); });
+  res.spr = rects; res.pages = pages.length;
+  return { res, files };
+}
+const t0 = Date.now();
+const { res, files } = await page.evaluate(src => window.T.ev('(' + src + ')()'), pageExport.toString());
+await browser.close();
+if (errs.length) { console.error('ошибки страницы:\n' + errs.join('\n')); process.exit(1); }
+fs.rmSync(out, { recursive: true, force: true });
+fs.mkdirSync(out, { recursive: true });
+fs.writeFileSync(path.join(out, '.gitignore'), '*\n');
+let bytes = 0;
+for (const [n, b64] of Object.entries(files)) { const b = Buffer.from(b64, 'base64'); bytes += b.length; fs.writeFileSync(path.join(out, n), b); }
+// BMFont (.fnt, текст) для пиксельных шрифтов — Godot импортирует их как FontFile
+for (const [fk, F] of Object.entries(res.fonts)) {
+  const chars = [], seen = new Set();
+  const put = (ch, g) => { const id = ch.codePointAt(0); if (seen.has(id)) return; seen.add(id); chars.push(`char id=${id} x=${g[0]} y=0 width=${g[1]} height=${F.hgt} xoffset=0 yoffset=0 xadvance=${g[1] + 1} page=0 chnl=15`); };
+  for (const [ch, g] of Object.entries(F.map)) { put(ch, g); if (F.upper) put(ch.toLowerCase(), g); }
+  for (const [a, b] of Object.entries(F.lat || {})) { const g = F.map[b] || F.map[String(b).toUpperCase()]; if (g) { put(a, g); if (F.upper) put(a.toLowerCase(), g); } }
+  chars.push(`char id=32 x=0 y=0 width=0 height=0 xoffset=0 yoffset=0 xadvance=${F.sp} page=0 chnl=15`);
+  const fnt = [`info face="slovo_${fk}" size=${F.hgt} bold=0 italic=0 charset="" unicode=1 stretchH=100 smooth=0 aa=1 padding=0,0,0,0 spacing=1,1`,
+    `common lineHeight=${fk === 'm' ? 11 : 8} base=${F.cap + 2} scaleW=${F.w} scaleH=${F.hgt} pages=1 packed=0`,
+    `page id=0 file="font_${fk}.png"`, `chars count=${chars.length}`, ...chars].join('\n') + '\n';
+  fs.writeFileSync(path.join(out, 'font_' + fk + '.fnt'), fnt);
+  delete F.map; delete F.lat;
+}
+fs.writeFileSync(path.join(out, 'court.json'), JSON.stringify(res));
+const nl = Object.keys(res.locs).length, np = res.people.length;
+console.log(`EXPORT OK: мест ${nl}, людей ${np}, животных ${res.animals.length}, спрайтов ${res.spr.length} на ${res.pages} стр., файлов ${Object.keys(files).length + 3}, ${(bytes / 1048576).toFixed(1)} МБ, ${((Date.now() - t0) / 1000).toFixed(1)} с`);
+process.exit(0);
