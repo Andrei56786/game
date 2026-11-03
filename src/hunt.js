@@ -164,7 +164,7 @@ function falconUpd(HU, dt, P) { const f = HU.fal; if (!f) return; f.t += dt; con
   if (f.st === 'kill') { f.kt -= dt; f.x = q.x; f.y = q.y; f.h = Math.max(0, (q.h || 0) + 2); if (f.kt <= 0) f.st = 'back'; return; }
   const dx = P.x - f.x, dy = P.y - f.y, d = Math.hypot(dx, dy), st = 170 * dt; f.h += (24 - f.h) * Math.min(1, dt * 3); if (d <= Math.max(st, 8)) { HU.fal = null; return; } f.x += dx / d * st; f.y += dy / d * st; f.flip = dx > 0; }
 function huntKill(a, by) { const HU = COURT.hunt, g = gameOf(a); a.st = 'dead'; a.moving = 0; a.fly = 0; a.zig = 0; a.pth = null; if (!HU) return; HU.bag.push({ k: gk(a), by }); if (HU.quarry === a) HU.quarry = null; Snd.sfx('thud');
-  UI.toast((g.f ? 'Сражена ' : 'Сражён ') + g.n + ({ hounds: ' — гончие взяли!', falcon: ' — сокол не промахнулся!', hunter: ' — ловчий не сплоховал!' }[by] || '!'));
+  UI.toast((g.f ? 'Сражена ' : 'Сражён ') + g.n + ({ hounds: ' — гончие взяли!', falcon: ' — сокол не промахнулся!', hunter: ' — ловчий не сплоховал!', comp: ' — меткая стрела спутника!' }[by] || '!'));
   const hn = npcByKey('srv_hunter'); if (hn && by === 'king') say(hn, R.pick(['Славный выстрел, государь!', 'Вот это рука! Прямо под лопатку.', 'Хорош! Будет что рассказать за столом.']), 3.5);
   if (hn && by === 'hounds') say(hn, 'Ату его! Молодцы, собачки!', 3); }
 function huntGored(a) { const HU = COURT.hunt, k = kingC(); if (!HU || HU.ended) return; const bear = a.kind === 'bear', days = bear ? R.i(14, 24) : R.i(8, 16);
