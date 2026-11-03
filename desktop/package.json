@@ -1,0 +1,28 @@
+{
+  "name": "slovo-korolya",
+  "productName": "Slovo korolya",
+  "version": "3.7.0",
+  "description": "Слово короля — пиксельная стратегия о короле, который правит словом (браузерная версия в окне Windows)",
+  "author": "Andrei56786",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prep": "node icon.mjs && node prep.mjs",
+    "win": "npm run prep && electron-builder --win portable --x64 --publish never"
+  },
+  "build": {
+    "appId": "io.github.andrei56786.slovo",
+    "productName": "Slovo korolya",
+    "copyright": "Andrei56786",
+    "files": ["main.js", "index.html", "icon.png"],
+    "directories": { "output": "out" },
+    "win": { "target": [{ "target": "portable", "arch": ["x64"] }], "icon": "icon.png" },
+    "portable": { "artifactName": "Slovo-korolya-${version}.exe" },
+    "linux": { "target": ["dir"] }
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0"
+  }
+}
