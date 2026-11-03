@@ -1,0 +1,281 @@
+class_name SimText
+## Слова и подсказки карты — перенос engine.js (fmt, plural), army.js (kmTxt), ai.js (armyLabel), econui.js (fq, agoTxt,
+## строки рынка и каравана) и ui.js (settLabelCol, settTip, armyTip, tileTip, goldTip). Строка подсказки — {t, c, ic}:
+## текст, цвет (#rrggbb или "") и значок ("shield3", "" — без значка), как строки tip в HTML.
+
+const UIC := {"good": "#9fe07a", "bad": "#ee7a6a", "warn": "#f7d35c", "dim": "#9a8a70", "text": "#f4ecd8", "blue": "#a8c8ff"}
+const SETT_T := {"village": "Деревня", "castle": "Замок", "town": "Город", "capital": "Столица"}
+const WALLS := ["нет", "частокол", "каменные", "мощные"]
+
+
+static func row(t: String, c: String = "", ic: String = "") -> Dictionary:
+	return {"t": t, "c": c, "ic": ic}
+
+
+## toFixed(d) с запятой, как в подсказках HTML
+static func fixed(v: float, d: int) -> String:
+	return (("%." + str(d) + "f") % v)
+
+
+## fmt: целое; от 10 000 — тысячами с «к»
+static func fmt(n: float) -> String:
+	n = JS.rnd(n)
+	if absf(n) >= 10000.0:
+		var k := n / 1000.0
+		return JS.s(signf(k) * floorf(absf(k) + 0.5)) + "к"
+	return JS.s(n)
+
+
+static func plural(n: float, a: String, b: String, c: String) -> String:
+	n = fmod(absf(n), 100.0)
+	var n1 := fmod(n, 10.0)
+	if n > 10 and n < 20:
+		return c
+	if n1 > 1 and n1 < 5:
+		return b
+	if n1 == 1:
+		return a
+	return c
+
+
+static func kmTxt(km: float) -> String:
+	var v := maxf(1.0, JS.rnd(km)) if km < 20 else (JS.rnd(km / 5) * 5 if km < 100 else JS.rnd(km / 10) * 10)
+	return JS.s(v) + " км"
+
+
+static func agoTxt(d: float) -> String:
+	if d <= 0:
+		return "сегодня"
+	if d == 1:
+		return "вчера"
+	return JS.s(d) + " " + plural(d, "день", "дня", "дней") + " назад"
+
+
+## fq: количество товара — доли с запятой, большие — как fmt
+static func fq(v: Variant) -> String:
+	var x := JS.n(v)
+	var a := absf(x)
+	if a < 0.005:
+		return "—"
+	if a < 1:
+		return fixed(x, 2).replace(".", ",")
+	if a < 10:
+		return fixed(x, 1).replace(".", ",")
+	return fmt(x)
+
+
+static func voin(n: float) -> String:
+	n = JS.rnd(n)
+	return JS.s(n) + " " + plural(n, "воин", "воина", "воинов")
+
+
+static func realmName(r: Variant) -> String:
+	return String(Sim.REALM_DEF[clampi(int(r), 0, Sim.REALM_DEF.size() - 1)].name)
+
+
+## подпись войска (armyLabel)
+static func armyLabel(a: Dictionary) -> String:
+	var g: Variant = Sim.charOf(a.gen)
+	if a.kind == "bandit":
+		return "шайка " + (String(g.name) if g != null else "")
+	if a.kind == "caravan":
+		return "караван"
+	if a.kind == "player":
+		return "войско короля"
+	return (String(g.name) if g != null else "войско") + " (" + realmName(a.realm) + ")"
+
+
+## цвет подписи поселения: своё — голубое, враждебное — розовое, прочее — светлое
+static func settLabelCol(S: Dictionary) -> String:
+	var pr: float = Sim.G.player.realm
+	if S.ctrl == pr:
+		return "#cfe2ff"
+	return "#ffb4a8" if Sim.hostile(pr, S.ctrl) else "#fff2c8"
+
+
+## строка рынка (settMarketLine): самые дорогие и дешёвые товары, если рынок видели не позже 60 дней назад
+static func settMarketLine(S: Dictionary) -> Variant:
+	var G := Sim.G
+	var sn: Variant = S.get("seen")
+	if not JS.t(sn) or Sim.W.setts[int(S.id)].type == "village" or G.day - sn.d > 60:
+		return null
+	var px: Dictionary = sn.px
+	var hi := JS.sort(Sim.GOODS.filter(func(k): return JS.n(px.get(k)) > 1.6), func(a, b): return JS.n(px.get(b)) - JS.n(px.get(a))).slice(0, 3)
+	var lo := JS.sort(Sim.GOODS.filter(func(k): return JS.n(px.get(k)) < 0.7 and px.has(k)), func(a, b): return JS.n(px.get(a)) - JS.n(px.get(b))).slice(0, 3)
+	var ago := " (" + agoTxt(G.day - sn.d) + ")" if G.day - sn.d > 0 else ""
+	if hi.is_empty() and lo.is_empty():
+		return row("Рынок: цены обычные" + ago + ".", UIC.dim)
+	var nm := func(k): return String(Sim.GD[k].n).to_lower()
+	var s := "Рынок" + ago + ": "
+	if not hi.is_empty():
+		s += "дорого — " + ", ".join(hi.map(nm))
+	if not hi.is_empty() and not lo.is_empty():
+		s += "; "
+	if not lo.is_empty():
+		s += "дёшево — " + ", ".join(lo.map(nm))
+	return row(s + ".", "#e8d8b0")
+
+
+## подсказка поселения (settTip)
+static func settTip(sid: int) -> Array:
+	var G := Sim.G
+	var W := Sim.W
+	var s: Dictionary = W.setts[sid]
+	var S: Dictionary = G.setts[sid]
+	var pr: float = G.player.realm
+	var own: bool = S.ctrl == pr
+	var vis: bool = own or G.vis[int(s.i)] == 2 or SimIntel.hasInward(S.ctrl)
+	var L := [row(String(s.name) + " — " + String(SETT_T[s.type]), "", "shield" + JS.s(S.ctrl)),
+		row(realmName(S.ctrl) + (" (занято; владелец: " + realmName(S.owner) + ")" if S.owner != S.ctrl else ""), settLabelCol(S)),
+		row("Провинция " + String(W.provs[int(s.prov)].name) + " · жителей " + fmt(S.pop))]
+	var pa: Variant = Sim.playerArmy()
+	var o := Vector2(-1, -1)
+	if pa != null:
+		o = Vector2(pa.x, pa.y)
+	else:
+		var cap := int(G.realms[int(pr)].capital)
+		if cap >= 0 and cap < W.setts.size():
+			o = Vector2(W.setts[cap].x + 0.5, W.setts[cap].y + 0.5)
+	if o.x >= 0:
+		var kpt: float = Sim.T.KM_PER_TILE
+		var dk := JS.hypot(o.x - s.x - 0.5, o.y - s.y - 0.5) * kpt
+		if dk > 4:
+			L.append(row(kmTxt(dk) + " по прямой от " + ("войска" if pa != null else "столицы") + " (≈" + JS.s(maxf(1.0, JS.rnd(dk / kpt / float(Sim.T.BASE_SPEED)))) + " дн. пути)", UIC.dim))
+	if JS.t(S.walls):
+		L.append(row("Стены: " + String(WALLS[int(S.walls)])))
+	L.append(row("Гарнизон: " + JS.s(Sim.menOf(S.gar)) if vis else "Гарнизон: неизвестно (нет обзора)"))
+	if JS.t(S.siege):
+		var by: Variant = Sim.armyById(S.siege.by)
+		L.append(row("В осаде" + (": " + armyLabel(by) if by != null else "") + " · запасы " + JS.s(JS.rnd(S.food)) + " дн.", UIC.bad))
+	var dev: float = JS.n(G.provs[int(s.prov)].get("dev"))
+	if dev > 0.15:
+		L.append(row("Разорение " + JS.s(JS.rnd(dev * 100)) + "%", UIC.warn))
+	var ml: Variant = settMarketLine(S)
+	if ml != null:
+		L.append(ml)
+	if pa == null:
+		L.append(row("Король в замке. Щелчок — коротко о месте; походы — в следующих версиях.", UIC.dim))
+	return L
+
+
+## строки каравана (caravanTipLines)
+static func caravanTipLines(a: Dictionary, exact: bool) -> Array:
+	var L := []
+	var cg: Variant = a.get("cargo")
+	var k: Variant = (cg as Dictionary).keys()[0] if typeof(cg) == TYPE_DICTIONARY and not cg.is_empty() else null
+	if k != null:
+		var to := -1.0
+		if typeof(a.get("ai")) == TYPE_DICTIONARY:
+			to = JS.n(a.ai.get("to")) if a.ai.has("to") else -1.0
+		L.append(row("Везёт: " + String(Sim.GD[k].n).to_lower() + " " + fq(cg[k]) + (" → " + String(Sim.W.setts[int(to)].name) if to >= 0 else ""), "", ""))
+	else:
+		L.append(row("Идёт порожняком — ищет выгодный товар."))
+	if exact or a.realm == Sim.G.player.realm:
+		L.append(row("Кошель ≈ " + JS.s(JS.rnd(JS.n(a.get("cash")))) + " зол. · рейсов: " + JS.s(JS.n(a.get("trips")))))
+	L.append(row("Купцы платят пошлину тому, чей рынок. Разбитый караван — добыча победителя.", UIC.dim))
+	return L
+
+
+## подсказка войска (armyTip); при дворе своего войска на карте нет — без строк о силе и приказах
+static func armyTip(a: Dictionary) -> Array:
+	var G := Sim.G
+	var e := SimIntel.estimateMen(a)
+	var exact := JS.t(e.exact)
+	var g: Variant = Sim.charOf(a.gen)
+	var isP: bool = a.id == G.player.army
+	var L := [row(armyLabel(a), "", "shield" + JS.s(a.realm))]
+	if g != null and a.kind != "caravan":
+		L.append(row(Sim.charName(g) + " · " + ", ".join((g.traits as Array).map(func(t): return String(Sim.TRAITS[t].n)))))
+	L.append(row(("Воинов: " if exact else "Воинов: около ") + fmt(e.n) + (" (костров много!)" if JS.t(a.get("fires")) else "")))
+	if exact or isP:
+		L.append(row(", ".join(Sim.UT.filter(func(t): return JS.n(a.u.get(t)) > 0).map(func(t): return String(Sim.UNIT[t].n) + " " + JS.s(JS.rnd(a.u[t]))))))
+	else:
+		L.append(row("Подойдите ближе или пошлите лазутчика, чтобы узнать точнее.", UIC.dim))
+	if a.kind == "caravan":
+		L.append_array(caravanTipLines(a, exact))
+	if not isP and Sim.hostile(G.player.realm, a.realm):
+		L.append(row("Враг.", UIC.dim))   # в HTML: «Враг. Щелчок — преследовать.» — походов пока нет
+	return L
+
+
+## подсказка клетки (tileTip); под туманом — только то, что земли не разведаны
+static func tileTip(t: int) -> String:
+	var W := Sim.W
+	var G := Sim.G
+	if not G.is_empty() and not JS.t(G.mapOpen) and not G.explored[t]:
+		return "Неразведанные земли"
+	var T := W.ter[t]
+	var s := String(Sim.TINFO[T].n)
+	if W.river[t]:
+		s += " · мост" if W.bridge[t] else (" · брод" if W.ford[t] else " · река")
+	if W.road[t]:
+		s += " · тракт" if W.road[t] == 2 else " · дорога"
+	var p := W.prov[t]
+	if p >= 0:
+		s += " · пров. " + String(W.provs[p].name) + " (" + realmName(G.setts[int(W.provs[p].seat)].ctrl) + ")"
+	return s
+
+
+## календарь (calendarTip): по часам двора (Game), совет — по G.court.meetDone
+const WEEKDAYS := ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+
+static func inDays(n: int) -> String:
+	return "сегодня" if n <= 0 else ("завтра" if n == 1 else "через " + str(n) + " " + plural(n, "день", "дня", "дней"))
+
+static func nextCouncilDay() -> int:
+	var C: Variant = Sim.G.get("court") if not Sim.G.is_empty() else null
+	var d := Game.day
+	if d % 7 == 3 and Game.hour_abs() < 12.0 and not (C is Dictionary and C.get("meetDone") != null and float(C.meetDone) == float(d)):
+		return d
+	d += 1
+	while d % 7 != 3:
+		d += 1
+	return d
+
+static func calendarTip() -> Array:
+	var nd := nextCouncilDay()
+	var doy := posmod(Game.day, Game.DAYS_YEAR)
+	var dd := posmod(Game.DAYS_SEASON * 3 - doy + Game.DAYS_YEAR, Game.DAYS_YEAR)
+	if dd == 0:
+		dd = Game.DAYS_YEAR
+	return [row("Календарь: неделя — 7 дней, сезон — 3 недели (21 день), год — 4 сезона (84 дня)."),
+		row("Сегодня " + WEEKDAYS[Game.day % 7] + ", " + str(doy + 1) + "-й день года."),
+		row("Малый совет — по четвергам в 9:30. Ближайший: " + Game.WDAY[nd % 7] + ", " + str(nd % Game.DAYS_SEASON + 1) + " д. · " + Game.SEASONS[int(posmod(nd, Game.DAYS_YEAR) / Game.DAYS_SEASON)] + " (" + inDays(nd - Game.day) + ").", "#e8d8b0"),
+		row("Совет короны (голоса держав) — раз в год, в первый день зимы: " + inDays(dd) + ".", "#e8d8b0")]
+
+## дата и погода на карте (ui.js, tb_date)
+static func dateTip() -> Array:
+	var Wt := Sim.weatherOf()
+	var L: Array = [row(Game.date_text()), row("Погода: " + String(Wt.n) + (" — марш медленнее ×" + JS.s(Wt.mv) if float(Wt.get("mv", 1.0)) > 1 else "") + (", обзор ×" + JS.s(Wt.vis) if float(Wt.get("vis", 1.0)) < 1 else "") + (", стрелы бьют хуже" if JS.t(Wt.get("wet")) else "") + (", сухо — огонь силён" if JS.t(Wt.get("dry")) else ""))]
+	var mud := float(Sim.G.get("mud", 0.0)) if Sim.G.get("mud") != null else 0.0
+	if mud >= 0.3:
+		L.append(row("Распутица: вне дорог войска идут медленнее (до " + str(roundi(55 * mud)) + "%), обозы вязнут.", UIC.warn))
+	return L + calendarTip()
+
+## казна (goldTip)
+static func goldTip() -> Array:
+	var r: Dictionary = Sim.G.realms[int(Sim.G.player.realm)]
+	var C: Variant = Sim.G.get("court")
+	return [row(("Казна: " + JS.s(JS.rnd(Sim.bookGold())) + " зол. — по книгам казначея") if C != null else ("Казна: " + JS.s(JS.rnd(r.gold)) + " зол.")),
+		row("Доход: +" + fixed(JS.n(r.get("inc")), 1) + " в день (налоги провинций)", UIC.good),
+		row("Расход: −" + fixed(JS.n(r.get("exp")), 1) + " в день (жалованье войску и гарнизонам)", UIC.bad),
+		row("«Если война длится долго — истощаются средства государства» (гл. 2).", "#e8d8b0")]
+
+
+## верхняя строка: казна, доход за день, воины, зерно — из королевства (Sim.G), а пока его нет — из выгрузки двора (Art.D).
+## Время при дворе идёт, а дневная экономика ещё не перенесена: казна прирастает на доход за каждый прошедший день.
+static func bar_vals() -> Dictionary:
+	if Sim.G.is_empty():
+		var D: Dictionary = Art.D
+		var net0: float = float(D.get("net", 0.0))
+		return {"gold": float(D.get("gold", 0)) + net0 * maxi(0, Game.day - int(D.get("day", 0))), "net": net0, "men": float(D.get("men", 0)), "grain": float(D.get("grain", 0))}
+	var G := Sim.G
+	var r: Dictionary = G.realms[int(G.player.realm)]
+	var net := JS.n(r.get("inc")) - JS.n(r.get("exp"))
+	var men := 0.0
+	for a: Dictionary in G.armies:
+		if JS.t(a.alive) and a.realm == 0.0 and a.kind == "lord":
+			men += Sim.armyMen(a)
+	var C: Variant = G.get("court")
+	var gold: float = Sim.bookGold() if C != null else float(r.gold)
+	return {"gold": gold + net * maxf(0.0, Game.day - G.day), "net": net, "men": men, "grain": JS.n(C.get("grain")) if C != null else 0.0}
