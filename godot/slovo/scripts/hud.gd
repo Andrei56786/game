@@ -156,7 +156,7 @@ func _draw() -> void:
 		help = false
 		help_auto = false
 	if help and dlg == null:
-		var hs := "WASD или мышь — идти · E — говорить · Z — масштаб · Пробел — пауза · 1–3 — скорость · H — подсказка · Esc — выход"
+		var hs := "WASD или мышь — идти · E — говорить · Z — масштаб · Пробел — пауза · 1–3 — скорость · Tab — карта · H — подсказка · Esc — выход"
 		var w := tw(hs, "s") + 10.0
 		box(8, H - 14, w, 11, Color8(20, 14, 12, 204))
 		txt(hs, 13, H - 11, Color8(200, 216, 232), "s")
