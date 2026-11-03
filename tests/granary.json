@@ -1,0 +1,85 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"eval": "UI.win=null; const C=G.court, o=granS(); window.__g0=C.grain; 'grain '+C.grain+' cap '+granCap()+' res '+o.res+' carts '+o.carts+' free '+granFree()+' eat '+granEat()+'/'+granEat(3)+' dues '+granDues(0.4,1)+'+'+granDues(0.6,1)+' q '+o.q"
+},
+{
+"expect": "G.court.grain===6000 && granS().res===2000 && granS().carts===8 && granFree()===4000 && granCap()===10000",
+"label": "новый двор: 6000 мер, запас 2000, 8 подвод"
+},
+{
+"eval": "const S=G.setts[G.realms[0].capital], ca=capitalArmy(); const c0=supCost(ca,14,S,S.id,0,0), c1=supCost(ca,14,S,S.id,granFree(),granS().carts); window.__c=[c0,c1]; 'old '+JSON.stringify(c0)+' new '+JSON.stringify(c1)"
+},
+{
+"expect": "__c[1].cost < 15 && __c[1].own===__c[1].k && __c[1].g>=1800 && __c[0].cost > 150",
+"label": "обоз на 14 дней у столицы: зерно из амбара и подводы — почти даром"
+},
+{
+"eval": "const r=G.realms[0]; r.gold=150; supS().res=50; const g0=G.court.grain, gc=granS().carts; const t=supPrepare(14); window.__p=[g0-G.court.grain, gc-granS().carts, 150-r.gold]; 'took grain '+__p[0]+' carts '+__p[1]+' gold '+__p[2].toFixed(1)+' | '+t"
+},
+{
+"expect": "__p[2] < 25 && __p[0] > 1500 && G.court.grain >= 2000 && supDaysOf(capitalArmy()).food >= 13.5 && supDaysOf(G.court.retinue).food >= 13.5",
+"label": "собран обоз на 14 дней: казна почти не тронута, запас не тронут"
+},
+{
+"eval": "UI.open({k:'supply'}); 'win'"
+},
+{
+"wait": 300
+},
+{
+"shot": "granary_supply.png"
+},
+{
+"eval": "UI.win=null; const C=G.court; C.grain=6000; const o=granS(); o.res=2000; window.__y=[]; window.__rt=[0,0]; const errs=[]; for(let i=0;i<DAYS_YEAR;i++){ try{ G.day++; granDaily(); }catch(e){ errs.push(String(e).slice(0,120)); } const d=dayOfYear(G.day); if (d===GRAN_THRESH) __rt=[o.reap,o.thr]; if (d%7===0||d===GRAN_REAP||d===GRAN_THRESH) __y.push(d+':'+Math.round(C.grain)); } 'errs '+errs.join('/')+' year '+__y.join(' ')+' reap/thr '+__rt.join('/')+' q '+o.q+' carts '+o.carts"
+},
+{
+"expect": "__rt[0]>1500 && __rt[1]>2500 && G.court.grain>2000 && granS().carts===GRAN_CARTS",
+"label": "за год: жатва, обмолот, зимний расход, подводы пополнились"
+},
+{
+"eval": "const C=G.court, o=granS(); C.grain=granCap()-100; const gold0=G.realms[0].gold; G.day += (GRAN_THRESH - dayOfYear(G.day) + DAYS_YEAR) % DAYS_YEAR - 1; o.q=0.65; G.day++; granBring(0.6,'thr'); window.__f=[C.grain, G.realms[0].gold-gold0, o.famY, yearOf(G.day)]; 'after thr grain '+C.grain+' sold +'+(G.realms[0].gold-gold0).toFixed(1)+' famY '+o.famY+' year '+yearOf(G.day)+' famine now '+granFamine()"
+},
+{
+"expect": "__f[0]===granCap() && __f[1] > 0 && __f[2]===__f[3] && !granFamine()",
+"label": "излишек сверх вместимости продан; голодный год отмечен"
+},
+{
+"eval": "G.day += DAYS_SEASON*3 - dayOfYear(G.day) + 2; const P=PETS.find(d=>d.k==='famine'); const p=P.mk(); window.__pf=[granFamine(), P.w, !!p]; if (p){ p.k='famine'; const ch=P.ch(p); for (const Q of granProvs()) Q.unrest=20; const u0=granProvs().reduce((s,P)=>s+P.unrest,0); const g0=G.court.grain; ch[0].fx(); window.__pf.push(g0-G.court.grain, u0-granProvs().reduce((s,P)=>s+P.unrest,0), P.w); } JSON.stringify(__pf)+' text: '+(p&&p.text)"
+},
+{
+"expect": "__pf[0] && __pf[1]===8 && __pf[2] && __pf[3]===1500 && __pf[4] > 0 && __pf[5]===0",
+"label": "голодная зима: староста просит хлеба, открытые амбары гасят смуту"
+},
+{
+"eval": "const S=G.setts[G.realms[0].capital]; G.court.grain=5000; const f0=S.food, g0=G.court.grain; const ok=granSiegeFeed(S); window.__sg=[ok, g0-G.court.grain, menOf(S.gar)]; JSON.stringify(__sg)"
+},
+{
+"expect": "__sg[0] && __sg[1]>=__sg[2]",
+"label": "осада столицы: гарнизон ест из амбаров"
+},
+{
+"eval": "delete G.court.gran; G.court.grain=1200; const o=granS(); 'migr grain '+G.court.grain+' res '+o.res"
+},
+{
+"expect": "G.court.grain===6000 && granS().res===2000",
+"label": "старое сохранение: амбары наполнены до 6000"
+},
+{
+"eval": "const errs=[]; for(let i=0;i<8;i++){ try{ dailyTick(); }catch(e){ errs.push(String(e.stack||e).slice(0,200)); } } window.__e=errs; 'errs '+errs.length+' '+errs.join(' / ')"
+},
+{
+"expect": "__e.length===0",
+"label": "полные дни игры без ошибок"
+},
+{
+"eval": "const T=granTip(); window.__t=T; T.map(x=>typeof x==='string'?x:x.t).join(' | ')"
+},
+{
+"expect": "__t.length>=5 && /из 10000 мер/.test(__t[0])",
+"label": "подсказка амбаров на верхней панели"
+}
+]
