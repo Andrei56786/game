@@ -1,4 +1,5 @@
-// Проверка веб-сборки Godot в Chromium без окна: заставка, тронный зал и двор днём, в сумерках и ночью, разговор, ходьба, масштаб.
+// Проверка веб-сборки Godot в Chromium без окна: заставка, тронный зал и двор днём, в сумерках и ночью, разговор, ходьба, масштаб;
+// карта королевства: вся, державы, куски у столицы, лето, зима и осень.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -66,6 +67,32 @@ try {
     s = await state();
     check(s && s.king[0] < x0 - 10, 'король идёт влево');
     await cmd('zoom 1'); await wait(800); await shot('yard_zoom1'); await cmd('zoom 2');
+    // карта королевства (Tab во дворе): вся карта, державы, куски полной детализации, вид года
+    await cmd('day 0', 'map');
+    const mr = await until(/^MAP READY /, 150000);
+    check(!!mr, 'карта королевства готова: ' + (mr || 'нет MAP READY за 2,5 минуты'));
+    if (mr) {
+      const mst = async () => { const n = logs.length; await cmd('state'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('MAPSTATE ')); return l ? JSON.parse(l.slice(9)) : null; };
+      const lum = async () => { const n = logs.length; await cmd('lum'); await wait(400); const l = logs.slice(n).find(x => x.startsWith('MAPLUM ')); return l ? +l.slice(7) : NaN; };
+      const settle = async (ms = 60000) => { const t = Date.now(); let m = null; while (Date.now() - t < ms) { m = await mst(); if (m && m.vis.miss === 0 && m.vis.stale === 0) break; await wait(500); } await wait(300); return m; };
+      await cmd('cam 4320 2700 0.125'); await wait(1500); await shot('map_kingdom');
+      let m = await mst();
+      check(m && m.ok && m.cam[2] === 0.125, 'вся карта (' + (m && JSON.stringify(m.ms)) + ' мс)');
+      await cmd('mode pol'); await wait(1000); await shot('map_realms'); await cmd('mode ter');
+      await cmd('capital', 'zoom 1', 'zoom 1', 'zoom 1'); m = await settle(); await shot('map_capital');
+      check(m && m.cam[2] === 1 && m.vis.n >= 4 && m.vis.miss === 0 && m.chunks >= m.vis.n, 'у столицы, масштаб 1: куски нарисованы (' + (m && JSON.stringify(m.vis)) + ', ' + (m && m.cms) + ' мс на кусок)');
+      check(m && m.sea.join() === '1,1,2', '1-й день: оттепель на севере и в середине, цветение на юге (' + (m && m.sea) + ')');
+      // середина королевства (тепло 0,54): лето → зима → осень, куски перекрашиваются
+      await cmd('cam 4224 2688 1', 'day 30'); m = await settle(); const l0 = await lum(); await shot('map_summer');
+      await cmd('day 70'); m = await settle(); const l1 = await lum(); await shot('map_winter');
+      check(m && m.sea.join() === '6,6,7' && l1 > l0 + 0.08 && m.nsea > 0, 'зима: снег (яркость ' + l0 + ' → ' + l1 + ', перекрашено кусков ' + (m && m.nsea) + '), на юге мягкая зима (' + (m && m.sea) + ')');
+      await cmd('day 50'); m = await settle(); await shot('map_autumn');
+      check(m && m.sea.join() === '4,4,3', 'осень: золотая на севере и в середине, ранняя на юге (' + (m && m.sea) + ')');
+      await cmd('zoom -1', 'zoom -1'); await wait(2000); await shot('map_autumn_far');
+      await cmd('day 0', 'court'); await wait(1500);
+      s = await state();
+      check(s && s.loc === 'yard', 'назад ко двору: ' + (s && s.loc));
+    }
     await cmd('title'); await wait(800);
   }
 } catch (e) { check(false, 'исключение: ' + e); }
