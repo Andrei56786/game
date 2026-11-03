@@ -111,7 +111,7 @@ function buildYard() {
   L.keep = { x: 12 * CT, y: 0, w: 26 }; door(L, 24, 10, 25, 10, 'keep', 24 * CT, 27 * CT + 10, 'up', { label: 'В замок' }); // the doorstep row: row 9 is the facade itself and cannot be stood on
   place(L, 'pole', { realm: 0 }, 21, 10, { anim: 4, fps: 3, solid: [21, 10, 21, 10], dx: 6 }); place(L, 'pole', { realm: 0 }, 28, 10, { anim: 4, fps: 3, solid: [28, 10, 28, 10], dx: 6 });
   // towers & gatehouse
-  place(L, 'tower', {}, 0, 39, { cx: 2 * CT, solid: [0, 34, 3, 39] }); place(L, 'tower', {}, 46, 39, { cx: 48 * CT, solid: [46, 34, 49, 39] });
+  place(L, 'tower', {}, 0, 39, { cx: 2 * CT, solid: [0, 34, 3, 39] }); place(L, 'tower', {}, 46, 42, { cx: 48 * CT, solid: [46, 36, 49, 42] }); // v3.6: the flanking tower stands out from the curtain — the road along the barracks runs past it
   place(L, 'gatehouse', {}, 19, 39, { anim: 2, fps: 2, solid: [19, 34, 23, 35], light: null, winLight: false }); sfill(L, 26, 34, 30, 35);
   lightAt(L, 23 * CT + 2, 35 * CT, 44, '#ffa040', 0.8, { fl: 0.15, night: 1 }); lightAt(L, 26 * CT + 14, 35 * CT, 44, '#ffa040', 0.8, { fl: 0.15, night: 1 });
   spot(L, 'gate_l', 23, 33, 'down'); spot(L, 'gate_r', 26, 33, 'down'); spot(L, 'gate_out', 24, 43, 'up', { away: 1 }); spot(L, 'gate_in', 25, 33, 'up');
