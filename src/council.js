@@ -53,14 +53,14 @@ const ORD = {
       done: (o, c, e) => { const g = Math.round(90 * e + G.setts.filter(S => S.owner === 0).length * 6); const honest = (c.hon || 60) >= 45 && !c.traits.includes('greedy'); const real = honest ? g : Math.round(g * 0.7); G.realms[0].gold += real; if (!honest) { G.court.hidden += g - real; addSecret('theft', [c.id]); } for (const P of G.provs) if (G.setts[WD.provs[P.id].seat].owner === 0) P.unrest = Math.min(100, P.unrest + 9); for (const H0 of G.houses) houseLoy(H0, -3); return 'Чрезвычайный сбор принёс ' + zol(g) + ' (по книгам). Народ ропщет.'; } },
     { k: 'lower_tax', n: 'Облегчить подати', d: 'На сезон доход меньше на четверть, зато смута спадает, а дома довольны.', cost: 0, dur: 21,
       go: o => { G.court.taxK = 0.75; }, day: (o) => { for (const P of G.provs) if (G.setts[WD.provs[P.id].seat].owner === 0) P.unrest = Math.max(0, P.unrest - 0.4); }, done: (o, c, e) => { G.court.taxK = 1; for (const H0 of G.houses) houseLoy(H0, 4); prestige(3); return 'Сезон лёгких податей окончен. Народ благословляет короля.'; } },
-    { k: 'buy_grain', n: 'Закупить зерно', d: 'Казначей покупает зерно у купцов для амбаров столицы (≈400 мер за 60 зол.).', cost: 60, dur: 5,
-      done: (o, c, e) => { const honest = (c.hon || 60) >= 45 && !c.traits.includes('greedy'); const q = Math.round(400 * clamp(e, 0.6, 1.4) * (honest ? 1 : 0.72)); G.court.grain += q; if (!honest) { G.court.hidden += 12; G.realms[0].gold -= 0; addSecret('theft', [c.id]); } return 'В амбары завезено ' + q + ' мер зерна.' + (honest ? '' : ' Цена, правда, вышла высоковата.'); } },
+    { k: 'buy_grain', n: 'Закупить зерно', d: 'Казначей покупает зерно у купцов для амбаров столицы (≈1 500 мер за 60 зол.).', cost: 60, dur: 5,
+      done: (o, c, e) => { const honest = (c.hon || 60) >= 45 && !c.traits.includes('greedy'); const q = Math.round(1500 * clamp(e, 0.6, 1.4) * (honest ? 1 : 0.72)); G.court.grain = Math.min(granCap(), (G.court.grain || 0) + q); if (!honest) { G.court.hidden += 12; G.realms[0].gold -= 0; addSecret('theft', [c.id]); } return 'В амбары завезено ' + q + ' мер зерна.' + (honest ? '' : ' Цена, правда, вышла высоковата.'); } },
     { k: 'census', n: 'Перепись и сверка', d: 'Перепись дворов: доход казны навсегда растёт на несколько процентов. Честный казначей заодно сверит книги.', cost: 15, dur: 12,
       done: (o, c, e) => { G.court.incK = Math.min(1.35, (G.court.incK || 1) + 0.04 * e); return 'Перепись окончена: доход казны вырос на ' + Math.round(4 * e) + '%.'; } },
     { k: 'charters', n: 'Торговые грамоты', d: 'Льготы купцам наших городов: достаток городов растёт, а с ним и подати.', cost: 25, dur: 14,
       done: (o, c, e) => { let n = 0; for (const S of G.setts) if (S.owner === 0 && WD.setts[S.id].type !== 'village') { S.prosp = Math.min(100, S.prosp + Math.round(5 * e)); n++; } return n ? 'Купцы ' + n + ' ' + plural(n, 'города', 'городов', 'городов') + ' получили грамоты: торговля оживилась (' + effWord(e) + ').' : 'Городов у нас нет — грамоты некому выдать.'; } },
-    { k: 'sell_grain', n: 'Продать излишки зерна', d: 'Казначей продаёт купцам треть зерна из амбаров столицы: золото сразу, но запас на случай голода и осады тает.', cost: 0, dur: 3,
-      done: (o, c, e) => { const C = G.court, q = Math.floor((C.grain || 0) / 3); if (q < 50) return 'Продавать нечего: амбары почти пусты.'; const honest = (c.hon || 60) >= 45 && !c.traits.includes('greedy'); const g = Math.round(q * 0.12 * clamp(e, 0.6, 1.4)), real = honest ? g : Math.round(g * 0.75); C.grain -= q; G.realms[0].gold += real; if (!honest) { C.hidden += g - real; addSecret('theft', [c.id]); } return 'Продано ' + q + ' мер зерна за ' + real + ' зол.'; } },
+    { k: 'sell_grain', n: 'Продать излишки зерна', d: 'Казначей продаёт купцам треть зерна сверх неприкосновенного запаса: золото сразу, но запас на голодный год и поход тает.', cost: 0, dur: 3,
+      done: (o, c, e) => { const C = G.court, q = Math.floor(granFree() / 3); if (q < 50) return 'Продавать нечего: сверх неприкосновенного запаса зерна почти нет.'; const honest = (c.hon || 60) >= 45 && !c.traits.includes('greedy'); const g = Math.round(q * 0.036 * clamp(e, 0.6, 1.4)), real = honest ? g : Math.round(g * 0.75); C.grain -= q; G.realms[0].gold += real; if (!honest) { C.hidden += g - real; addSecret('theft', [c.id]); } return 'Продано ' + q + ' мер зерна за ' + real + ' зол.'; } },
   ],
   marshal: [
     { k: 'recruit', n: 'Набрать рекрутов', d: 'Набор в войско у столицы: копейщики и лучники присоединятся к войску в столице.', cost: 70, dur: 7,
@@ -73,7 +73,7 @@ const ORD = {
       done: (o, c, e) => musterBanners(e) },
     { k: 'supply', n: 'Снарядить обоз', d: 'Войска у столицы получают из амбаров еду на две недели, а также фураж, стрелы и полные бочки воды.', cost: 25, dur: 3,
       done: (o, c, e) => { const cap = G.realms[0].capital, C = G.court, A = G.armies.filter(a => a.alive && a.realm === 0 && (a.kind === 'lord' || a.kind === 'player') && settNear(a.x, a.y, 2) === cap); if (!A.length) return 'У столицы нет войск — обоз некому отдать.'; let f = 0;
-        for (const a of A) { const q = Math.max(0, Math.floor(Math.min(armyMen(a) * 14 - a.food, C.grain || 0, armyCap(a) - armyLoad(a)))); a.food += q; C.grain -= q; f += q; a.fodder += Math.round(mountedN(a.u) * 6 * e); a.arrows += Math.round(rangedN(a.u) * 15 * e); a.water = waterCap(a); }
+        for (const a of A) { const q = Math.max(0, Math.floor(Math.min(armyMen(a) * 14 - a.food, granFree(), armyCap(a) - armyLoad(a)))); a.food += q; C.grain -= q; f += q; a.fodder += Math.round(mountedN(a.u) * 6 * e); a.arrows += Math.round(rangedN(a.u) * 15 * e); a.water = waterCap(a); }
         return 'Обоз снаряжён: ' + f + ' мер еды из амбаров, фураж, стрелы и вода для ' + A.length + ' ' + plural(A.length, 'войска', 'войск', 'войск') + '.'; } },
     { k: 'patrol', n: 'Облава на разбойников', d: 'Конные разъезды прочёсывают наши земли: шайки разбойников редеют, на дорогах спокойнее.', cost: 30, dur: 8,
       done: (o, c, e) => { let k = 0, m = 0; for (const a of G.armies) if (a.alive && a.kind === 'bandit') { const S = settNear(a.x, a.y, 8); if (S >= 0 && G.setts[S].owner === 0) { m += takeMen(a, Math.ceil(armyMen(a) * clamp(0.4 * e, 0.15, 0.8))); k++; provUnrest(S, -3); } } return k ? 'Облава прошла по ' + k + ' ' + plural(k, 'шайке', 'шайкам', 'шайкам') + ': перебито и рассеяно ' + m + ' разбойников.' : 'Разъезды не нашли разбойников в наших землях.'; } },
@@ -98,17 +98,17 @@ const ORD = {
     { k: 'feast', n: 'Устроить пир', d: 'Пир в тронном зале: знать довольна, слава короля растёт. Дорого.', cost: 60, dur: 2,
       done: (o, c, e) => { for (const H0 of G.houses) houseLoy(H0, Math.round(5 * e * (projDone('tapestries') ? 1.35 : 1))); prestige(4); G.court.feastDay = G.day; return 'Пир удался на славу (' + effWord(e) + ')! Знать пьёт за здоровье короля.'; } },
     { k: 'stock', n: 'Пополнять амбары', d: 'Сенешаль скупает зерно понемногу всё поручение: амбары растут, казна тает медленно.', cost: 0, dur: 21,
-      day: (o, c, e) => { if (G.realms[0].gold > 30) { G.realms[0].gold -= 2; G.court.grain += Math.round(18 * e); } }, done: () => 'Амбары пополнены.' },
+      day: (o, c, e) => { if (G.realms[0].gold > 30) { G.realms[0].gold -= 2; G.court.grain = Math.min(granCap(), (G.court.grain || 0) + Math.round(50 * e)); } }, done: () => 'Амбары пополнены.' },
     { k: 'guard', n: 'Усилить стражу', d: 'Больше караулов в замке и у ворот: заговорщикам труднее, шпионам тоже.', cost: 20, dur: 21, go: () => { G.court.guard = 1; }, done: () => { G.court.guard = 0; return 'Усиленные караулы сняты.'; } },
     { k: 'tourney', n: 'Турнир', d: 'Рыцарский турнир у стен замка: знать довольна, слава растёт, конные воины в столице набираются удали.', cost: 45, dur: 3,
       done: (o, c, e) => { for (const H0 of G.houses) if (H0.alive) houseLoy(H0, Math.round(3 * e)); prestige(Math.round(3 * e)); const a = capitalArmy(); if (a) { for (const t of ['horse', 'harch', 'knight']) a.xp[t] = Math.min(100, a.xp[t] + 6 * e); a.morale = Math.min(100, a.morale + 5); } return 'Турнир удался (' + effWord(e) + ')! Знать рукоплещет, о короле говорят повсюду.'; } },
-    { k: 'alms', n: 'Раздавать хлеб', d: 'Хлеб беднякам столицы из амбаров (≈10 мер в день): смута в столичной провинции спадает, слава растёт.', cost: 0, dur: 14,
-      day: (o, c, e) => { if ((G.court.grain || 0) >= 10) { G.court.grain -= 10; provUnrest(G.realms[0].capital, -0.8 * e); prestige(0.06 * e); } }, done: () => 'Раздача хлеба окончена. Бедняки молятся за короля.' },
+    { k: 'alms', n: 'Раздавать хлеб', d: 'Хлеб беднякам столицы из амбаров (≈30 мер в день): смута в столичной провинции спадает, слава растёт.', cost: 0, dur: 14,
+      day: (o, c, e) => { if ((G.court.grain || 0) >= 30) { G.court.grain -= 30; provUnrest(G.realms[0].capital, -0.8 * e); prestige(0.06 * e); } }, done: () => 'Раздача хлеба окончена. Бедняки молятся за короля.' },
   ],
   magister: [
     { k: 'research', n: 'Исследовать', d: 'Магистр и переписчики изучают выбранное знание. Скорость — от Книги магистра.', cost: 0, dur: 999, tgt: 'tech',
-      go: o => { G.tech.cur = o.t; }, day: (o, c, e) => { if (!G.tech.cur) G.tech.cur = o.t; techProgress(clamp(c.lrn / 9, 0.3, 2.4) * e); if (!G.tech.cur || G.tech.done[o.t]) o.fin = 1; }, done: (o) => 'Изучено: «' + TECH[o.t].n + '».' },
-    { k: 'heal', n: 'Лечить больных', d: 'Лекари обходят войска у столицы и город: болезни отступают.', cost: 15, dur: 10,
+      go: o => { const T = techInit(); T.cur = o.t; if (!o.self) { T.first = 1; T.by = 'king'; T.why = ''; } }, day: (o, c, e) => { const T = techInit(); if (!T.cur) T.cur = o.t; if (studyPay(T.cur)) techProgress(clamp(c.lrn / 9, 0.3, 2.4) * e); if (!T.cur || T.done[o.t]) o.fin = 1; }, done: (o) => 'Изучено: «' + TECH[o.t].n + '».' },
+    { k: 'heal', n: 'Лечить больных', d: 'Лекари обходят войска у столицы, город и двор: болезни отступают, при дворе реже заражаются и легче переносят хвори.', cost: 15, dur: 10,
       day: (o, c, e) => { for (const a of G.armies) if (a.alive && a.realm === 0 && settNear(a.x, a.y, 3) === G.realms[0].capital) a.sick = Math.max(0, a.sick * (1 - 0.08 * e)); }, done: () => 'Лекари закончили обход.' },
     { k: 'teach', n: 'Учить наследника', d: 'Магистр учит выбранное дитя короля: растут Книга и Речь, а иногда и мудрость.', cost: 0, dur: 21, tgt: 'child',
       done: (o, c, e) => { const k = charOf(o.t); if (!k || !k.alive) return 'Ученика больше нет.'; k.lrn = Math.min(20, k.lrn + Math.round(2 * e)); k.dip = Math.min(20, k.dip + (e > 1 ? 1 : 0)); if (e > 1.3 && !k.traits.includes('wise') && R.chance(0.3)) { k.traits = k.traits.filter(t => t !== 'reckless'); if (k.traits.length < 3) k.traits.push('wise'); } return k.name + ' прилежно учится: Книга ' + k.lrn + ', Речь ' + k.dip + '.'; } },
@@ -148,7 +148,7 @@ function giveOrder(seatK, k, mode, t) {
 function ordersDaily() {
   const C = G.court;
   for (const s of SEATS) { const o = C.orders[s.k]; if (!o) continue; const c = seatChar(s.k); if (!c) { C.orders[s.k] = null; continue; } const d = ordDef(s.k, o.k); if (!d) { C.orders[s.k] = null; continue; }
-    if (o.eff === undefined) o.eff = orderEff(c, s.k, o.mode); if (o.self) o.eff = orderEff(c, s.k, 'intent') * selfK(s.k);
+    if (o.eff === undefined) o.eff = orderEff(c, s.k, o.mode); if (o.self) o.eff = orderEff(c, s.k, 'intent') * (o.k === 'research' ? 0.9 : selfK(s.k));
     if (d.day) d.day(o, c, o.eff); o.prog = Math.min(1, (G.day - o.day0) / o.dur);
     if (o.fin || G.day - o.day0 >= o.dur) { let rep = ''; try { rep = d.done(o, c, o.eff) || ''; } catch (e) { console.warn(e); } C.orders[s.k] = null; if (!o.self) (C.lastOrd = C.lastOrd || {})[s.k] = G.day; if (rep) addReport(s.k, (o.self ? 'Сам, без поручения: ' : '') + rep, o.self); } }
   selfOrders();
@@ -160,8 +160,8 @@ const SELF = {
   treasurer: () => (G.court.incK || 1) < 1.12 ? ['census'] : null,
   marshal: () => capitalArmy() ? ['train'] : null,
   eye: () => ['protect'],
-  seneschal: () => (G.court.grain || 0) < 700 ? ['stock'] : G.provs[WD.setts[G.realms[0].capital].prov].unrest > 12 ? ['alms'] : null,
-  magister: () => { const t = G.tech.cur && techAvail(G.tech.cur) ? G.tech.cur : Object.keys(TECH).filter(techAvail).sort((a, b) => TECH[a].cost - TECH[b].cost)[0]; return t ? ['research', t] : ['chronicle']; },
+  seneschal: () => (G.court.grain || 0) < Math.min(granCap() - 1500, granRes() + 1000) ? ['stock'] : G.provs[WD.setts[G.realms[0].capital].prov].unrest > 12 ? ['alms'] : null,
+  magister: () => null, // v3.6: the magister's own choice of subjects lives in study.js (studyDaily)
   justice: () => { const P = G.provs.filter(p => G.setts[WD.provs[p.id].seat].owner === 0), u = P.length ? P.reduce((s, p) => s + p.unrest, 0) / P.length : 0; return u > 15 ? ['banditry'] : G.day - (G.court.auditDay || -99) > 60 ? ['audit'] : ['laws']; },
 };
 function selfOrders() { const C = G.court, L = C.lastOrd || (C.lastOrd = {});
@@ -178,8 +178,8 @@ function seatReport(k) { const c = seatChar(k), C = G.court, r = G.realms[0]; if
   if (k === 'treasurer') { const inc = (r.inc || 0); return 'В казне ' + zol(bookGold()) + ', доход ' + inc.toFixed(1) + ' в день, расход ' + (r.exp || 0).toFixed(1) + '.' + treasurerEconNote(c) + (bookGold() < 100 ? ' Казна скудеет, государь!' : '') + ord; }
   if (k === 'marshal') { const A = G.armies.filter(a => a.alive && a.realm === 0 && a.kind === 'lord'); const men = A.reduce((s, a) => s + armyMen(a), 0); return 'Под знамёнами ' + voin(noisy(men, c, 'mar')) + ' в ' + A.length + ' ' + plural(A.length, 'войске', 'войсках', 'войсках') + '.' + (A[0] ? ' Сэр ' + charOf(A[0].gen).name + ' стоит у ' + nearSettName(A[0]) + '.' : '') + ord; }
   if (k === 'eye') { const L = []; for (let t = 1; t < 5; t++) { if (!alive(t)) continue; const men = G.armies.filter(a => a.alive && a.realm === t && a.kind === 'lord').reduce((s, a) => s + armyMen(a), 0); const net = C.net[t] || 0; const est = net ? noisy(men, c, 'intr') : Math.round(noisy(men, { intr: c.intr * 0.6 }, 'intr') / 50) * 50; L.push(realmName(t) + ' ~' + est); } const sec = C.secrets.filter(s => !s.known && s.k !== 'love').length; return 'Войска соседей (по моим людям): ' + L.join(', ') + '.' + (sec && c.intr >= 10 ? ' При дворе что-то затевается — по ночам в саду шепчутся.' : ' При дворе всё спокойно.') + ord; }
-  if (k === 'seneschal') return 'В амбарах ' + noisy(C.grain, c, 'stew') + ' мер зерна. ' + (C.grain < 400 ? 'Маловато на случай осады.' : 'Голод нам не грозит.') + ' Двор ' + (C.prestige > 15 ? 'восхищён государем' : C.prestige < -10 ? 'ропщет' : 'спокоен') + '.' + ord;
-  if (k === 'magister') { const t = G.tech.cur; return (t ? 'Изучаем «' + TECH[t].n + '»: ' + Math.round(G.tech.prog / TECH[t].cost * 100) + '%.' : 'Сейчас мы ничего не изучаем.') + ord; }
+  if (k === 'seneschal') return 'В амбарах ' + noisy(C.grain, c, 'stew') + ' мер зерна. ' + (C.grain < granRes() ? 'Это меньше неприкосновенного запаса — случись осада или голодный год, беда.' : granFamine() ? 'Год голодный, деревни ждут хлеба.' : 'Голод нам не грозит.') + ' Двор ' + (C.prestige > 15 ? 'восхищён государем' : C.prestige < -10 ? 'ропщет' : 'спокоен') + '.' + ord;
+  if (k === 'magister') return studyReport(c) + (o && o.k === 'research' ? '' : ord);
   if (k === 'justice') { const P = G.provs.filter(p => G.setts[WD.provs[p.id].seat].owner === 0); const u = P.length ? P.reduce((s, p) => s + p.unrest, 0) / P.length : 0; const worst = P.slice().sort((a, b) => b.unrest - a.unrest)[0]; return 'Смута в провинциях ' + (u > 40 ? 'велика' : u > 20 ? 'заметна' : 'невелика') + (worst && worst.unrest > 25 ? '; хуже всего в ' + WD.provs[worst.id].name : '') + '.' + ord; }
   return ord; }
 function nearSettName(a) { const s = settNear(a.x, a.y, 30); return s >= 0 ? WD.setts[s].name : 'дороги'; }
