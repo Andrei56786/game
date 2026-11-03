@@ -1,15 +1,23 @@
 extends "res://scripts/hud.gd"
-## Надписи экрана карты (ui.js: drawSetts, drawLabels, drawRealmNames, drawTopBar, drawMinimap, drawStatus, drawTipBox):
-## поселения с флагами и названиями, подписи озёр и гор, названия держав, верхняя строка, мини-карта, подсказки.
+## Надписи экрана карты (ui.js: drawLabels, drawSetts, drawArmies, drawRealmNames, drawTopBar, drawMinimap, drawStatus,
+## drawTipBox). Два слоя: part = "objs" — подписи озёр и гор, поселения, войска (под бумагой тумана, как в HTML);
+## part = "top" — названия держав, верхняя строка с казной, мини-карта с войсками, строка состояния, подсказки.
+## Состояние королевства — Sim.G: видно только разведанное (G.explored), чужие войска — в поле обзора (G.vis).
 const SETT_T := {"village": "Деревня", "castle": "Замок", "town": "Город", "capital": "Столица"}
+const CAMP := ["camp", "fort", "hide", "forage", "drill", "siege"]
 const MX := 509.0           # мини-карта 128×80 (W − 131, H − 83)
 const MY := 277.0
 var mv                      # MapView
+var part := "top"
 var hover_at := Vector2(-1, -1)   # для проверок: «мышь» в этой точке
 var sett_hits: Array = []   # [Rect2, номер поселения] — что нарисовано последним, то и сверху
+var army_hits: Array = []   # [Rect2, номер войска]
 var btns: Array = []        # [Rect2, действие]
+var tips: Array = []        # [Rect2, Callable → строки] — подсказки верхней строки
 var hov_sett := -1
+var hov_army := -1
 var hov_tile := -1
+var n_armies := 0           # войск нарисовано (для проверок)
 var t0 := Time.get_ticks_msec()
 
 func _ready() -> void:
@@ -47,11 +55,26 @@ func click(p: Vector2) -> void:
 		mv.cam.y = (p.y - MY) / k
 		mv.clamp_cam()
 		return
+	if hov_army >= 0:
+		var a: Variant = Sim.armyById(float(hov_army))
+		if a != null:
+			toast(_cap(SimText.armyLabel(a)) + ". Приказы войскам — в следующих версиях.")
+		return
 	if hov_sett >= 0:
 		var s: Dictionary = mv.G.W.setts[hov_sett]
-		toast(String(s.name) + " — " + String(SETT_T[s.type]).to_lower() + ". Походы и рынки — в следующих срезах.")
+		var t := String(s.name) + " — " + String(SETT_T[s.type]).to_lower()
+		if sim_on():
+			var S: Dictionary = Sim.G.setts[hov_sett]
+			t += ", " + SimText.realmName(S.ctrl) + ", жителей " + SimText.fmt(S.pop)
+		toast(t + ". Походы и рынки — в следующих версиях.")
+
+func _cap(s: String) -> String:
+	return s.substr(0, 1).to_upper() + s.substr(1) if s != "" else s
 
 func hover_s() -> String:
+	if hov_army >= 0:
+		var a: Variant = Sim.armyById(float(hov_army))
+		return SimText.armyLabel(a) if a != null else ""
 	if hov_sett >= 0:
 		return String(mv.G.W.setts[hov_sett].name)
 	if hov_tile >= 0:
@@ -61,33 +84,70 @@ func hover_s() -> String:
 func rc(i: int) -> Dictionary:
 	return mv.G.M.realms[clampi(i, 0, 6)]
 
+## королевство есть (Sim.G) — карта показывает его: туман, владельцы по поселениям, войска
+func sim_on() -> bool:
+	return not Sim.G.is_empty()
+
+func fog_on() -> bool:
+	return sim_on() and not JS.t(Sim.G.mapOpen)
+
+func explored(t: int) -> bool:
+	return not fog_on() or Sim.G.explored[t] != 0
+
+func ctrl_of(sid: int) -> int:
+	return int(Sim.G.setts[sid].ctrl) if sim_on() else mv.G.own[mv.G.W.setts[sid].prov]
+
 func _draw() -> void:
 	btns = []
+	tips = []
+	if part == "objs":
+		sett_hits = []
+		army_hits = []
+		n_armies = 0
+		if mv.on:
+			_labels()
+			_setts()
+			if sim_on():
+				_armies()
+		return
 	if not mv.on:
 		_loading()
 		return
 	var G: MapGPU = mv.G
 	var m := mouse()
-	_labels()
-	sett_hits = []
-	_setts()
 	if mv.mode == "pol" and mv.cam.z < 0.5:
 		_realm_names()
-	# что под мышью: поселение (сверху — нарисованное последним) или клетка
+	# что под мышью: войско или поселение (сверху — нарисованное последним) или клетка
 	hov_sett = -1
+	hov_army = -1
 	hov_tile = -1
+	var ob = mv.objs
 	if not mv.dragging and not over_ui(m):
-		for k in range(sett_hits.size() - 1, -1, -1):
-			if (sett_hits[k][0] as Rect2).has_point(m):
-				hov_sett = sett_hits[k][1]
+		for k in range(ob.army_hits.size() - 1, -1, -1):
+			if (ob.army_hits[k][0] as Rect2).has_point(m):
+				hov_army = ob.army_hits[k][1]
 				break
-		if hov_sett < 0 and m.x >= 0 and m.y >= 0 and m.x < W and m.y < H:
+		if hov_army < 0:
+			for k in range(ob.sett_hits.size() - 1, -1, -1):
+				if (ob.sett_hits[k][0] as Rect2).has_point(m):
+					hov_sett = ob.sett_hits[k][1]
+					break
+		if hov_army < 0 and hov_sett < 0 and m.x >= 0 and m.y >= 0 and m.x < W and m.y < H:
 			hov_tile = mv.tile_at(m)
 	_top()
 	_mini()
 	_status()
-	if hov_sett >= 0:
+	if hov_army >= 0:
+		var a: Variant = Sim.armyById(float(hov_army))
+		if a != null:
+			_tip(_rows(SimText.armyTip(a)), m)
+	elif hov_sett >= 0:
 		_tip(sett_tip(hov_sett), m)
+	else:
+		for tp in tips:
+			if (tp[0] as Rect2).has_point(m):
+				_tip(_rows((tp[1] as Callable).call()), m)
+				break
 	if toast_t > now():
 		var a := clampf((toast_t - now()) * 3.0, 0.0, 1.0)
 		var ls := wrap_text(toast_s, 380)
@@ -117,6 +177,8 @@ func _labels() -> void:
 	if mv.cam.z < 0.5:
 		return
 	for L: Dictionary in mv.G.W.labels:
+		if not explored(int(floorf(L.y)) * WorldData.MW + int(floorf(L.x))):
+			continue
 		var p: Vector2 = mv.w2s(Vector2(L.x * WorldData.TS + WorldData.TS / 2.0, L.y * WorldData.TS + WorldData.TS / 2.0))
 		if p.x < -80 or p.x > W + 80 or p.y < -10 or p.y > H + 10:
 			continue
@@ -139,6 +201,8 @@ func _setts() -> void:
 	var sc := 2 if z >= 2.0 else 1
 	var list: Array = []
 	for s: Dictionary in G.W.setts:
+		if not explored(s.i):
+			continue
 		var p: Vector2 = mv.w2s(mv.sw[s.id])
 		if p.x < -40 or p.y < -40 or p.x > W + 40 or p.y > H + 50:
 			continue
@@ -150,23 +214,26 @@ func _setts() -> void:
 		var s: Dictionary = G.W.setts[e[1]]
 		var sx: float = e[2]
 		var sy: float = e[0]
-		var ctrl: int = G.own[s.prov]
+		var ctrl := ctrl_of(s.id)
 		var d := rc(ctrl)
 		var col := Color.html(String(d.col))
 		var big: bool = s.type != "village"
 		var cap: bool = s.type == "capital"
-		var lc := Color.html("#cfe2ff") if ctrl == 0 else Color.html("#fff2c8")
+		var lc := Color.html(SimText.settLabelCol(Sim.G.setts[s.id])) if sim_on() else (Color.html("#cfe2ff") if ctrl == 0 else Color.html("#fff2c8"))
+		var sg: bool = sim_on() and JS.t(Sim.G.setts[s.id].siege)
 		if z <= 0.25 or (z == 0.5 and not big):
 			if not big and z <= 0.25:
 				continue
 			var r := (2 if cap else 1) if z < 0.25 else (3 if cap else (2 if big else 1))
 			box(sx - r - 1, sy - r - 1, r * 2 + 3, r * 2 + 3, PO)
 			box(sx - r, sy - r, r * 2 + 1, r * 2 + 1, col if big else Color.html("#e8d8a8"))
-			if cap and crown >= 0:
-				spr(crown, sx - 2, sy - 9)
+			if cap and crown >= 0 and not _hi("i_crown", "one", floorf(sx - 2), floorf(sy - 9)):
+				spr(crown, floorf(sx - 2), floorf(sy - 9))
 			if z == 0.5 or cap:
 				txt(s.name, sx, sy + 5, lc, "m" if cap else "s", "c", PO)
 			sett_hits.append([Rect2(sx - 5, sy - 5, 11, 11), s.id])
+			if sg:
+				_siege_fx(sx, sy, 1, t)
 			continue
 		var cul: String = String(G.W.provs[s.prov].cul)
 		if cul == "":
@@ -187,19 +254,130 @@ func _setts() -> void:
 				_flag(x0 + f[0] * 2, y0 + f[1] * 2 - 4, col, dk, t)
 			else:
 				_flag(x0 + f[0], y0 + f[1] - 5, col, dk, t)
+		if sg:
+			_siege_fx(sx, sy - 4 * sc, sc, t)
 		if big or z >= 2.0:
 			var fn := "m" if (cap or s.type == "town") else "s"
 			txt(s.name, sx, sy + 5 * sc, lc, fn, "c", PO)
-			if cap and crown >= 0:
-				spr(crown, sx - tw(s.name, fn) / 2.0 - 8, sy + 5 * sc)
+			var cx := floorf(sx - tw(s.name, fn) / 2.0 - 8)
+			if cap and crown >= 0 and not _hi("i_crown", "one", cx, floorf(sy + 5 * sc)):
+				spr(crown, cx, floorf(sy + 5 * sc))
 		sett_hits.append([Rect2(x0, y0, sz.x * sc, sz.y * sc + 6), s.id])
+
+func ms(k: String) -> int:
+	return int(Art.D.get("mapspr", {}).get(k, -1))
+
+func sp(k: String, x: float, y: float, sc: float = 1.0, a: float = 1.0) -> void:
+	var i := ms(k)
+	if i >= 0:
+		spr(i, x, y, sc, a)
+
+func disc(x: float, y: float, r: float, c: Color) -> void:
+	draw_circle(Vector2(x, y), r, c)
+
+## осада (drawSiegeFx): дым над поселением, огоньки, два шатра осаждающих
+func _siege_fx(sx: float, sy: float, sc: int, t: float) -> void:
+	for k in 3:
+		var ph := fmod(t * 0.7 + k * 0.33, 1.0)
+		disc(sx + sin(k * 2 + t) * 3, sy - 6 - ph * 16 * sc, 1 + ph * 3 * sc, Color(Color.html("#4a4440"), 0.5 * (1 - ph)))
+	if sin(t * 9) > -0.3:
+		box(sx - 1, sy - 3, 1, 1, Color.html("#ff9a3c"))
+		box(sx + 1, sy - 4, 1, 1, Color.html("#ffe07a"))
+	sp("a_tent", sx - 16 * sc, sy + 2, sc)
+	sp("a_tent", sx + 8 * sc, sy + 4, sc)
+
+## войска на карте (drawArmies): чужие — только в поле обзора; вдали — квадратик цвета державы, ближе — всадник,
+## пехота (больше 150 и 400 воинов), шайка, караван с волом, лагерь с шатром и костром, флаг, число воинов (с 1:1)
+func _armies() -> void:
+	var G: MapGPU = mv.G
+	var z: float = mv.cam.z
+	var sc := 2 if z >= 2.0 else 1
+	var list: Array = []
+	var AA: Array = Sim.G.armies
+	for k in AA.size():
+		var a: Dictionary = AA[k]
+		if not JS.t(a.alive) or not SimIntel.armyVisible(a):
+			continue
+		var p: Vector2 = mv.w2s(G.warp_pt(a.x * WorldData.TS, a.y * WorldData.TS))
+		if p.x < -30 or p.y < -30 or p.x > W + 30 or p.y > H + 30:
+			continue
+		list.append([p.y, k, p.x])
+	list.sort_custom(func(a, b): return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
+	var t := now()
+	var pid: float = Sim.G.player.army
+	var pr: float = Sim.G.player.realm
+	for e: Array in list:
+		var a: Dictionary = AA[e[1]]
+		var sx: float = e[2]
+		var sy: float = e[0]
+		var d := rc(int(a.realm))
+		var col := Color.html(String(d.col))
+		var isP: bool = a.id == pid
+		var pth: Variant = a.get("path")
+		var moving: bool = pth != null and (pth as Array).size() > 1 and JS.n(a.get("pi")) < (pth as Array).size() - 1
+		n_armies += 1
+		if z <= 0.25:
+			box(sx - 2, sy - 2, 5, 5, PO)
+			box(sx - 1, sy - 1, 3, 3, Color.WHITE if isP else col)
+			army_hits.append([Rect2(sx - 4, sy - 4, 9, 9), int(a.id)])
+			continue
+		if isP:
+			var r := 7 + roundf(sin(t * 4))
+			draw_arc(Vector2(sx, sy - 1), r * sc, 0, TAU, 24, Color(Color.html("#fff2c8"), 0.5), 1.0)
+		box(sx - 5 * sc, sy, 10 * sc, 2 * sc, Color(Color.html("#0c0a10"), 0.35))
+		var bob := roundf(absf(sin(t * 9 + a.id))) if moving else 0.0
+		var camp: bool = not moving and String(a.get("mode", "")) in CAMP
+		var key := "a_bandit" if a.kind == "bandit" else ("a_wagon" if a.kind == "caravan" else "a_knight")
+		if camp and a.kind != "caravan":
+			sp("a_tent", sx - 10 * sc, sy - 6 * sc, sc)
+			if a.mode != "hide":
+				sp("a_camp", sx + 3 * sc, sy - 3 * sc, sc)
+				if sin(t * 12 + a.id) > 0:
+					box(sx + 5 * sc, sy - 4 * sc, 1, 1, Color.html("#ffe07a"))
+			if a.mode == "fort" and JS.n(a.get("fortDays")) >= 1:
+				for k in range(-2, 3):
+					box(sx + k * 4 * sc, sy + 2 * sc, 1, 3 * sc, Color.html("#6a4224"))
+				box(sx - 9 * sc, sy + 3 * sc, 18 * sc, 1, Color.html("#8a5a34"))
+		var men := Sim.armyMen(a)
+		if a.kind == "bandit":
+			sp(key, sx - 6 * sc, sy - 7 * sc - bob, sc)
+			sp(key, sx - 1 * sc, sy - 6 * sc - bob, sc)
+		elif a.kind == "caravan":
+			sp("a_ox", sx - 11 * sc, sy - 4 * sc - bob, sc)
+			sp(key, sx - 6 * sc, sy - 7 * sc, sc)
+		else:
+			if not camp or isP:
+				sp(key, sx - 6 * sc, sy - 11 * sc - bob, sc)
+			if men > 150:
+				sp("a_foot", sx + 3 * sc, sy - 7 * sc - bob, sc)
+			if men > 400:
+				sp("a_foot", sx - 9 * sc, sy - 6 * sc - bob, sc)
+		if a.kind != "bandit":
+			_flag(sx + 3 * sc, sy - 19 * sc - bob, col, Color.html(String(d.dark)), t)
+		if JS.t(a.get("hidden")):
+			if not _hi("i_eye", "one", floorf(sx - 2), floorf(sy - 24 * sc), 0.5):
+				sp("i_eye", floorf(sx - 2), floorf(sy - 24 * sc), 1, 0.5)
+		if JS.t(a.get("fires")):
+			for k in 3:
+				if sin(t * 10 + k * 2) > -0.2:
+					box(sx - 8 + k * 7, sy + 4, 1, 1, Color.html("#ff9a3c"))
+		if z >= 1.0:
+			var est := SimIntel.estimateMen(a)
+			var lab := ("" if JS.t(est.exact) else "~") + SimText.fmt(est.n)
+			var lw := tw(lab, "s") + 4
+			var ly := sy - 30 * sc - bob if Sim.settAtTile(Sim.armyTile(a)) >= 0 else sy + 3 * sc
+			box(floorf(sx - lw / 2.0), ly, lw, 7, Color.html("#22408a") if isP else (Color.html("#7a1e2a") if Sim.hostile(pr, a.realm) else Color.html("#3a2a1e")))
+			txt(lab, sx, ly + 1, Color.html("#fff2c8"), "s", "c")
+		army_hits.append([Rect2(sx - 8 * sc, sy - 16 * sc, 16 * sc, 22 * sc), int(a.id)])
 
 func _realm_names() -> void:
 	var G: MapGPU = mv.G
 	var acc := {}
 	for P: Dictionary in G.W.provs:
-		var o: int = G.own[P.id]
+		var o: int = int(Sim.ownerOfProv(P.id)) if sim_on() else G.own[P.id]
 		if o < 0 or o > 5:
+			continue
+		if not explored(G.W.setts[P.seat].i):
 			continue
 		if not acc.has(o):
 			acc[o] = Vector3.ZERO
@@ -217,6 +395,8 @@ func _realm_names() -> void:
 
 # ---------- подсказки ----------
 func tile_tip(t: int) -> String:
+	if sim_on():
+		return SimText.tileTip(t)
 	var Wd: WorldData = mv.G.W
 	var T := Wd.ter[t]
 	var s := String(mv.G.M.tinfo[T].n)
@@ -229,17 +409,42 @@ func tile_tip(t: int) -> String:
 		s += " · пров. " + String(Wd.provs[p].name) + " (" + String(rc(mv.G.own[p]).name) + ")"
 	return s
 
+## строки подсказки {t, c, ic} или строки → [текст, цвет ("" — по умолчанию), значок (−1 — нет)]
+func _rows(L: Array) -> Array:
+	var out := []
+	for r in L:
+		if typeof(r) == TYPE_STRING:
+			out.append([r, "", -1])
+		elif r != null:
+			var ic := String(r.get("ic", ""))
+			out.append([String(r.t), String(r.get("c", "")), ms(ic) if ic != "" else -1])
+	return out
+
 func sett_tip(sid: int) -> Array:
+	if sim_on():
+		return _rows(SimText.settTip(sid))
 	var G: MapGPU = mv.G
 	var s: Dictionary = G.W.setts[sid]
 	var o: int = G.own[s.prov]
 	return [[String(s.name) + " — " + String(SETT_T[s.type]), Art.pal("y")], [String(rc(o).name), Color.html("#cfe2ff") if o == 0 else Color.html("#fff2c8")],
 		["Провинция " + String(G.W.provs[s.prov].name), Art.pal("w")]]
 
-func _tip(rows: Array, m: Vector2) -> void:
+## подсказка (drawTipBox): строки переносятся по 220 точек, значок — у первой строки, цвет по умолчанию — жёлтый у первой
+func _tip(rows0: Array, m: Vector2) -> void:
+	var rows: Array = []
+	for r in rows0:
+		var ls := wrap_text(String(r[0]), 220)
+		for k in ls.size():
+			var ic: int = int(r[2]) if r.size() > 2 and k == 0 else -1
+			var c: Variant = r[1]
+			if typeof(c) == TYPE_STRING:
+				c = Color.html(c) if c != "" else null
+			rows.append([ls[k], c, ic])
+	if rows.is_empty():
+		return
 	var w := 0.0
 	for r in rows:
-		w = maxf(w, tw(r[0]))
+		w = maxf(w, tw(r[0]) + (Art.size(r[2]).x + 3 if r[2] >= 0 else 0.0))
 	w += 10.0
 	var h := rows.size() * 10.0 + 6.0
 	var x := m.x + 10.0
@@ -254,7 +459,12 @@ func _tip(rows: Array, m: Vector2) -> void:
 	box(x + 1, y + 1, w - 2, h - 2, Color.html("#20160f"))
 	box(x + 1, y + 1, w - 2, 1, Color.html("#3a2a1c"))
 	for i in rows.size():
-		txt(rows[i][0], x + 5, y + 5 + i * 10, rows[i][1])
+		var tx := x + 5
+		if rows[i][2] >= 0:
+			spr(rows[i][2], tx, y + 4 + i * 10)
+			tx += Art.size(rows[i][2]).x + 3
+		var c: Variant = rows[i][1]
+		txt(rows[i][0], tx, y + 5 + i * 10, c if c != null else (Art.pal("y") if i == 0 else Art.pal("w")))
 
 func _status() -> void:
 	var s := ""
@@ -287,21 +497,34 @@ func _top() -> void:
 	var x := 4.0
 	icon("shield0", x, 3)
 	x += 16.0
-	var D: Dictionary = Art.D
-	var net: float = float(D.get("net", 0.0))
-	var gs := str(int(float(D.get("gold", 0)) + net * maxi(0, Game.day - int(D.get("day", 0)))))
+	var bv := SimText.bar_vals()
+	var net: float = bv.net
+	var gs := SimText.fmt(bv.gold)
 	icon("i_gold", x, 7)
-	txt(gs, x + 8, 6, Art.pal("y"))
+	txt(gs, x + 8, 6, Color.html("#ee7a6a") if bv.gold < 0 else Art.pal("y"))
 	var x2 := x + 10.0 + tw(gs)
 	txt(("+" if net >= 0.0 else "−") + "%.1f" % absf(net), x2, 6, Color.html("#9fe07a") if net >= 0.0 else Color.html("#ee7a6a"), "s")
+	if sim_on():
+		tips.append([Rect2(x, 2, x2 + 26 - x, 14), func(): return SimText.goldTip()])
 	x = x2 + 30.0
 	_btn("« Ко двору (Tab)", x, 2, 92, 14, func(): mv.leave.emit())
 	var pol: bool = mv.mode == "pol"
 	_btn("Державы" if pol else "Местность", W - 70, 2, 66, 14, func(): mv.set_mode("ter" if mv.mode == "pol" else "pol"), pol)
 	var ds := Game.date_text()
-	txt(ds, W - 78 - tw(ds), 6, Color8(255, 242, 200))
+	var wx := W - 78.0 - tw(ds)
+	if sim_on():
+		# погода королевства (weatherOf): значок и название, как у даты в HTML
+		var Wt := Sim.weatherOf()
+		var wn := String(Wt.n)
+		wx -= 12.0 + tw(wn, "s")
+		txt(ds, wx, 6, Color8(255, 242, 200))
+		icon("i_" + String(Wt.ic), wx + tw(ds) + 4, 7)
+		txt(wn, wx + tw(ds) + 13, 6, Color.html("#c8d8e8"), "s")
+		tips.append([Rect2(wx, 2, W - 78.0 - wx, 14), func(): return SimText.dateTip()])
+	else:
+		txt(ds, wx, 6, Color8(255, 242, 200))
 	var zs := "масштаб " + ("1/%d" % roundi(1.0 / mv.cam.z) if mv.cam.z < 1.0 else "×%d" % roundi(mv.cam.z))
-	txt(zs, W - 90 - tw(ds) - tw(zs, "s"), 7, Color8(200, 184, 152), "s")
+	txt(zs, wx - 12 - tw(zs, "s"), 7, Color8(200, 184, 152), "s")
 
 func _mini() -> void:
 	var G: MapGPU = mv.G
@@ -312,6 +535,17 @@ func _mini() -> void:
 	box(MX - 1, MY - 1, 130, 82, PO)
 	draw_texture(G.T.mini, Vector2(MX, MY))
 	var k := 128.0 / WorldData.WPW
+	if sim_on():
+		# войска на мини-карте: свои и видимые чужие — точки цвета державы, разбойники — тёмные
+		var pid: float = Sim.G.player.army
+		for a: Dictionary in Sim.G.armies:
+			if not JS.t(a.alive) or not SimIntel.armyVisible(a):
+				continue
+			var ax: float = MX + a.x * WorldData.TS * k
+			var ay: float = MY + a.y * WorldData.TS * k
+			var isP: bool = a.id == pid
+			var c := (Color.WHITE if sin(now() * 6) > 0 else Art.pal("y")) if isP else (Color.html("#1b1420") if a.kind == "bandit" else Color.html(String(rc(int(a.realm)).dark)))
+			box(floorf(ax) - (1 if isP else 0), floorf(ay) - (1 if isP else 0), 3 if isP else 2, 3 if isP else 2, c)
 	var vw: float = W / mv.cam.z * k
 	var vh: float = H / mv.cam.z * k
 	stroke(roundf(MX + mv.cam.x * k - vw / 2.0), roundf(MY + mv.cam.y * k - vh / 2.0), roundf(vw), roundf(vh), Color.html("#fff2c8"))
