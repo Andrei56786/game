@@ -133,7 +133,7 @@ function aiArmy(a) {
     let best = null, bs = -Infinity; const bd = borderDist(a.realm);
     for (const S of G.setts) {
       if (!enemies.includes(S.ctrl) || S.siege) continue; const ws = WD.setts[S.id]; if (ws.type === 'village') continue;
-      const d = Math.hypot(ws.x - a.x, ws.y - a.y); const gp = powerU(S.gar) * (1 + S.walls * 0.6);
+      const d = Math.hypot(ws.x - a.x, ws.y - a.y); const gp = garSeen(S, a.realm) * (1 + S.walls * 0.6); // the garrison as they see it (dummies on the walls)
       if (gp > my * 1.6) continue;
       let sc = -d * 0.8 - gp / Math.max(1, my) * 30 - bd[ws.i] * 1.5 + (ws.type === 'capital' ? 12 : 0) + (S.owner === a.realm ? 25 : 0) + R.f() * 8;
       if (S.ctrl === 5) sc -= 10;
