@@ -4,12 +4,19 @@ const W = 640, H = 360;
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 cv.width = W; cv.height = H; ctx.imageSmoothingEnabled = false;
+// v3.6: the book font. The canvas backing store follows the real screen size (RS device pixels per game pixel),
+// so text is drawn sharp while pixel art is still scaled without smoothing. Pixel font mode keeps RS = 1.
+const VF = { on: (() => { try { return !JSON.parse(localStorage.getItem('sk3_opts') || '{}').pixfont; } catch (_) { return true; } })(), ok: false, fam: 'Slovo Serif', cache: new Map(), cur: '' };
+let RS = 1;
 function fit() {
   const s = Math.min(innerWidth / W, innerHeight / H);
   const k = s >= 1 ? Math.floor(s) : s;
   cv.style.width = Math.round(W * k) + 'px'; cv.style.height = Math.round(H * k) + 'px';
+  const rs = VF.on && VF.ok ? clamp(Math.round(k * (devicePixelRatio || 1)), 1, 3) : 1;
+  if (rs !== RS || cv.width !== W * rs) { RS = rs; cv.width = W * RS; cv.height = H * RS; }
+  ctx.setTransform(RS, 0, 0, RS, 0, 0); ctx.imageSmoothingEnabled = false; ctx.textBaseline = 'alphabetic'; VF.cur = '';
 }
-addEventListener('resize', fit); fit();
+addEventListener('resize', fit);
 
 // ---------- RNG ----------
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -26,6 +33,7 @@ function mkRng(seed) {
 }
 const R = mkRng((Date.now() ^ 0x5bd1e995) >>> 0); // gameplay rng: newGame seeds it from the world seed, saves keep its state
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+fit();
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = t => t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t);
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
@@ -152,7 +160,7 @@ const GS = {
   '8': '###|#.#|###|#.#|###', '9': '###|#.#|###|..#|###',
   '.': '.|.|.|.|#', '…': '.....|.....|.....|.....|#.#.#', ',': '.|.|.|.|#|#', ':': '.|#|.|#|.', ';': '.|#|.|.|#|#', '!': '#|#|#|.|#', '?': '###|..#|.##|...|.#.',
   '-': '..|..|##|..|..', '+': '...|.#.|###|.#.|...', '±': '.#.|###|.#.|...|###', '/': '..#|..#|.#.|#..|#..', '(': '.#|#.|#.|#.|.#', ')': '#.|.#|.#|.#|#.',
-  '%': '#.#|..#|.#.|#..|#.#', '"': '#.#|#.#|...|...|...', '×': '...|#.#|.#.|#.#|...', '→': '....|..#.|####|..#.|....',
+  '%': '#.#|..#|.#.|#..|#.#', '"': '#.#|#.#|...|...|...', '×': '...|#.#|.#.|#.#|...', '✓': [1, '....#|...#.|#.#..|.#...'], '→': '....|..#.|####|..#.|....',
   '←': '....|.#..|####|.#..|....', '·': '.|.|#|.|.', '—': '...|...|###|...|...', '=': '...|###|...|###|...', "'": '#|#|.|.|.',
   '>': '#..|.#.|..#|.#.|#..', '<': '..#|.#.|#..|.#.|..#', '~': '....|.#.#|#.#.|....|....', '«': '...|.##|##.|.##|...', '»': '...|##.|.##|##.|...',
   // latin letters without a cyrillic look-alike (Shift, Tab, Esc, F1…)
@@ -213,7 +221,7 @@ const GM = {
   '?': [0, '.###.|#...#|....#|...#.|..#..|.....|..#..'], '-': [4, '####'], '+': [2, '..#..|..#..|#####|..#..|..#..'], '±': [2, '..#..|#####|..#..|.....|#####'],
   '/': [0, '....#|...#.|...#.|..#..|.#...|.#...|#....'], '(': [0, '.#|#.|#.|#.|#.|#.|.#'], ')': [0, '#.|.#|.#|.#|.#|.#|#.'],
   '%': [0, '##..#|##.#.|...#.|..#..|.#...|.#.##|#..##'], '"': [0, '#.#|#.#'], "'": [0, '#|#'], '«': [2, '..#.#|.#.#.|#.#..|.#.#.|..#.#'],
-  '»': [2, '#.#..|.#.#.|..#.#|.#.#.|#.#..'], '—': [4, '######'], '–': [4, '####'], '·': [4, '#'], '×': [2, '#...#|.#.#.|..#..|.#.#.|#...#'],
+  '»': [2, '#.#..|.#.#.|..#.#|.#.#.|#.#..'], '—': [4, '######'], '–': [4, '####'], '·': [4, '#'], '×': [2, '#...#|.#.#.|..#..|.#.#.|#...#'], '✓': [1, '.....#|....#.|#..#..|.#.#..|..#...'],
   '=': [3, '####|....|####'], '<': [1, '...#|..#.|.#..|#...|.#..|..#.|...#'], '>': [1, '#...|.#..|..#.|...#|..#.|.#..|#...'],
   '*': [1, '#.#.#|.###.|#.#.#'], '→': [2, '..#..|...#.|#####|...#.|..#..'], '←': [2, '..#..|.#...|#####|.#...|..#..'],
   '↑': [0, '..#..|.###.|#.#.#|..#..|..#..|..#..|..#..'], '↓': [0, '..#..|..#..|..#..|..#..|#.#.#|.###.|..#..'],
@@ -221,7 +229,7 @@ const GM = {
   '#': [1, '.#.#.|#####|.#.#.|#####|.#.#.'], '&': [0, '.##..|#..#.|.##..|.#...|#.#.#|#..#.|.##.#'], '~': [3, '.#..#|#.##.'], '°': [0, '.#.|#.#|.#.'],
 };
 const LAT = { A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', Y: 'У',
-  a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у', k: 'к', m: 'м', n: 'п', i: 'I', l: 'I', s: 'S', d: 'D', r: 'г', t: 'т', u: 'и', v: 'V', w: 'W', z: 'Z', b: 'б', f: 'F', g: 'G', h: 'н', j: 'J', q: 'Q', '−': '-', '±': '+', '✓': '+', '✗': '×', '≈': '~', '✉': '·', '✝': '+', '∞': '~', '•': '·', '–': '-', '▶': '>', "'": '"', '’': '"', '‘': '"' };
+  a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у', k: 'к', m: 'м', n: 'п', i: 'I', l: 'I', s: 'S', d: 'D', r: 'г', t: 'т', u: 'и', v: 'V', w: 'W', z: 'Z', b: 'б', f: 'F', g: 'G', h: 'н', j: 'J', q: 'Q', '−': '-', '±': '+', '✗': '×', '≈': '~', '✉': '·', '✝': '+', '∞': '~', '•': '·', '–': '-', '▶': '>', "'": '"', '’': '"', '‘': '"' };
 function buildFont(def, cap) {
   const F = { map: {}, atlas: {}, width: 0, cap };
   let x = 0;
@@ -248,14 +256,28 @@ function glyph(F, ch) {
   const u = ch.toUpperCase(); if (F.map[u]) return F.map[u]; if (LAT[u] && F.map[LAT[u]]) return F.map[LAT[u]];
   return null;
 }
+// ---- book font (vector): sizes give the same cap height as the pixel faces (m: 7, s: 5) ----
+const VFS = { m: 10, s: 7.5 }, VPIX = new Set([...'→←↑↓▶▸▼■✓✗✝✉♥']); // symbols the book font lacks are drawn with pixel glyphs
+const vfUse = o => VF.on && VF.ok && !(o && (o.px || (o.sc || 1) >= 2));
+function vfFont(o) { return VFS[(o && o.f) || 'm'] * ((o && o.sc) || 1) + "px '" + VF.fam + "'"; }
+function vfSet(f) { if (VF.cur !== f) { ctx.font = f; VF.cur = f; } }
+function vfRuns(s) { const out = []; let cur = '', pix = false; for (const ch of s) { const p = VPIX.has(ch); if (p !== pix && cur) { out.push([cur, pix]); cur = ''; } pix = p; cur += ch; } if (cur) out.push([cur, pix]); return out; }
+function pixW(s, o) { const F = FONTS[(o && o.f) || 'm'], sc = (o && o.sc) || 1; let w = 0; for (const ch of s) { const g = glyph(F, ch); w += (g ? g.w + 1 : 4) * sc; } return w; }
+function vfW(s, o) { const f = vfFont(o), key = f + '\u0001' + s; let w = VF.cache.get(key); if (w !== undefined) return w;
+  vfSet(f); w = 0; for (const [t, p] of vfRuns(s)) w += p ? pixW(t, o) : ctx.measureText(t).width; if (VF.cache.size > 6000) VF.cache.clear(); VF.cache.set(key, w); return w; }
+function vfLoad() { if (VF.req || typeof VF_DATA === 'undefined' || typeof FontFace === 'undefined') return; VF.req = 1;
+  try { const ff = new FontFace(VF.fam, 'url(data:font/woff;base64,' + VF_DATA + ')'); ff.load().then(f => { document.fonts.add(f); VF.ok = true; VF.cache.clear(); fit(); }).catch(e => console.warn('font', e)); } catch (e) { console.warn('font', e); } }
+function setBookFont(on) { VF.on = !!on; VF.cache.clear(); fit(); }
 function tw(s, o) {
+  if (vfUse(o)) return vfW(String(s), o);
   const F = FONTS[(o && o.f) || 'm'], sc = (o && o.sc) || 1, sp = F === FONTS.m ? 4 : 3; let w = 0;
   for (const ch of String(s)) { if (ch === ' ') { w += sp; continue; } const g = glyph(F, ch); w += g ? g.w + 1 : 4; }
   return Math.max(0, w - 1) * sc;
 }
 // draw text. y = top of cap height. o: {f:'s'|'m', sh: shadow col, al:'c'|'r', sc}
 function txt(s, x, y, col, o) {
-  s = String(s); o = o || {}; const F = FONTS[o.f || 'm'], sc = o.sc || 1, sp = F === FONTS.m ? 4 : 3; col = col || PAL.w;
+  s = String(s); o = o || {}; col = col || PAL.w; if (vfUse(o)) return vtxt(s, x, y, col, o);
+  const F = FONTS[o.f || 'm'], sc = o.sc || 1, sp = F === FONTS.m ? 4 : 3;
   if (o.al === 'c') x -= Math.floor(tw(s, o) / 2); else if (o.al === 'r') x -= tw(s, o);
   x |= 0; y |= 0;
   if (o.sh) { txt(s, x, y + sc, o.sh, { f: o.f, sc }); if (o.ol) { txt(s, x + sc, y, o.sh, { f: o.f, sc }); txt(s, x - sc, y, o.sh, { f: o.f, sc }); txt(s, x, y - sc, o.sh, { f: o.f, sc }); } }
@@ -269,6 +291,15 @@ function txt(s, x, y, col, o) {
   }
   return x;
 }
+// book-font text: y is the top of capitals, as with the pixel faces; returns x after the text
+function vtxt(s, x, y, col, o) { const w = vfW(s, o); if (o.al === 'c') x -= w / 2; else if (o.al === 'r') x -= w;
+  x = Math.round(x * RS) / RS; y = Math.round(y * RS) / RS; const sc = o.sc || 1, sz = VFS[o.f || 'm'] * sc, base = y + sz * 0.7;
+  if (o.sh) { const so = { f: o.f, sc, px: o.px }; vdraw(s, x, base + sc, o.sh, so); if (o.ol) { vdraw(s, x + sc, base, o.sh, so); vdraw(s, x - sc, base, o.sh, so); vdraw(s, x, base - sc, o.sh, so); } }
+  vdraw(s, x, base, col, o); return x + w + 1; }
+function vdraw(s, x, base, col, o) { const f = vfFont(o), sc = o.sc || 1; vfSet(f); ctx.fillStyle = col;
+  const runs = vfRuns(s); if (runs.length === 1 && !runs[0][1]) { ctx.fillText(s, x, base); return; }
+  for (const [t, p] of runs) { if (!p) { ctx.fillText(t, x, base); x += ctx.measureText(t).width; continue; }
+    const F = FONTS[o.f || 'm'], at = fontAtlas(F, col), top = base - F.cap * sc; for (const ch of t) { const g = glyph(F, ch); if (!g) { x += 4 * sc; continue; } ctx.drawImage(at, g.x, 0, g.w, F.hgt, Math.round(x), Math.round(top - 2 * sc), g.w * sc, F.hgt * sc); x += (g.w + 1) * sc; } } }
 function wrap(s, maxW, o) {
   const out = [];
   for (const para of String(s).split('\n')) {
@@ -320,7 +351,10 @@ function btn(id, x, y, w, h, o) {
     const iw = sprW(o.ic), tot = iw + 3 + tw(o.label);
     spr(o.ic, cx - (tot >> 1), y + ((h - sprH(o.ic)) >> 1), { alpha: dis ? 0.45 : 1 });
     txt(o.label, cx - (tot >> 1) + iw + 3, y + ((h - 7) >> 1), tc, st === 'parch' ? {} : { sh: PAL.o });
-  } else if (o.ic) spr(o.ic, cx - (sprW(o.ic) >> 1), y + ((h - sprH(o.ic)) >> 1) - (hv ? 1 : 0), { alpha: dis ? 0.45 : 1 });
+  } else if (o.ic) { // v3.6: drawn icons (icons2.js) fill a roomy icon-only button better: up to 1.6× their size
+    const iw = sprW(o.ic), ih = sprH(o.ic), sc = hiIc(o.ic) ? clamp((Math.min(w, h) - 5) / Math.max(iw, ih), 1, 1.6) : 1;
+    spr(o.ic, Math.round(cx - iw * sc / 2), Math.round(y + (h - ih * sc) / 2) - (hv ? 1 : 0), { alpha: dis ? 0.45 : 1, scale: sc > 1 ? sc : undefined });
+  }
   else if (o.label) txt(o.label, cx, y + ((h - 7) >> 1), tc, st === 'parch' ? { al: 'c' } : { al: 'c', sh: PAL.o });
   hit(x, y, w, h, { id, onClick: dis ? (o.onDis || null) : o.onClick, tip: o.tip, cursor: !dis, sfx: o.sfx });
   return hv;
