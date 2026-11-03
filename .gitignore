@@ -4,3 +4,6 @@ shots/
 /*.html
 tmp_*
 node_modules/
+.godot/
+godot/*/build/
+godot/*/slovo_serif.woff*

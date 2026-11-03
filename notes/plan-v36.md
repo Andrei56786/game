@@ -54,3 +54,4 @@
   `git tag gh-synced origin/main`.
 - Сборка: `python3 tools/build.py` → dist/index.html (v3.6.0).
 - Morning brief не трогали.
+- Дальше (решено 3 ноября): графика и перенос на Godot — `notes/plan-v4.md`; выжимка обновлена до v3.6.
