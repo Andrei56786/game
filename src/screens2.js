@@ -37,13 +37,15 @@ function drawRealmWin() {
 }
 // ---------- menu ----------
 function drawMenuWin() {
-  const X = W / 2 - 90, Y = 60, WW = 180, HH = 214; winFrame(X, Y, WW, HH, 'Меню', false);
+  const X = W / 2 - 90, Y = 40, WW = 180, HH = 254; winFrame(X, Y, WW, HH, 'Меню', false);
   let y = Y + 26; const B = (id, label, f, o) => { btn(id, X + 20, y, WW - 40, 16, Object.assign({ label, onClick: f }, o || {})); y += 20; };
   B('m_cont', 'Продолжить', () => UI.shut());
   B('m_save', 'Сохранить', () => { UI.toast(saveGame() ? 'Сохранено.' : 'Не удалось сохранить.'); UI.shut(); });
   B('m_load', 'Загрузить', () => { UI.shut(); startLoad(); }, { disabled: !saveOk(), tip: hasSave() && !saveOk() ? OLDSAVE_TIP : undefined });
   B('m_snd', 'Звук…', () => sndOpen());
   B('m_tut', 'Обучение: ' + (G.tut.on ? 'вкл' : 'выкл'), () => { G.tut.on = !G.tut.on; });
+  B('m_adv', 'Советы: ' + (advOn() ? 'вкл' : 'выкл'), () => { const A = advS(); A.on = A.on ? 0 : 1; if (A.on) { A.seen = {}; ADV.done = ''; } }, { tip: ['Советы при входе', 'Когда король впервые входит в комнату, здание, лес, на охоту или выезжает за ворота, советник подсказывает, что там можно сделать. Включив снова, вы услышите все советы заново.'] });
+  B('m_font', 'Шрифт: ' + (VF.on ? 'книжный' : 'пиксельный'), () => { OPTS.pixfont = VF.on ? 1 : 0; saveOpts(); setBookFont(!OPTS.pixfont); }, { tip: ['Шрифт', 'Книжный — гладкий и чёткий, легче читать. Пиксельный — как в старых играх. Заголовки окон всегда пиксельные.'] });
   B('m_ap', 'Автопауза: ' + (OPTS.autoPause ? 'вкл' : 'выкл'), () => { OPTS.autoPause = !OPTS.autoPause; saveOpts(); }, { tip: ['Автопауза', 'Время само встаёт на паузу, когда войско короля дошло до цели или остановилось, когда вы выходите из города, выезжаете из замка и после битвы.', { t: 'Пробел — снять паузу.', c: UIC.dim }] });
   B('m_help', 'Управление', () => { UI.shut(); UI.alert('help'); });
   B('m_exit', 'Выйти в главное меню', () => { saveGame(); UI.shut(); UI.modals = []; SCREEN = 'title'; Snd.music('title'); });
@@ -62,7 +64,7 @@ function drawBookWin(w) {
   if (lines.length > maxL) txt((UI.scroll + maxL < lines.length ? 'ниже ещё · ' : '') + 'колесо — листать', RX + RW - 4, Y + HH - 12, INK2, { al: 'r', f: 's' });
 }
 // ---------- modal dialogs ----------
-function dlg(w, h, title, parch) { const x = Math.round(W / 2 - w / 2), y = Math.round(H / 2 - h / 2); blocker(); dim(0.5); if (parch !== false) panelParch(x, y, w, h); else panelWood(x, y, w, h); if (title) { txt(title, x + w / 2, y + 8, parch !== false ? INK : PAL.y, { al: 'c', sh: parch === false ? PAL.o : undefined }); if (parch !== false) hline(x + 12, y + 18, w - 24, '#b89a68'); } return [x, y]; }
+function dlg(w, h, title, parch) { const x = Math.round(W / 2 - w / 2), y = Math.round(H / 2 - h / 2); blocker(); dim(0.5); if (parch !== false) panelParch(x, y, w, h); else panelWood(x, y, w, h); if (title) { txt(title, x + w / 2, y + 8, parch !== false ? INK : PAL.y, { al: 'c', sh: parch === false ? PAL.o : undefined, px: 1 }); if (parch !== false) hline(x + 12, y + 18, w - 24, '#b89a68'); } return [x, y]; }
 function adviceByRatio(r) {
   if (r >= 8) return 'Сил вдесятеро больше — окружай.'; if (r >= 4) return 'Сил впятеро больше — нападай.'; if (r >= 1.8) return 'Сил вдвое больше — раздели врага и бей по частям.';
   if (r >= 0.85) return 'Силы равны — сражайся умело: местность и хитрость решат.'; if (r >= 0.5) return 'Сил меньше — умей оторваться от врага.'; return 'Враг много сильнее — уклоняйся. «Упорство слабого — добыча сильного».';
