@@ -22,7 +22,7 @@ const Snd = (() => {
   function init(ctx) {
     ac = ctx;
     comp = ac.createDynamicsCompressor(); comp.threshold.value = -15; comp.knee.value = 12; comp.ratio.value = 3.2; comp.attack.value = 0.005; comp.release.value = 0.22;
-    master = ac.createGain(); master.gain.value = P.on ? 1 : 0; master.connect(comp); comp.connect(ac.destination);
+    master = ac.createGain(); master.gain.value = P.on ? gvol() : 0; master.connect(comp); comp.connect(ac.destination);
     const conv = ac.createConvolver(); conv.buffer = mkIR(2.8, 2.6); revIn = ac.createGain(); const rOut = ac.createGain(); rOut.gain.value = 0.85;
     revIn.connect(conv); conv.connect(rOut); rOut.connect(master);
     musBus = ac.createGain(); musBus.gain.value = P.mus ? P.mv : 0; musBus.connect(master);
@@ -31,7 +31,9 @@ const Snd = (() => {
     const sr = ac.createGain(); sr.gain.value = 0.16; sfxBus.connect(sr); sr.connect(revIn);
     NB = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const d = NB.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1;
     const im = [0, 1, 0.42, 0.17, 0.08, 0.045, 0.022, 0.011]; FW = ac.createPeriodicWave(new Float32Array(im.length), new Float32Array(im));
+    if (K.hooks.init) K.hooks.init();
   }
+  const gvol = () => P.gv === undefined ? 1 : P.gv;
   const G_ = (v, dest) => { const g = ac.createGain(); g.gain.value = v; if (dest) g.connect(dest); return g; };
   function pan(dest, p) { if (!ac.createStereoPanner) return dest; const s = ac.createStereoPanner(); s.pan.value = cl(p, -1, 1); s.connect(dest); return s; }
   function filt(type, f, q, dest) { const b = ac.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; if (dest) b.connect(dest); return b; }
@@ -172,6 +174,7 @@ const Snd = (() => {
   function vary(M, ph, p) { const b2 = genBar(M, pick(RH(M)), p[2], lastD(ph[1]), false); return [ph[0], ph[1], b2, genBar(M, pick(CAD(M)), p[3], lastD(b2), true)]; }
   const themeBars = th => th.m.map(bar => { let s = 0; return bar.map(([d, l]) => { const n = { s, l, d, acc: s % 3 === 0 ? 1 : 0.8 }; s += l; return n; }); });
   function compose(mood) {
+    if (K.hooks.compose) { const r = K.hooks.compose(mood); if (r) return r; }
     const M = MOODS[mood], pa = pick(M.prog), pb = pick(M.prog.filter(x => x !== pa));
     const mid = Math.round((M.lo + M.hi) / 2), A = genPhrase(M, pa, nearCT(mid, pa[0], M)), B = genPhrase(M, pb, nearCT(M.hi - 2, pb[0], M)), A2 = vary(M, A, pa);
     const L = (lute, mel, drum, drone) => ({ lute, mel, drum, drone }), F = [];
@@ -221,12 +224,13 @@ const Snd = (() => {
   };
   function schedBar(S, t) {
     const M = S.M, pc = S.pc, sec = pc.F[pc.si], st = M.st * pc.k, barD = st * M.meter, ly = sec.ly;
-    if (ly.drone && pc.bi === 0) drone(M.dr, t, barD * (sec.rest || 4) + 0.6, M.dv, S.b.dr);
+    if (ly.drone && pc.bi === 0) (M.dronef || drone)(M.dr, t, barD * (sec.rest || 4) + 0.6, M.dv, S.b.dr);
     if (!sec.rest) {
-      const c = sec.p[pc.bi];
-      if (ly.lute) LUTE[M.lute](S, c, t, st, M.lv, S.b.lu);
-      if (ly.mel && sec.m) for (const n of sec.m[pc.bi]) if (!n.r) MEL[M.mel](d2m(M.mb, M.sc, n.d), t + n.s * st + (rnd() - 0.5) * 0.01, n.l * st * 0.94, M.mv * n.acc * (0.92 + rnd() * 0.16), S.b.me, n);
-      if (ly.drum) DRUM[M.drum](t, st, pc.bi, S.b.dm);
+      const c = sec.p[pc.bi], mel = sec.mel || M.mel, mb = sec.mel && M.mb2 ? M.mb2 : M.mb, mv = sec.mel && M.mv2 ? M.mv2 : M.mv;
+      if (ly.lute) LUTE[sec.lute || M.lute](S, c, t, st, M.lv, S.b.lu);
+      if (ly.mel && sec.m) for (const n of sec.m[pc.bi]) if (!n.r) MEL[mel](d2m(mb, M.sc, n.d), t + n.s * st + (rnd() - 0.5) * 0.01, n.l * st * 0.94, mv * n.acc * (0.92 + rnd() * 0.16), S.b.me, n);
+      if (ly.drum) DRUM[sec.drum || M.drum](t, st, pc.bi, S.b.dm);
+      if (K.hooks.bar) K.hooks.bar(S, sec, pc.bi, t, st, barD);
     }
     pc.bi++; if (pc.bi >= (sec.rest || 4)) { pc.bi = 0; pc.si++; if (pc.si >= pc.F.length) nextPiece(S, t + barD); }
     return barD;
@@ -244,6 +248,7 @@ const Snd = (() => {
     if (nm !== S.mood && MOODS[nm]) { S.mood = nm; S.M = MOODS[nm]; const g = S.pg.gain; g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(S.M.g || 1, t + 1); } S.pc = compose(S.mood); }
   let cur = null, want = 'title';
   function resolve() {
+    if (K.hooks.resolve) { const r = K.hooks.resolve(want); if (r) return r; }
     if (want !== 'auto') return want;
     try { if (typeof G !== 'undefined' && G && G.player && warsOf(G.player.realm).length) return 'war'; } catch (_) { }
     try { const h = hourAbs(), night = h >= 21.5 || h < 4.5;
@@ -256,7 +261,7 @@ const Snd = (() => {
   let amb = null, ambK = null, roar = null, bnT = 0, bnAcc = 0, nextBird = 0, nextThunder = 0;
   function loopNoise(type, f, q, dest) { const s = ac.createBufferSource(); s.buffer = NB; s.loop = true; const fl = filt(type, f, q); const g = G_(0, dest); s.connect(fl); fl.connect(g); s.start(); return { s, fl, g }; }
   function ensureAmb() {
-    if (amb) return; amb = { rain: loopNoise('highpass', 1100, 0.5, sfxBus), wind: loopNoise('bandpass', 420, 1.2, sfxBus) };
+    if (amb) return; const ab = K.ambBus || sfxBus; amb = { rain: loopNoise('highpass', 1100, 0.5, ab), wind: loopNoise('bandpass', 420, 1.2, ab) };
     const lfo = ac.createOscillator(); lfo.frequency.value = 0.09; const lg = G_(220); lfo.connect(lg); lg.connect(amb.wind.fl.frequency); lfo.start();
   }
   function bird(t) { const f = 2600 + rnd() * 1600, n = 2 + Math.floor(rnd() * 4), p = pan(sfxBus, rnd() * 1.6 - 0.8); for (let i = 0; i < n; i++) { const tt = t + i * (0.09 + rnd() * 0.05); tone('sine', f * (1 + rnd() * 0.15), f * (0.75 + rnd() * 0.5), tt, 0.07, 0.025, p, 0.01); } }
@@ -264,12 +269,13 @@ const Snd = (() => {
   function ambTick(now) {
     let k = null;
     let ins = 0; try { if (typeof SCREEN !== 'undefined' && (SCREEN === 'map' || SCREEN === 'court') && typeof G !== 'undefined' && G && G.weather) { k = G.weather.k; if (SCREEN === 'court' && LOCS[COURT.loc] && !LOCS[COURT.loc].out) ins = 1; } } catch (_) { }
-    const on = P.sfx && P.on; if (!on) k = null;
+    const on = K.ambBus ? P.on && (P.av === undefined || P.av > 0) : P.sfx && P.on; if (!on) k = null;
     if (k || amb) { ensureAmb();
       const rv = k === 'rain' ? 0.035 : k === 'storm' ? 0.07 : 0, wv = k === 'blizzard' ? 0.09 : k === 'snow' ? 0.03 : k === 'wind' ? 0.05 : k === 'storm' ? 0.03 : k === 'cloud' ? 0.008 : 0;
       amb.rain.g.gain.setTargetAtTime(rv * (ins ? 0.3 : 1), now, 1.2); amb.wind.g.gain.setTargetAtTime(wv * (ins ? 0.4 : 1), now, 1.5); }
     if (k === 'storm' && now > nextThunder) { if (nextThunder) thunder(now + 0.1); nextThunder = now + 12 + rnd() * 20; }
-    if ((k === 'clear' || k === 'cloud') && now > nextBird) { let s = 1; try { s = seasonOf(G.day); } catch (_) { } if (nextBird && s < 2 && G.speed > 0 && !ins && !(SCREEN === 'court' && typeof isNight === 'function' && isNight())) bird(now + 0.05); nextBird = now + 4 + rnd() * 9; }
+    if (K.hooks.amb) { try { K.hooks.amb(now, k, ins); } catch (e) { console.warn('amb', e); } }
+    else if ((k === 'clear' || k === 'cloud') && now > nextBird) { let s = 1; try { s = seasonOf(G.day); } catch (_) { } if (nextBird && s < 2 && G.speed > 0 && !ins && !(SCREEN === 'court' && typeof isNight === 'function' && isNight())) bird(now + 0.05); nextBird = now + 4 + rnd() * 9; }
     ambK = k;
     if (roar && now - bnT > 0.35) roar.g.gain.setTargetAtTime(0, now, 0.35);
   }
@@ -333,7 +339,11 @@ const Snd = (() => {
   }
   addEventListener('keydown', unlock);
   function setBus(b, v) { if (!ac) return; const t = ac.currentTime; b.gain.cancelScheduledValues(t); b.gain.setValueAtTime(b.gain.value, t); b.gain.linearRampToValueAtTime(v, t + 0.25); }
+  // the inside, for audio2 (more instruments and pieces, the sounds of places, footsteps) and the mixer
+  const K = { get ac() { return ac; }, get master() { return master; }, get musBus() { return musBus; }, get sfxBus() { return sfxBus; }, get revIn() { return revIn; }, get NB() { return NB; }, get cur() { return cur; }, ambBus: null, stepBus: null,
+    P, save, gvol, MOODS, LUTE, MEL, DRUM, FAM, SFX, SC, tone, nz, lute, strum, flute, shawm, horn, drone, drum, voice, bellV, pan, filt, G_, envAD, loopNoise, mtof, d2m, genPhrase, vary, nearCT, pick, pickW, rnd, cl, setBus, hooks: {} };
   return {
+    _k: K,
     unlock,
     sfx(name) { if (!ac || ac.state !== 'running' || !P.sfx || !P.on || !SFX[name]) return; const now = ac.currentTime; if (lastPlay[name] && now - lastPlay[name] < 0.06) return; lastPlay[name] = now; try { SFX[name](now + 0.01); } catch (e) { console.warn('sfx', name, e); } },
     battleNoise(n) {
@@ -344,19 +354,19 @@ const Snd = (() => {
     },
     music(m) { want = m; if (ac) tick(); },
     mood: () => cur ? cur.mood : null, family: () => cur ? cur.fam : null,
-    muted: () => !P.on, toggle() { P.on = P.on ? 0 : 1; save(); unlock(); if (ac) setBus(master, P.on ? 1 : 0); },
+    muted: () => !P.on, toggle() { P.on = P.on ? 0 : 1; save(); unlock(); if (ac) setBus(master, P.on ? gvol() : 0); },
     musOn: () => !!P.mus, toggleMusic() { P.mus = P.mus ? 0 : 1; save(); if (ac) setBus(musBus, P.mus ? P.mv : 0); },
     sfxOn: () => !!P.sfx, toggleSfx() { P.sfx = P.sfx ? 0 : 1; save(); if (ac) setBus(sfxBus, P.sfx ? P.sv : 0); },
     vol(k, v) { if (k === 'mus') { P.mv = cl(v, 0, 1); if (ac && P.mus) setBus(musBus, P.mv); } else { P.sv = cl(v, 0, 1); if (ac && P.sfx) setBus(sfxBus, P.sv); } save(); },
     prefs: () => P,
     // offline render for testing: returns stats of mood (or sfx list) rendered for secs
     async _test(what, secs, wav) {
-      const sr = 44100, oc = new OfflineAudioContext(2, sr * secs, sr); const keep = [ac, cur]; init(oc); for (const k in KS) delete KS[k];
+      const sr = 44100, oc = new OfflineAudioContext(2, sr * secs, sr); const keep = [ac, cur, master, comp, musBus, sfxBus, revIn, NB, FW, K.ambBus, K.stepBus]; init(oc); for (const k in KS) delete KS[k];
       if (MOODS[what]) { const S = startSeq(what, 0); let t = 0.1; while (t < secs) t += schedBar(S, t); }
-      else { what.split(',').forEach((n, i) => SFX[n](0.05 + i * 1.2)); }
+      else { what.split(',').forEach((n, i) => { if (SFX[n]) SFX[n](0.05 + i * 1.2); else if (K.hooks.test) K.hooks.test(n, 0.05 + i * 1.2); else throw new Error('no sound ' + n); }); }
       const buf = await oc.startRendering(); let pk = 0, ss = 0, nan = 0; const n = buf.length;
       for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) { const v = d[i]; if (v !== v) nan++; const a = Math.abs(v); if (a > pk) pk = a; ss += v * v; } }
-      for (const k in KS) delete KS[k]; ac = keep[0]; cur = keep[1];
+      for (const k in KS) delete KS[k]; [ac, cur, master, comp, musBus, sfxBus, revIn, NB, FW, K.ambBus, K.stepBus] = keep;
       if (wav) { const d0 = buf.getChannelData(0), d1 = buf.getChannelData(1), N = Math.floor(n / 2), b = new DataView(new ArrayBuffer(44 + N * 2)); const ws = (o, s) => { for (let i = 0; i < s.length; i++) b.setUint8(o + i, s.charCodeAt(i)); };
         ws(0, 'RIFF'); b.setUint32(4, 36 + N * 2, true); ws(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true); b.setUint32(24, sr / 2, true); b.setUint32(28, sr, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); ws(36, 'data'); b.setUint32(40, N * 2, true);
         for (let i = 0; i < N; i++) { const v = Math.max(-1, Math.min(1, (d0[i * 2] + d1[i * 2]) * 0.5)); b.setInt16(44 + i * 2, v * 32767, true); }
