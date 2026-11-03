@@ -8,7 +8,7 @@ function woundKing(sev, part, by) { const k = kingC(), W0 = WOUNDS[sev]; let day
   const old = k.wound > G.day ? k.wound - G.day : 0; if (old) days += Math.ceil(old * 0.5);
   if (!(k.wound > G.day) || sev >= (k.woundK || 0)) { k.woundK = sev; k.woundP = part; k.woundBy = by; }
   k.wound = Math.max(k.wound || 0, G.day + days); k.woundDay = G.day;
-  const how = by === 'турнир' ? 'на турнире' : by === 'кабан' ? 'кабаном' : by === 'медведь' ? 'медведем' : by; log((sev === 1 ? 'Ушиб ' + (by === 'турнир' ? 'на турнире' : 'на охоте') : (sev === 3 ? 'Король тяжело ранен ' : 'Король ранен ') + how) + ': ' + part + '. ' + (sev === 1 ? 'Пройдёт за ' : 'Заживёт за ') + dn(days) + '.', sev === 1 ? 'info' : 'bad');
+  const how = { 'турнир': 'на турнире', 'кабан': 'кабаном', 'медведь': 'медведем', 'олень': 'оленем', 'шальная стрела': 'шальной стрелой', 'падение': 'при падении' }[by] || by; log((sev === 1 ? 'Ушиб ' + (by === 'турнир' ? 'на турнире' : 'на охоте') : (sev === 3 ? 'Король тяжело ранен ' : 'Король ранен ') + how) + ': ' + part + '. ' + (sev === 1 ? 'Пройдёт за ' : 'Заживёт за ') + dn(days) + '.', sev === 1 ? 'info' : 'bad');
   return days; }
 // ---------- the charge: the beast lowers its head and paws the ground — then rushes in a line; step aside, or take it on the spear ----------
 const DIRV = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
@@ -60,8 +60,9 @@ function kingHit(a, close) { const HU = COURT.hunt, P = COURT.p, k = kingC(); if
   HEAL.pend = { t: NOW + 2.2, f: () => DLG.say(null, t, { name: 'Беда на охоте', choices: [{ t: 'Домой, на носилках', fx: () => huntEnd('wound') }], esc: 0 }) }; }
 // ---------- the cutscene: the stretcher to the keep, the physician at the bed, the days going by ----------
 const HEAL = { on: 0, sh: '', pend: null, q: null };
-function healStart(o) { const k = kingC(), W0 = WOUNDS[k.woundK || 2], tot = Math.max(1, k.wound - G.day), bed = Math.max(2, Math.round(tot * W0.bed));
-  Object.assign(HEAL, { on: 1, o, king: k.id, tot, bed, fast: 0, sh: '', t0: NOW, cap: '', vis: [], fever: k.woundK === 3 && R.chance(0.3) ? { day: R.i(2, 3), ext: R.i(3, 5), st: 0 } : null });
+function healStart(o) { // v3.6: k.woundFv — the fever chance of this grave wound (an arrow in the chest: 0.6)
+  const k = kingC(), W0 = WOUNDS[k.woundK || 2], tot = Math.max(1, k.wound - G.day), bed = Math.max(2, Math.round(tot * W0.bed));
+  Object.assign(HEAL, { on: 1, o, king: k.id, tot, bed, fast: 0, sh: '', t0: NOW, cap: '', vis: [], fever: k.woundK === 3 && R.chance((k.woundFv || 0.3) * docK()) ? { day: R.i(2, 3), ext: R.i(3, 5), st: 0 } : null }); k.woundFv = 0;
   UI.win = null; while (DLG.open()) DLG.close(); COURT.path = null; COURT.onArrive = null; Snd.music('lament'); healLitter(); }
 function healQueue(o) { HEAL.q = o; }
 const healMan = (i, role, age, name) => ({ c: pseudoChar(90 + i, role, 0, age, name), x: 0, y: 0, dir: 'down', f: 0, moving: 0 });
@@ -73,13 +74,13 @@ function healLitter() { fadeTo(() => { const Y = LOCS.yard, P = COURT.p, HU = HE
     HEAL.path = path; HEAL.sh = 'litter'; HEAL.t0 = NOW; HEAL.cap = HEAL.o.from === 'tourney' ? 'Короля уносят с ристалища' : 'Ловчие несут раненого короля в замок';
     HEAL.men = [healMan(0, 'peasant', 34, 'Ловчий'), healMan(1, 'guard', 27, 'Стражник')]; snapCam(); Snd.sfx('horn_low'); }); }
 function healBed() { fadeTo(() => { const L = LOCS.keep, P = COURT.p, sp = L.spots.bed_king, k = kingC(); COURT.loc = 'keep'; P.hide = 0; sitAt(sp); COURT.parts = []; snapCam();
-    const doc = healMan(2, 'scholar', 58, 'Лекарь'); doc.x = sp.sx + 30; doc.y = sp.sy + 8; doc.dir = 'left'; HEAL.vis = [doc];
-    const sp2 = k.spouse >= 0 ? charOf(k.spouse) : null; if (sp2 && sp2.alive && !sp2.away) HEAL.vis.push({ c: sp2, x: sp.sx + 2, y: sp.sy + 46, dir: 'up', f: 0, moving: 0 });
-    HEAL.sh = 'bed'; HEAL.t0 = NOW; HEAL.cap = 'Лекарь промывает рану вином и зашивает. «Лежать, государь, — дней ' + HEAL.bed + '».'; Snd.sfx('door'); }); }
+    const doc = sickDocVis(); doc.x = sp.sx + 30; doc.y = sp.sy + 8; doc.dir = 'left'; HEAL.vis = [doc];
+    const sp2 = k.spouse >= 0 ? charOf(k.spouse) : null; if (sp2 && sp2.alive && !sp2.away && !(sp2.ill && sp2.ill.bed)) HEAL.vis.push({ c: sp2, x: sp.sx + 2, y: sp.sy + 46, dir: 'up', f: 0, moving: 0 });
+    HEAL.sh = 'bed'; HEAL.t0 = NOW; HEAL.cap = HEAL.o.from === 'ill' ? sickBedCap() : doc.c.name + ' промывает рану вином и зашивает. «Лежать, государь, — дней ' + HEAL.bed + '».'; Snd.sfx('door'); }); }
 function healDays() { HEAL.sh = 'days'; HEAL.d0 = G.day; HEAL.end = G.day + HEAL.bed + 3 / 24; HEAL.lastD = -1; HEAL.t0 = NOW; G.speed = G.speed || 1;
-  const k = kingC(); HEAL.lines = { 1: k.spouse >= 0 && charOf(k.spouse) && charOf(k.spouse).alive ? (charOf(k.spouse).fem ? 'Королева' : 'Супруг') + ' не отходит от постели.' : 'Паж приносит бульон и вести из столицы.', [Math.max(2, Math.floor(HEAL.bed / 2))]: 'Канцлер читает у изголовья донесения: совет справляется сам.' }; }
+  const k = kingC(); HEAL.lines = { 1: k.spouse >= 0 && charOf(k.spouse) && charOf(k.spouse).alive && !(charOf(k.spouse).ill && charOf(k.spouse).ill.bed) ? (charOf(k.spouse).fem ? 'Королева' : 'Супруг') + ' не отходит от постели.' : 'Паж приносит бульон и вести из столицы.', [Math.max(2, Math.floor(HEAL.bed / 2))]: 'Канцлер читает у изголовья донесения: совет справляется сам.' }; }
 function healEnd(dead) { const k = kingC(), P = COURT.p, o = HEAL.o || {}; HEAL.on = 0; HEAL.sh = ''; HEAL.vis = []; HEAL.men = null; if (P) { P.hide = 0; P.downT = 0; }
-  if (dead) return; standUp(); npcSnap(false); COURT.lastHA = G.day * 24 + hourAbs(); Snd.music('auto');
+  if (dead) return; standUp(); npcSnap(false); COURT.lastHA = G.day * 24 + hourAbs(); Snd.music('auto'); if (o.from === 'ill') { sickUp(); return; }
   const rest = Math.max(1, Math.round(HEAL.tot * 0.4)); k.wound = Math.max(G.day + rest, Math.min(k.wound, G.day + rest)); UI.toast('Король встаёт на ноги. Ещё ' + dn(rest) + ' беречься: ходить медленно, без меча и охоты.');
   log('Король поднялся с постели после ' + dn(HEAL.bed) + ' в покоях.', 'info'); if (o.from === 'hunt' && o.HU) huntSummary(o.HU, 'wound'); }
 function healSkip() { if (HEAL.sh === 'litter') healBed(); else if (HEAL.sh === 'bed') healDays(); else if (HEAL.sh === 'days') HEAL.fast = HEAL.fast ? 0 : 1; }
@@ -91,11 +92,11 @@ UPD_EXT.push(dt => { const P = COURT.p; if (!P) return;
   if (HEAL.sh === 'litter' && !COURT.fade) { const pt = HEAL.path[0]; if (!pt || NOW - HEAL.t0 > 10) { healBed(); return; } const gx = pt[0] * CT + 8, gy = pt[1] * CT + 11, dx = gx - P.x, dy = gy - P.y, d = Math.hypot(dx, dy), st = 26 * dt;
     if (d <= st) { P.x = gx; P.y = gy; HEAL.path.shift(); } else { P.x += dx / d * st; P.y += dy / d * st; HEAL.vx = dx / d; HEAL.vy = dy / d; } P.f += st; }
   if (HEAL.sh === 'bed' && !COURT.fade && NOW - HEAL.t0 > 4.5) healDays();
-  if (HEAL.sh === 'days' && !COURT.fade) { const k = kingC(); if (!k.alive || G.over) { healEnd(true); return; }
+  if (HEAL.sh === 'days' && !COURT.fade) { const k = kingC(); if (!k.alive || G.over || k.id !== HEAL.king) { healEnd(true); return; }
     const d = G.day - HEAL.d0; if (d !== HEAL.lastD) { HEAL.lastD = d; if (HEAL.lines[d]) HEAL.cap = HEAL.lines[d]; if (d === 0) HEAL.vis = HEAL.vis.slice(0, 1); else if (d === 1) HEAL.vis = []; const F = HEAL.fever;
       if (F && d === F.day) { F.st = 1; HEAL.end += F.ext; k.wound += F.ext; HEAL.tot += F.ext; HEAL.cap = 'Ночью начался жар. Лекарь пускает кровь, капеллан молится у изголовья.'; Snd.sfx('bell'); }
-      if (F && F.st === 1 && d === F.day + 2) { F.st = 2; if (R.chance(k.age > 50 ? 0.15 : 0.06)) { HEAL.cap = ''; healEnd(true); charDies(k, 'от раны: ' + (k.woundBy || 'зверь') + ', ' + (k.woundP || 'рана')); return; } HEAL.cap = 'Жар спал. Лекарь крестится: «Обошлось, государь».'; }
-      if (G.day + G.frac >= HEAL.end - 1) HEAL.cap = 'Рана затянулась. Лекарь разрешает встать.'; }
+      if (F && F.st === 1 && d === F.day + 2) { F.st = 2; if (R.chance((k.age > 50 ? 0.15 : 0.06) * docK())) { HEAL.cap = ''; healEnd(true); charDies(k, 'от раны: ' + (k.woundBy || 'зверь') + ', ' + (k.woundP || 'рана')); return; } HEAL.cap = 'Жар спал. Лекарь крестится: «Обошлось, государь».'; }
+      if (G.day + G.frac >= HEAL.end - 1) HEAL.cap = HEAL.o.from === 'ill' ? 'Жар отступил. Лекарь разрешает встать.' : 'Рана затянулась. Лекарь разрешает встать.'; }
     if (!UI.modalOpen() && !DLG.open()) { const n = HEAL.fast ? 9 : 3; for (let i = 0; i < n && G.day + G.frac < HEAL.end; i++) worldAdvance(Math.min(0.004, HEAL.end - G.day - G.frac + 1e-6)); }
     if (G.day + G.frac >= HEAL.end - 1e-6) healEnd(false); } });
 TIMEK_EXT.push(() => HEAL.on && HEAL.sh !== 'days' ? 0.02 : 1);
@@ -118,8 +119,8 @@ SPR_EXT.push((L, list) => { const P = COURT.p; if (!P) return;
   if ((HEAL.sh === 'bed' || HEAL.sh === 'days') && L.id === 'keep') for (const v of HEAL.vis) list.push([v.y, 1, v]); });
 // the letterbox, the caption, the day count; the court's own HUD is hidden meanwhile
 { const dh = drawCourtHUD; drawCourtHUD = function () { if (!HEAL.on) { dh(); healBadge(); return; } const bh = 24; ctx.fillStyle = '#07050a'; ctx.fillRect(0, 0, W, bh); ctx.fillRect(0, H - bh - 6, W, bh + 6);
-    if (HEAL.sh === 'days') { const d = clamp(G.day - HEAL.d0 + 1, 1, HEAL.bed + (HEAL.fever && HEAL.fever.st ? HEAL.fever.ext : 0)), nT = Math.round(HEAL.end - HEAL.d0); spr(isNight() ? 'i_moon' : 'i_sun', W / 2 - 92, 9);
-      txt(woundName()[0].toUpperCase() + woundName().slice(1) + ' · день ' + d + ' из ' + nT, W / 2 - 84, 8, '#fff2c8'); bar(W / 2 + 30, 9, 70, 6, (G.day + G.frac - HEAL.d0) / Math.max(1, HEAL.end - HEAL.d0), '#c0353f'); txt(clockStr(), W / 2 + 106, 8, '#a8a0b8', { f: 's' }); }
+    if (HEAL.sh === 'days') { const d = clamp(G.day - HEAL.d0 + 1, 1, HEAL.bed + (HEAL.fever && HEAL.fever.st ? HEAL.fever.ext : 0)), nT = Math.round(HEAL.end - HEAL.d0); const hn = HEAL.o && HEAL.o.from === 'ill' ? sickTitle() : woundName(), hs = hn[0].toUpperCase() + hn.slice(1) + ' · день ' + d + ' из ' + nT, hw = tw(hs), cs = clockStr(), x0 = Math.round(W / 2 - (96 + hw + tw(cs, { f: 's' })) / 2);
+      spr(isNight() ? 'i_moon' : 'i_sun', x0, 9); txt(hs, x0 + 8, 8, '#fff2c8'); bar(x0 + 16 + hw, 9, 70, 6, (G.day + G.frac - HEAL.d0) / Math.max(1, HEAL.end - HEAL.d0), '#c0353f'); txt(cs, x0 + 92 + hw, 8, '#a8a0b8', { f: 's' }); }
     if (HEAL.cap) txt(HEAL.cap, W / 2, H - bh + 2, '#f0e4c8', { al: 'c' });
     const lab = HEAL.sh === 'days' ? (HEAL.fast ? 'Обычно' : 'Быстрее') : 'Дальше'; btn('heal_skip', W - 74, H - 24, 66, 14, { label: lab + ' ▸', style: 'dark', tip: 'Пробел', onClick: () => healSkip() });
     drawStatus(); }; }
