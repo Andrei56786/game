@@ -88,12 +88,14 @@ function pageExport() {
   res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9));
   // значки верхней строки
   const WIC = ['i_star', 'i_sun', 'i_moon', 'i_cloud', 'i_fog', 'i_rain', 'i_snow', 'i_storm', 'i_wind'];
-  res.icons = {}; for (const k of ['shield0', 'i_gold', 'i_men', 'i_food', ...WIC, 'i_seal', 'i_scroll', 'i_book', 'i_pause', 'i_play1', 'i_play2', 'i_play3']) if (SPR[k]) res.icons[k] = [add(SPR[k]), typeof hiIc === 'function' && hiIc(k) ? 1 : 0];
+  res.icons = {}; for (const k of ['shield0', 'i_gold', 'i_men', 'i_food', ...WIC, 'i_seal', 'i_scroll', 'i_book', 'i_pause', 'i_play1', 'i_play2', 'i_play3', 'i_crown', 'i_eye']) if (SPR[k]) res.icons[k] = [add(SPR[k]), typeof hiIc === 'function' && hiIc(k) ? 1 : 0];
+  // карта королевства: войска (mkArmySprites), гербы держав для подсказок, глаз скрытого войска
+  res.mapspr = {}; for (const k of ['a_knight', 'a_foot', 'a_bandit', 'a_wagon', 'a_ox', 'a_tent', 'a_camp', 'i_eye', ...REALM_DEF.map((d, i) => 'shield' + i)]) if (SPR[k]) res.mapspr[k] = add(SPR[k]);
   // чёткие значки книжного шрифта (icons2.js, hiCanvas): растр под масштаб окна V = 2, 3, 4 точки экрана на точку игры;
-  // bar — значок у чисел верхней строки (sprBar, ×1.4), btn — на кнопке скорости (btn с ic: до ×1.6)
+  // bar — значок у чисел верхней строки (sprBar, ×1.4), btn — на кнопке скорости (btn с ic: до ×1.6), one — как есть (spr: корона столицы, глаз; значок до 7×7 — ×1.2 вокруг середины)
   res.hi = {};
   if (typeof hiCanvas === 'function') for (const k in res.icons) { const base = k.slice(2), s = SPR[k]; if (k.slice(0, 2) !== 'i_' || !HI[base]) continue;
-    const q = {}, uses = { bar: 1.4, btn: Math.min(1.6, Math.max(1, (14 - 5) / Math.max(s.width, s.height))) };
+    const q = {}, uses = { bar: 1.4, btn: Math.min(1.6, Math.max(1, (14 - 5) / Math.max(s.width, s.height))), one: s.width <= 7 && s.height <= 7 ? 1.2 : 1 };
     for (const u in uses) { const sc = uses[u]; q[u] = { sc }; for (const V of [2, 3, 4]) { const e = hiCanvas(base, Math.round(V * sc * 100) / 100, ''); q[u][V] = [add(e.c), e.pad]; } }
     res.hi[k] = q; }
   try { res.weather = weatherOf(); } catch (e) { res.weather = { n: '', ic: 'sun' }; }

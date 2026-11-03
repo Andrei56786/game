@@ -57,7 +57,7 @@ func icon(k: String, x: float, y: float) -> float:
 	return sz.x
 
 # чёткий значок (icons2.js в HTML): растр ровно под точки экрана; false — нет такого, пиксельный шрифт или окно ×1
-func _hi(k: String, use: String, X: float, Y: float) -> bool:
+func _hi(k: String, use: String, X: float, Y: float, a: float = 1.0) -> bool:
 	if Art.pixfont:
 		return false
 	var q: Dictionary = Art.D.get("hi", {}).get(k, {}).get(use, {})
@@ -70,7 +70,13 @@ func _hi(k: String, use: String, X: float, Y: float) -> bool:
 	var i: int = int(e[0])
 	var p: float = float(e[1]) / V
 	var r := Art.rect(i)
-	draw_texture_rect_region(Art.page(i), Rect2(X - p, Y - p, r.size.x / V, r.size.y / V), r)
+	if use == "one":
+		# как spr в icons2.js: значок до 7×7 — в 1,2 раза больше вокруг середины своей клетки, по точкам экрана
+		var g := float(q.get("sc", 1.0))
+		var s0 := Art.size(int(Art.D["icons"][k][0]))
+		X = floorf(X) - roundf(s0.x * (g - 1.0) / 2.0 * V) / V
+		Y = floorf(Y) - roundf(s0.y * (g - 1.0) / 2.0 * V) / V
+	draw_texture_rect_region(Art.page(i), Rect2(X - p, Y - p, r.size.x / V, r.size.y / V), r, Color(1, 1, 1, a))
 	return true
 
 # ---------- разговор ----------
@@ -185,18 +191,19 @@ func _top() -> void:
 	icon("shield0", x, 3)
 	x += 16.0
 	var D: Dictionary = Art.D
-	var net: float = float(D.get("net", 0.0))
-	var gs := str(int(float(D.get("gold", 0)) + net * maxi(0, Game.day - int(D.get("day", 0)))))   # казна растёт раз в день
+	var bv := SimText.bar_vals()   # казна растёт раз в день; после открытия карты — из королевства (Sim.G)
+	var net: float = bv.net
+	var gs := SimText.fmt(bv.gold)
 	icon("i_gold", x, 7)
-	txt(gs, x + 8, 6, Art.pal("y"))
+	txt(gs, x + 8, 6, Color.html("#ee7a6a") if bv.gold < 0 else Art.pal("y"))
 	var x2 := x + 10.0 + tw(gs)
 	txt(("+" if net >= 0.0 else "−") + "%.1f" % absf(net), x2, 6, Color.html("#9fe07a") if net >= 0.0 else Color.html("#ee7a6a"), "s")
 	x = x2 + 30.0
 	icon("i_men", x, 7)
-	txt(str(int(D.get("men", 0))), x + 8, 6, Color8(244, 236, 216))
+	txt(SimText.fmt(bv.men), x + 8, 6, Color8(244, 236, 216))
 	x += 42.0
 	icon("i_food", x, 7)
-	txt(str(int(D.get("grain", 0))), x + 8, 6, Color8(244, 236, 216))
+	txt(SimText.fmt(bv.grain), x + 8, 6, Color8(244, 236, 216))
 	x += 48.0
 	var night := Game.is_night()
 	var ds := Game.date_text()

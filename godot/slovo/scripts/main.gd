@@ -107,5 +107,41 @@ func _selftest() -> void:
 	add_child(c)
 	await get_tree().process_frame
 	var ok: bool = c.selftest()
+	ok = _sim_selftest() and ok
 	print("SELFTEST OK" if ok else "SELFTEST FAIL")
 	get_tree().quit(0 if ok else 1)
+
+## королевство без экрана: новая игра в мире из выгрузки, подсказки всех поселений и войск, обзор, казна
+func _sim_selftest() -> bool:
+	var w := WorldData.load_export("res://art")
+	if w == null:
+		print("SIM: нет мира")
+		return false
+	var t0 := Time.get_ticks_msec()
+	Sim.start(w, Game.seed)
+	var ms := Time.get_ticks_msec() - t0
+	var G := Sim.G
+	var n := 0
+	for s: Dictionary in w.setts:
+		n += SimText.settTip(s.id).size()
+	for a: Dictionary in G.armies:
+		n += SimText.armyTip(a).size()
+	for t in range(0, WorldData.NT, 997):
+		n += SimText.tileTip(t).length()
+	var ex := (G.explored as PackedByteArray).count(1)
+	var vis := (G.vis as PackedByteArray).count(2)
+	var seen := 0
+	for a: Dictionary in G.armies:
+		if JS.t(a.alive) and SimIntel.armyVisible(a):
+			seen += 1
+	var bv := SimText.bar_vals()
+	print("SIM: новая игра %d мс, людей %d, войск %d (видно %d), разведано %d клеток, видно %d, казна %.1f, доход %.2f (в выгрузке двора: %s и %s), строк подсказок %d" % [ms,
+		G.chars.size(), G.armies.size(), seen, ex, vis, bv.gold, bv.net, str(Art.D.get("gold")), str(Art.D.get("net")), n])
+	var ok: bool = G.chars.size() > 100 and G.armies.size() > 40 and G.setts.size() == w.setts.size() and ex > 1000 and ex < WorldData.NT and vis > 100 and seen > 0 and seen < G.armies.size()
+	# казна та же, что в выгрузке двора (HTML, то же зерно): с доходом за прожитые при дворе дни
+	var D: Dictionary = Art.D
+	var dg := float(D.get("gold", 0)) + float(D.get("net", 0.0)) * maxi(0, Game.day - int(D.get("day", 0)))
+	ok = ok and absf(bv.gold - dg) < 1.0 and absf(bv.net - float(D.get("net", 0.0))) < 0.01
+	if not ok:
+		print("SIM: проверка королевства не прошла")
+	return ok

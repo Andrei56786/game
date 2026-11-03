@@ -44,6 +44,7 @@ var A := {}              # "f:oak" / "q:mount" → [Rect2i…] в атласе �
 var over_vp: SubViewport
 var qp_vp: SubViewport
 var mini_vp: SubViewport
+var mini_mat: ShaderMaterial
 var chunks := {}         # номер куска → запись окна
 var order: Array = []    # недавно виденные — в конце
 var free_e: Array = []
@@ -86,6 +87,14 @@ func prepare(dir := "res://art") -> void:
 		push_error("MAP: " + stage)
 		return
 	ms.load = Time.get_ticks_msec() - t0
+	# королевство (как newGame3 в HTML): державы, люди, поселения, войска, рынки — по зерну игры, в том же мире
+	if Sim.G.is_empty():
+		stage = "королевство: люди, войска, рынки"
+		await get_tree().process_frame
+		await get_tree().process_frame
+		t0 = Time.get_ticks_msec()
+		Sim.start(w, Game.seed)
+		ms.sim = Time.get_ticks_msec() - t0
 	await build(w)
 	print("MAP READY ", JSON.stringify(ms))
 
@@ -153,10 +162,13 @@ func build(w: WorldData) -> void:
 	await RenderingServer.frame_post_draw
 	T.over = sea_vp.get_texture()
 	mini_vp = _vp(Vector2i(128, 80))
-	var mm := _mat("map_mini")
-	mm.set_shader_parameter("over_tex", T.over)
-	mm.set_shader_parameter("qp_tex", T.qp)
-	_rect(mini_vp, Vector2(128, 80), mm)
+	mini_mat = _mat("map_mini")
+	mini_mat.set_shader_parameter("over_tex", T.over)
+	mini_mat.set_shader_parameter("qp_tex", T.qp)
+	if T.has("exp"):
+		mini_mat.set_shader_parameter("exp_tex", T.exp)
+		mini_mat.set_shader_parameter("fog_on", true)
+	_rect(mini_vp, Vector2(128, 80), mini_mat)
 	await RenderingServer.frame_post_draw
 	T.mini = mini_vp.get_texture()
 	ms.over = Time.get_ticks_msec() - t1
@@ -646,6 +658,18 @@ func set_day(day: int) -> bool:
 		sea_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		_mini_later()
 	return true
+
+## туман войны на мини-карте: маска разведанного (R8, 1 точка на клетку); после смены маски — перерисовать
+func set_fog(tex: Texture2D) -> void:
+	T.exp = tex
+	if mini_mat:
+		mini_mat.set_shader_parameter("exp_tex", tex)
+		mini_mat.set_shader_parameter("fog_on", tex != null)
+		mini_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+func fog_changed() -> void:
+	if mini_vp:
+		mini_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 func _mini_later() -> void:
 	await RenderingServer.frame_post_draw
