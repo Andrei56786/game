@@ -116,8 +116,8 @@ function drawCmdWin(w) {
   if (w.app) { const K = G.chars.filter(c => c.alive && c.realm === 0 && c.prison < 0 && c.age >= 16 && !c.seat && !armyOfGen(c.id) && !c.withKing && c.id !== G.player.char && (c.role === 'knight' || c.role === 'lord' || c.role === 'courtier')).sort((p, q) => q.mar - p.mar).slice(0, 8);
     txt('Новый командир (по Мечу):', x0, y, PAL.y); sbtn('cm_back3', x0 + wR - 60, y - 2, 60, 'Назад', () => { w.app = 0; }); y += 14;
     K.forEach((c, i) => { const yy = y + i * 15; btn('cm_k' + c.id, x0, yy, wR, 13, { label: charName(c) + ' · Меч ' + c.mar + ' · ' + c.traits.map(t => TRAITS[t] ? TRAITS[t].n : t).join(', '), tip: traitTip(c), onClick: () => { const old = charOf(a.gen); if (old) { old.atCourt = 1; old.loy = clamp((old.loy || 60) - 8, 0, 100); } a.gen = c.id; c.atCourt = 0; w.app = 0; log(charName(c) + ' принял командование войском.', 'info'); } }); }); return; }
-  const OB = [['hold', null], ['defend', 'own'], ['attack', 'foe'], ['patrol', 'own'], ['join', 'army'], ['ret', null]];
-  OB.forEach(([k, tg], i) => { const d = CMD[k]; btn('cm_o' + k, x0 + (i % 3) * (wR / 3 + 1), y + Math.floor(i / 3) * 16, wR / 3 - 2, 14, { label: d.n + (tg ? '…' : ''), tip: [d.n, d.d], onClick: () => { if (tg) { w.pick = k; return; } sendOrder(a, { o: k, t: k === 'ret' ? G.realms[0].capital : -1, mode: w.mode }); } }); }); y += 36;
+  const OB = [['hold', null], ['defend', 'own'], ['attack', 'foe'], ['patrol', 'own'], ['join', 'army'], ['ret', null], ['feint', 'foe']];
+  OB.forEach(([k, tg], i) => { const d = CMD[k]; btn('cm_o' + k, x0 + (i % 3) * (wR / 3 + 1), y + Math.floor(i / 3) * 16, wR / 3 - 2, 14, { label: d.n + (tg ? '…' : ''), tip: [d.n, d.d], onClick: () => { if (tg) { w.pick = k; return; } sendOrder(a, { o: k, t: k === 'ret' ? G.realms[0].capital : -1, mode: w.mode }); } }); }); y += Math.ceil(OB.length / 3) * 16 + 4;
   para('«Кто знает, когда сражаться, а когда нет, — побеждает» (гл. 3). Приказ идёт с гонцом: пока он скачет, обстановка может измениться.', x0, y, wR, '#a89878', { f: 's', lh: 9 });
   sbtn('cm_app', x0, Y + HH - 20, 120, 'Сменить командира…', () => { w.app = 1; }); sbtn('cm_dis', x0 + 126, Y + HH - 20, 110, 'Распустить войско', () => { UI.shut(); DLG.say(null, 'Распустить войско ' + (g ? charName(g) : '') + ' (' + voin(armyMen(a)) + ') по домам? Жалованье платить не придётся, но собрать их снова будет непросто.', { choices: [{ t: 'Распустить', fx: () => disbandArmy(a) }, { t: 'Нет', fx: () => { } }], esc: 1 }); }); }
 // ---------- Династия и дома ----------
@@ -194,7 +194,7 @@ function drawSettInfoWin(w) { const sid = w.id, S = G.setts[sid], ws = WD.setts[
   btn('si_ok', X + WW - 96, Y + HH - 24, 80, 16, { label: 'Закрыть', onClick: () => UI.shut() }); }
 // map target picking for orders (UI.target.kind === 'cmd')
 function cmdPickSett(sid) { const tg = UI.target; UI.target = null; const a = armyById(tg.army); if (!a) return; const S = G.setts[sid];
-  if (tg.o === 'attack' && (S.ctrl === 0 || !(hostile(0, S.ctrl) || S.ctrl === 5))) { UI.toast('С хозяевами этой крепости нет войны.'); return; }
+  if ((tg.o === 'attack' || tg.o === 'feint') && (S.ctrl === 0 || !(hostile(0, S.ctrl) || S.ctrl === 5))) { UI.toast('С хозяевами этой крепости нет войны.'); return; }
   if ((tg.o === 'defend' || tg.o === 'patrol') && S.ctrl !== 0) { UI.toast('Это не наша крепость.'); return; }
   if (tg.o === 'join') { UI.toast('Нужно выбрать войско, а не крепость.'); return; } sendOrder(a, { o: tg.o, t: sid, mode: tg.mode }); }
 function cmdPickArmy(b) { const tg = UI.target; UI.target = null; const a = armyById(tg.army); if (!a) return; if (tg.o !== 'join' || b.realm !== 0 || b === a) { UI.toast('Не подходит.'); return; } sendOrder(a, { o: 'join', t: b.id, mode: tg.mode }); }

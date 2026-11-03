@@ -3,7 +3,11 @@ tmp/
 shots/
 /*.html
 tmp_*
-node_modules/
+node_modules
 .godot/
 godot/*/build/
 godot/*/slovo_serif.woff*
+desktop/index.html
+desktop/icon.png
+desktop/out/
+desktop/package-lock.json
