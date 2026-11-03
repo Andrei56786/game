@@ -16,13 +16,13 @@ function tgtList(type) { const C = G.court, king = kingC();
   if (type === 'realm') return [1, 2, 3, 4].filter(t => alive(t)).map(t => ({ id: t, n: realmName(t), sub: opinionWord(opinionOf(t, 0)) + (G.rel[0][t].war ? ' · война' : '') }));
   if (type === 'house') return G.houses.filter(h => h.alive).map(h => ({ id: h.id, n: 'Дом ' + h.name, sub: loyWord(houseSeen(h)) }));
   if (type === 'sett') return G.setts.filter(S => S.owner === 0 && S.ctrl === 0 && WD.setts[S.id].type !== 'village').map(S => ({ id: S.id, n: WD.setts[S.id].name, sub: 'стены ' + S.walls }));
-  if (type === 'tech') return Object.keys(TECH).filter(techAvail).map(k => ({ id: k, n: TECH[k].n, sub: BRANCHES[TECH[k].b].n + ' · ' + TECH[k].cost }));
+  if (type === 'tech') return Object.keys(TECH).filter(k => techAvail(k) || techAhead(k)).map(k => ({ id: k, n: TECH[k].n, sub: BRANCHES[TECH[k].b].n + ' · ' + TECH[k].cost }));
   if (type === 'child') return royalFamily().filter(c => c.age >= 4 && c.age < 18).concat(C.wards.map(charOf).filter(c => c && c.alive)).map(c => ({ id: c.id, n: c.name, sub: yrs(c.age) }));
   if (type === 'char') return G.chars.filter(c => c.alive && c.realm === 0 && c.id !== king.id && (c.atCourt || c.seat || c.role === 'lord' || c.role === 'knight') && c.age >= 16 && c.prison < 0).slice(0, 40).map(c => ({ id: c.id, n: c.name, sub: c.seat ? seatName(c.seat) : houseName(c.house) }));
   return []; }
 function drawCouncilWin3(w) {
   const X = 14, Y = 21, WW = 612, HH = 326, C = G.court; winFrame(X, Y, WW, HH, 'Малый совет', false);
-  { let tx = X + 12; [['Места и поручения', 104], ['Доклады', 64], ['Суд', 44]].forEach(([t, tw0], i) => { btn('tab' + i, tx, Y + 22, tw0, 13, { label: t, style: 'parch', active: UI.tab === i, onClick: () => { UI.tab = i; UI.scroll = 0; }, tip: i === 2 ? ['Судебная книга', 'Все прошения, решённые при дворе: вами, верховным судьёй, регентом или писцами — и насколько мудро.'] : null }); tx += tw0 + 2; }); } w.mode = w.mode || 'intent'; if (!w.seat) w.seat = 'chancellor';
+  { let tx = X + 12; [['Места и поручения', 104, 0], ['Кандидаты', 66, 3], ['Доклады', 60, 1], ['Суд', 40, 2]].forEach(([t, tw0, i]) => { btn('tab' + i, tx, Y + 22, tw0, 13, { label: t, style: 'parch', active: UI.tab === i, onClick: () => { UI.tab = i; UI.scroll = 0; }, tip: i === 2 ? ['Судебная книга', 'Все прошения, решённые при дворе: вами, верховным судьёй, регентом или писцами — и насколько мудро.'] : i === 3 ? ['Кандидаты', 'Все, кого можно посадить за стол совета, — такими, какими вы их знаете. Пташки Ока узнают о них больше.'] : null }); tx += tw0 + 2; }); } w.mode = w.mode || 'intent'; if (!w.seat) w.seat = 'chancellor';
   { // schedule + emergency call (right side of the tab row)
     const nd = nextCouncilDay(), why = canCallCouncil(), open = meetingOpen(), bw = Math.max(tw('Созвать совет сейчас'), tw('Сесть во главе стола')) + 12, bx = X + WW - 12 - bw, ty = Y + 25;
     let s = 'Ближайший совет: ' + WDAY_S[weekdayOf(nd)] + ', ' + (nd % DAYS_SEASON + 1) + ' д. · ' + inDays(nd - G.day);
@@ -31,7 +31,7 @@ function drawCouncilWin3(w) {
     const sw = tw(s, { f: 's' }); txt(s, bx - 6, ty, '#e8d8b0', { al: 'r', f: 's' }); hit(bx - 6 - sw, ty - 1, sw, 9, { id: 'c_next', tip: calendarTip() });
     if (open && G.atCourt && SCREEN === 'court') sbtn('c_go', bx, Y + 22, bw, 'Сесть во главе стола', () => { UI.shut(); goCouncilSeat(); }, { tip: ['Пройти в зал совета и занять место короля.', { t: 'Совет начнётся, когда все советники сядут.', c: UIC.dim }] });
     else sbtn('c_call', bx, Y + 22, bw, 'Созвать совет сейчас', () => callCouncil(), { disabled: !!why, tip: why ? ['Созвать совет нельзя', { t: why + '.', c: UIC.warn }] : ['Экстренный сбор: советники, что сейчас в замке, придут в зал совета в течение часа.', isNight() ? { t: 'Ночью советники будут недовольны (верность −2).', c: UIC.warn } : { t: 'Не чаще раза в день. Если король не придёт за два часа — разойдутся, обидевшись.', c: UIC.dim }] }); }
-  if (UI.tab === 2) { drawCourtBook(w, X, Y, WW, HH); return; }
+  if (UI.tab === 2) { drawCourtBook(w, X, Y, WW, HH); return; } if (UI.tab === 3) { drawCandTab(w, X, Y, WW, HH); return; }
   if (UI.tab === 1) { let y = Y + 42; const L = C.reports.slice().reverse(); const sc = wheelScroll(w, L.length - 6);
     if (!L.length) txt('Докладов пока нет. Дайте поручения — советники отчитаются, когда закончат.', X + 16, y, P3.lab);
     for (const r of L.slice(sc)) { if (y > Y + HH - 24) break; txt(seatName(r.seat) + ' · ' + dateStr(r.day), X + 16, y, PAL.y, { f: 's' }); y += 9; y += para(r.text, X + 16, y, WW - 32, PAL.w, { f: 's', lh: 9 }) + 5; } return; }
@@ -40,9 +40,9 @@ function drawCouncilWin3(w) {
   SEATS.forEach((s, i) => { const yy = y0 + i * 40, c = seatChar(s.k), sel = w.seat === s.k, o = C.orders[s.k];
     rect(X + 10, yy, 200, 38, sel ? P3.sel : i % 2 ? P3.row : P3.row2); if (sel) strokeR(X + 10, yy, 200, 38, '#c9a060');
     if (c) drawPortrait(c, X + 13, yy + 3, 0.5); else { rect(X + 13, yy + 3, 24, 24, '#1a120c'); txt('?', X + 25, yy + 11, UIC.dim, { al: 'c' }); }
-    spr(s.ic, X + 42, yy + 4); txt(s.n, X + 52, yy + 3, PAL.y); if (c) txt(SKN[s.sk] + ' ' + skillOf(c, s.sk), X + 206, yy + 3, skCol(skillOf(c, s.sk)), { al: 'r', f: 's' });
+    spr(s.ic, X + 42, yy + 4); txt(s.n, X + 52, yy + 3, PAL.y); if (c) { const z = skSeen(c, s.sk); txt(SKN[s.sk] + ' ' + z.s, X + 206, yy + 3, z.kn ? skCol(z.v) : '#c8b898', { al: 'r', f: 's' }); }
     txt(c ? c.name : '— место пустует —', X + 42, yy + 14, c ? PAL.w : UIC.warn, { f: 's' });
-    if (o) { const d = ordDef(s.k, o.k); bar(X + 42, yy + 26, 60, 6, o.k === 'research' && G.tech.cur ? (G.tech.prog || 0) / TECH[G.tech.cur].cost : o.prog || 0, '#e0a630'); txt((o.self ? 'сам: ' : '') + (d ? d.n : o.k), X + 106, yy + 25, o.self ? '#b8a888' : '#e8dcc0', { f: 's' }); }
+    if (o) { const d = ordDef(s.k, o.k); bar(X + 42, yy + 26, 60, 6, o.k === 'research' && G.tech.cur ? techFrac(G.tech.cur) : o.prog || 0, '#e0a630'); txt((o.self ? 'сам: ' : '') + (d ? d.n : o.k), X + 106, yy + 25, o.self ? '#b8a888' : '#e8dcc0', { f: 's' }); }
     else if (c) txt('ждёт поручения', X + 42, yy + 25, UIC.dim, { f: 's' });
     hit(X + 10, yy, 200, 38, { id: 'row_cs' + s.k, cursor: true, onClick: () => { w.seat = s.k; w.pick = null; w.app = 0; w.sc = 0; } }); });
   // details
@@ -51,11 +51,11 @@ function drawCouncilWin3(w) {
   if (!c || w.app) { drawCandidates(w, x0, y, wR, s); return; }
   drawPortrait(c, x0, y, 1); strokeR(x0 - 1, y - 1, 50, 50, '#c9a060');
   txt(charName(c), x0 + 56, y, PAL.w); txt((c.house >= 0 ? 'Дом ' + houseName(c.house) + ' · ' : '') + yrs(c.age), x0 + 56, y + 10, P3.lab, { f: 's' });
-  const tl = c.traits.map(t => TRAITS[t] ? TRAITS[t].n : t).join(', '); txt(tl, x0 + 56, y + 20, '#e8c890', { f: 's' }); hit(x0 + 56, y + 19, tw(tl, { f: 's' }), 9, { id: 'c_tr', tip: traitTip(c) });
+  const ts = traitsSeen(c), tl = ts.s; txt(tl, x0 + 56, y + 20, '#e8c890', { f: 's' }); hit(x0 + 56, y + 19, tw(tl, { f: 's' }), 9, { id: 'c_tr', tip: ts.all ? traitTip(c) : ['Нрав виден лишь отчасти', 'Пташки Ока донесут о нём больше.'] });
   skillsLine(c, x0 + 56, y + 30, s.sk); const ls = loySeen(c); txt('Верность: ' + ls.s, x0 + 56, y + 40, ls.v < 35 ? UIC.bad : ls.v > 65 ? UIC.good : PAL.w, { f: 's' });
-  hit(x0 + 56, y + 39, 200, 9, { id: 'c_loy', tip: ['Верность скрыта: вы видите лишь лицо, которое вам показывают.', 'Нечестные кажутся вернее, чем есть.', { t: 'Точно узнать — досье от Ока короля.', c: UIC.dim }] }); y += 54;
+  hit(x0 + 56, y + 39, 200, 9, { id: 'c_loy', tip: ['Верность скрыта: вы видите лишь лицо, которое вам показывают.', 'Нечестные кажутся вернее, чем есть.', { t: 'Точнее узнать — досье от Ока короля или пташки.', c: UIC.dim }] }); y += 54;
   const o = C.orders[w.seat];
-  if (o) { const d = ordDef(w.seat, o.k); const pr = o.k === 'research' && G.tech.cur ? (G.tech.prog || 0) / TECH[G.tech.cur].cost : o.prog || 0; txt('Поручение: ' + (d ? d.n : o.k) + (o.k === 'research' && G.tech.cur ? ' «' + TECH[G.tech.cur].n + '»' : '') + ' · ' + (o.self ? 'сам, без поручения (сила ×' + selfK(w.seat).toFixed(2) + ')' : o.mode === 'order' ? 'приказ' : 'замысел'), x0, y, PAL.w, { f: 's' }); if (o.self) hit(x0, y - 1, wR - 76, 9, { id: 'c_self', tip: ['Советник взялся за дело сам', 'Без ваших поручений советник берётся за дешёвые и безопасные дела, тратит вдвое меньше золота, но и работает вполсилы. Если в казне меньше 200 золотых — ждёт.', { t: 'Чем дольше вы молчите (больше двух недель), тем хуже он угадывает вашу волю: сила падает до ×0.4.', c: UIC.warn }, { t: 'Любое ваше поручение заменит это дело.', c: UIC.dim }] }); bar(x0, y + 10, 140, 6, pr, '#e0a630'); txt(Math.round(pr * 100) + '%', x0 + 146, y + 9, P3.lab, { f: 's' });
+  if (o) { const d = ordDef(w.seat, o.k); const pr = o.k === 'research' && G.tech.cur ? techFrac(G.tech.cur) : o.prog || 0; txt('Поручение: ' + (d ? d.n : o.k) + (o.k === 'research' && G.tech.cur ? ' «' + TECH[G.tech.cur].n + '»' : '') + ' · ' + (o.self ? 'сам, без поручения (сила ×' + selfK(w.seat).toFixed(2) + ')' : o.mode === 'order' ? 'приказ' : 'замысел'), x0, y, PAL.w, { f: 's' }); if (o.self) hit(x0, y - 1, wR - 76, 9, { id: 'c_self', tip: ['Советник взялся за дело сам', 'Без ваших поручений советник берётся за дешёвые и безопасные дела, тратит вдвое меньше золота, но и работает вполсилы. Если в казне меньше 200 золотых — ждёт.', { t: 'Чем дольше вы молчите (больше двух недель), тем хуже он угадывает вашу волю: сила падает до ×0.4.', c: UIC.warn }, { t: 'Любое ваше поручение заменит это дело.', c: UIC.dim }] }); bar(x0, y + 10, 140, 6, pr, '#e0a630'); txt(Math.round(pr * 100) + '%', x0 + 146, y + 9, P3.lab, { f: 's' });
     sbtn('c_cancel', x0 + wR - 70, y + 2, 70, 'Отменить', () => { if (o.k === 'research') G.tech.cur = null; C.orders[w.seat] = null; UI.toast('Поручение отменено.'); }); y += 22; }
   else { txt('Поручений нет. Если промолчите — советник возьмётся за дело сам, но вполсилы.', x0, y, UIC.dim, { f: 's' }); y += 12; }
   // mode
@@ -138,7 +138,7 @@ function drawDynWin(w) {
       btn('dh_w' + H0.id, X + 500, yy + 18, 98, 13, { label: 'Взять воспитанника', disabled: !!ward, tip: ['Ребёнок дома будет расти при дворе.', 'Дом польщён — и дважды подумает, прежде чем бунтовать.'], onClick: () => takeWard(H0.id) });
       hit(X + 10, yy, 380, 44, { id: 'row_h' + H0.id, tip: [H0.d] }); }); return; }
   // family
-  const card = (c, x, yy, role) => { drawPortrait(c, x, yy, 1); strokeR(x - 1, yy - 1, 50, 50, '#c9a060'); txt(charName(c), x + 54, yy, PAL.y); txt(role + ' · ' + yrs(c.age), x + 54, yy + 11, P3.lab, { f: 's' }); skillsLine(c, x + 54, yy + 22); const tl = c.traits.map(t => TRAITS[t] ? TRAITS[t].n : t).join(', '); txt(tl, x + 54, yy + 33, '#e8c890', { f: 's' }); hit(x + 54, yy + 32, tw(tl, { f: 's' }), 9, { id: 'row_ft' + c.id, tip: traitTip(c) }); };
+  const card = (c, x, yy, role) => { drawPortrait(c, x, yy, 1); strokeR(x - 1, yy - 1, 50, 50, '#c9a060'); txt(charName(c), x + 54, yy, PAL.y); txt(role + ' · ' + yrs(c.age) + sickTag(c), x + 54, yy + 11, c.ill ? UIC.warn : P3.lab, { f: 's' }); skillsLine(c, x + 54, yy + 22); const tl = c.traits.map(t => TRAITS[t] ? TRAITS[t].n : t).join(', '); txt(tl, x + 54, yy + 33, '#e8c890', { f: 's' }); hit(x + 54, yy + 32, tw(tl, { f: 's' }), 9, { id: 'row_ft' + c.id, tip: traitTip(c) }); };
   card(king, X + 16, y, king.fem ? 'Королева' : 'Король'); if (C.regent >= 0) txt('Регент: ' + regentName(), X + 16, y + 52, UIC.warn, { f: 's' });
   const sp = king.spouse >= 0 ? charOf(king.spouse) : null;
   if (sp && sp.alive) { card(sp, X + 310, y, famRole(sp) + (sp.house >= 0 ? ' из дома ' + houseName(sp.house) : '')); txt((sp.aff >= 70 ? 'любит вас' : sp.aff >= 40 ? 'ровна с вами' : 'холодна с вами') + (sp.preg && sp.pregKnown ? ' · ждёт ребёнка' : ''), X + 364, y + 44, sp.preg && sp.pregKnown ? UIC.good : P3.lab, { f: 's' }); }
@@ -147,27 +147,14 @@ function drawDynWin(w) {
   if (!kids.length) txt('Детей нет — а без наследника династия оборвётся.', X + 16, y, UIC.bad, { f: 's' });
   kids.slice(0, 5).forEach((c, i) => { const yy = y + i * 30; rect(X + 12, yy, WW - 24, 28, i % 2 ? P3.row : P3.row2); drawPortrait(c, X + 14, yy + 2, 0.5);
     txt(charName(c) + (heir && heir.id === c.id ? ' — наследник' + (c.fem ? 'ца' : '') : ''), X + 42, yy + 3, heir && heir.id === c.id ? PAL.y : PAL.w, { f: 's' });
-    const b = c.betrothed >= 0 ? charOf(c.betrothed) : null, m = c.spouse >= 0 ? charOf(c.spouse) : null; txt(yrs(c.age) + (c.dowager ? ' · вдовствующая королева' : '') + (m ? ' · в браке с ' + m.name : b ? ' · обручен' + (c.fem ? 'а' : '') + ' с ' + b.name + ' (дом ' + houseName(b.house) + ')' : '') + (c.away ? ' · живёт в доме мужа' : ''), X + 42, yy + 13, P3.lab, { f: 's' });
+    const b = c.betrothed >= 0 ? charOf(c.betrothed) : null, m = c.spouse >= 0 ? charOf(c.spouse) : null; txt(yrs(c.age) + sickTag(c) + (c.dowager ? ' · вдовствующая королева' : '') + (m ? ' · в браке с ' + m.name : b ? ' · обручен' + (c.fem ? 'а' : '') + ' с ' + b.name + ' (дом ' + houseName(b.house) + ')' : '') + (c.away ? ' · живёт в доме мужа' : ''), X + 42, yy + 13, P3.lab, { f: 's' });
     skillsLine(c, X + 330, yy + 9);
     if (!b && !m && !c.dowager && c.age >= 4) btn('df_b' + c.id, X + WW - 100, yy + 7, 84, 13, { label: 'Обручить…', active: w.pick === c.id, tip: ['Помолвка с отпрыском знатного дома.', 'Дом станет куда вернее короне, остальные честолюбцы — ревнуют.', { t: 'Свадьба — в 16 лет.', c: UIC.dim }], onClick: () => { w.pick = w.pick === c.id ? null : c.id; } }); });
   y += Math.min(5, kids.length) * 30 + 4;
   if (w.pick !== null && w.pick !== undefined && charOf(w.pick)) { const c = charOf(w.pick); txt('С каким домом обручить ' + c.name + '?', X + 16, y + 2, PAL.y, { f: 's' }); G.houses.filter(h => h.alive).forEach((H0, i) => btn('df_h' + H0.id, X + 160 + i * 74, y, 72, 13, { label: H0.name, tip: 'Верность: ' + loyWord(houseSeen(H0)), onClick: () => { betroth(c.id, H0.id); w.pick = null; } })); y += 16; }
   const wards = C.wards.map(charOf).filter(c => c && c.alive); txt('Воспитанники: ' + (wards.length ? wards.map(c => c.name + ' (' + yrs(c.age) + ', ' + (c.happy >= 2 ? 'доволен' : c.happy >= 0 ? 'скучает' : 'несчастен') + ')').join(', ') : 'нет'), X + 16, Math.min(y + 2, Y + HH - 14), P3.lab, { f: 's' }); }
-// ---------- Знания ----------
-function drawTechWin(w) {
-  const X = 14, Y = 21, WW = 612, HH = 326, T = G.tech; winFrame(X, Y, WW, HH, 'Знания королевства', false); w.mode = w.mode || 'intent';
-  const m = seatChar('magister'), o = G.court.orders.magister; let y = Y + 22;
-  if (m) { const sp = clamp(m.lrn / 9, 0.3, 2.4) * orderEff(m, 'magister', w.mode); txt('Магистр ' + m.name + ' · Книга ' + m.lrn + ' · ≈' + sp.toFixed(1) + ' очка в день', X + 16, y, PAL.w, { f: 's' }); }
-  else txt('Магистра нет — назначьте его в Совете, иначе знания не движутся.', X + 16, y, UIC.bad, { f: 's' });
-  txt('Записи без темы: ' + Math.round(T.bank || 0) + ' очк.', X + WW - 196, y, P3.lab, { al: 'r', f: 's' }); modeToggle(X + WW - 188, y - 3, 170, w.mode, md => { w.mode = md; }); y += 14;
-  BRANCHES.forEach((B, b) => { const x = X + 12 + b * 148; spr(B.ic, x, y + 1); txt(B.n, x + 10, y, PAL.y);
-    branchTechs(b).forEach((k, r) => { const t = TECH[k], st = techState(k), yy = y + 12 + r * 66, cw = 144, chh = 62;
-      rect(x, yy, cw, chh, st === 'done' ? '#2e4a24' : st === 'cur' ? '#5a4030' : st === 'avail' ? '#3a2a1e' : '#211812'); strokeR(x, yy, cw, chh, st === 'cur' ? '#f7d35c' : st === 'avail' ? '#c9a060' : st === 'done' ? '#7fb04c' : '#4a3424');
-      txt(t.n, x + 4, yy + 3, st === 'locked' ? '#7a6a5a' : PAL.hi || '#fff'); txt(st === 'done' ? '✓' : t.cost + '', x + cw - 4, yy + 3, st === 'done' ? UIC.good : P3.lab, { al: 'r', f: 's' });
-      const ln = wrap(t.d, cw - 8, { f: 's' }).slice(0, 4); ln.forEach((l, i) => txt(l, x + 4, yy + 14 + i * 9, st === 'locked' ? '#6a5a4a' : '#d8c8a8', { f: 's' }));
-      if (st === 'cur') bar(x + 4, yy + chh - 9, cw - 8, 6, (T.prog || 0) / t.cost, '#e0a630');
-      hit(x, yy, cw, chh, { id: 'tc_' + k, cursor: st === 'avail', tip: [t.n, t.d, st === 'locked' ? { t: 'Сначала: «' + TECH[t.req].n + '»', c: UIC.warn } : st === 'done' ? { t: 'Изучено', c: UIC.good } : st === 'cur' ? { t: 'Изучается: ' + Math.round(T.prog || 0) + ' из ' + t.cost, c: UIC.dim } : { t: 'Щелчок — поручить магистру', c: UIC.dim }],
-        onClick: () => { if (st !== 'avail') return; if (!m) { UI.toast('Нет магистра.'); return; } if (giveOrder('magister', 'research', w.mode, k)) { G.tech.cur = k; UI.toast('Магистр взялся за «' + t.n + '».'); } } }); }); }); }
+// ---------- Знания: the window lives in reignui.js (v3.5–3.6) ----------
+function drawTechWin(w) { }
 // ---------- Письма ----------
 function drawLettersWin(w) { const X = 60, Y = 26, WW = 520, HH = 312, C = G.court; winFrame(X, Y, WW, HH, 'Письма и донесения', true);
   const now = G.day + G.frac, L = C.letters.filter(l => l.arr <= now), way = C.letters.length - L.length; let y = Y + 24; const sc = wheelScroll(w, L.length - 12);

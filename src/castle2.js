@@ -183,26 +183,29 @@ function buildChapel() {
   return L;
 }
 // ---------- the royal forest (hunting grounds) ----------
-function buildForest() {
-  const W0 = 84, H0 = 60, L = mkLoc('forest', 'Королевский лес', W0, H0, 79, true), T = GT, r = mkRng((((G && G.seed) || 1) * 2654435761 + 977) >>> 0);
+function buildForest() { // v3.6: twice the size — twelve clearings, the alder ravine, the bear's corner, the old burn, the elk fen and a thicket in the south-east
+  const W0 = 120, H0 = 84, L = mkLoc('forest', 'Королевский лес', W0, H0, 79, true), T = GT, r = mkRng((((G && G.seed) || 1) * 2654435761 + 977) >>> 0);
   L.dark = 0.92; tfill(L, 0, 0, W0 - 1, H0 - 1, T.GRASS);
   const open = new Uint8Array(W0 * H0), occ = new Uint8Array(W0 * H0), mark = (x, y, v) => { if (x >= 0 && y >= 0 && x < W0 && y < H0) open[y * W0 + x] = Math.max(open[y * W0 + x], v); };
-  const CL = [[14, 30, 5, 4], [30, 13, 7, 5], [34, 46, 8, 6], [64, 16, 7, 5], [68, 44, 8, 6], [44, 30, 4, 3], [76, 30, 5, 6]].map(([cx, cy, rx, ry]) => [cx + r.i(-2, 2), cy + r.i(-2, 2), rx, ry]);
+  const CL = [[14, 30, 5, 4], [30, 13, 7, 5], [34, 46, 8, 6], [64, 16, 7, 5], [68, 44, 8, 6], [44, 30, 4, 3], [76, 30, 5, 6],
+    [18, 66, 7, 5], [62, 69, 8, 6], [98, 13, 7, 5], [100, 40, 7, 6], [96, 68, 8, 6]].map(([cx, cy, rx, ry]) => [cx + r.i(-2, 2), cy + r.i(-2, 2), rx, ry]);
   for (const [cx, cy, rx, ry] of CL) for (let y = cy - ry; y <= cy + ry; y++) for (let x = cx - rx; x <= cx + rx; x++) if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) mark(x, y, 1);
   for (let y = 21; y <= 37; y++) for (let x = 0; x <= 12; x++) mark(x, y, 1);
   // the stream (north to south), then the trail across it (fords)
-  let sx = 50 + r.i(-2, 2); for (let y = 0; y < H0; y++) { if (y % 3 === 0 && r.f() < 0.5) sx = clamp(sx + r.pick([-1, 1]), 46, 56); tfill(L, sx, y, sx + 1, y, T.WATER); sfill(L, sx, y, sx + 1, y); mark(sx, y, 3); mark(sx + 1, y, 3); mark(sx - 1, y, 1); mark(sx + 2, y, 1); }
-  const pc = CL[2]; for (let y = pc[1] - 2; y <= pc[1] + 2; y++) for (let x = pc[0] - 3; x <= pc[0] + 3; x++) if (((x - pc[0]) / 3.2) ** 2 + ((y - pc[1]) / 2.2) ** 2 <= 1) { tfill(L, x, y, x, y, T.WATER); sfill(L, x, y, x, y); mark(x, y, 3); }
+  let sx = 50 + r.i(-2, 2); for (let y = 0; y < H0; y++) { if (y % 3 === 0 && r.f() < 0.5) sx = clamp(sx + r.pick([-1, 1]), 46, 55); tfill(L, sx, y, sx + 1, y, T.WATER); sfill(L, sx, y, sx + 1, y); mark(sx, y, 3); mark(sx + 1, y, 3); mark(sx - 1, y, 1); mark(sx + 2, y, 1); }
+  const pond = (c, kx, ky) => { for (let y = c[1] - ky; y <= c[1] + ky; y++) for (let x = c[0] - kx; x <= c[0] + kx; x++) if (((x - c[0]) / (kx + 0.2)) ** 2 + ((y - c[1]) / (ky + 0.2)) ** 2 <= 1) { tfill(L, x, y, x, y, T.WATER); sfill(L, x, y, x, y); mark(x, y, 3); } };
+  pond(CL[2], 3, 2); const fen = CL[11]; pond([fen[0] - 3, fen[1] + 1], 2, 1); pond([fen[0] + 3, fen[1] - 2], 1, 1);   // the pond; the pools of the elk fen
   const path = (x, y) => { if (x < 0 || y < 0 || x >= W0 || y >= H0) return; const i = y * W0 + x; tfill(L, x, y, x, y, L.ter[i] === T.WATER ? T.SAND : T.DIRT); L.solid[i] = 0; mark(x, y, 2); };
   let y = 30; const trail = []; for (let x = 0; x < W0 - 2; x++) { if (x > 7 && r.f() < 0.22) y = clamp(y + r.pick([-1, 1]), 24, 36); trail.push([x, y]); path(x, y); path(x, y - 1); mark(x, y + 1, 1); mark(x, y - 2, 1); }
   const branch = (i0, c, sw) => { let [x, yy] = trail[i0]; const [x1, y1] = c; for (let k = 0; k < 300 && (x !== x1 || yy !== y1); k++) { let nx = x, ny = yy; if (x !== x1 && (yy === y1 || r.f() < 0.5)) nx += Math.sign(x1 - x); else ny += Math.sign(y1 - yy); if (sw && L.ter[ny * W0 + nx] === T.WATER) break; x = nx; yy = ny; path(x, yy); mark(x + 1, yy, 1); mark(x - 1, yy, 1); } };
-  branch(30, CL[1]); branch(34, CL[2], 1); branch(62, CL[3]); branch(66, CL[4]);
+  branch(30, CL[1]); branch(34, CL[2], 1); branch(62, CL[3]); branch(66, CL[4]); branch(18, CL[7]); branch(70, CL[8]); branch(96, CL[9]); branch(100, CL[10]); branch(92, CL[11], 1);
   for (let x = 0; x < W0; x++) { sfill(L, x, 0, x, 0); sfill(L, x, H0 - 1, x, H0 - 1); } for (let yy = 0; yy < H0; yy++) { if (yy < 27 || yy > 33) sfill(L, 0, yy, 0, yy); sfill(L, W0 - 1, yy, W0 - 1, yy); }
-  // trees: denser towards the edges, pines in the north
+  // trees: denser towards the edges and in the south-eastern thicket, pines in the north and the east
+  const thick = (tx, ty) => tx > 70 && tx < 92 && ty > 50 && ty < 80 ? 0.2 : 0;
   const tree = (tx, ty) => { const i = ty * W0 + tx; if (L.solid[i] || open[i]) return; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (occ[(ty + dy) * W0 + tx + dx]) return;
-    const pine = r.f() < (ty < 22 ? 0.7 : tx > 60 ? 0.5 : 0.25), k = pine ? 'pine' : 'oak', v = r.i(0, 5); place(L, k, { seed: 300 + v * 17 + (pine ? 7 : 0), ck: 'f' + k + v }, tx, ty, { cx: tx * CT + 8, solid: [tx, ty, tx, ty], shadow: pine ? [12, 4] : [20, 6] }); occ[i] = 1; };
-  for (let ty = 1; ty < H0 - 1; ty++) for (let tx = 1; tx < W0 - 1; tx++) { const edge = Math.min(tx, ty, W0 - 1 - tx, H0 - 1 - ty); if (r.f() < (edge < 3 ? 0.7 : 0.2 + 0.08 * Math.sin(tx * 0.21 + ty * 0.13))) tree(tx, ty); }
-  for (let k = 0; k < 170; k++) { const tx = r.i(2, W0 - 3), ty = r.i(2, H0 - 3), i = ty * W0 + tx; if (L.solid[i] || open[i] >= 2 || occ[i]) continue; const p = r.f();
+    const pine = r.f() < (ty < 22 ? 0.7 : tx > 86 ? 0.6 : tx > 60 ? 0.45 : 0.25), k = pine ? 'pine' : 'oak', v = r.i(0, 5); place(L, k, { seed: 300 + v * 17 + (pine ? 7 : 0), ck: 'f' + k + v }, tx, ty, { cx: tx * CT + 8, solid: [tx, ty, tx, ty], shadow: pine ? [12, 4] : [20, 6] }); occ[i] = 1; };
+  for (let ty = 1; ty < H0 - 1; ty++) for (let tx = 1; tx < W0 - 1; tx++) { const edge = Math.min(tx, ty, W0 - 1 - tx, H0 - 1 - ty); if (r.f() < (edge < 3 ? 0.7 : 0.2 + thick(tx, ty) + 0.08 * Math.sin(tx * 0.21 + ty * 0.13))) tree(tx, ty); }
+  for (let k = 0; k < 360; k++) { const tx = r.i(2, W0 - 3), ty = r.i(2, H0 - 3), i = ty * W0 + tx; if (L.solid[i] || open[i] >= 2 || occ[i]) continue; const p = r.f() - thick(tx, ty);
     if (p < 0.33) place(L, 'bush', { seed: k, flower: r.f() < 0.2 ? 1 : 0, ck: 'fb' + (k % 5) }, tx, ty, { dx: -4, solid: [tx, ty, tx, ty] });
     else if (p < 0.47) place(L, 'rock', { seed: k % 4 + 1, ck: 'rk' + (k % 4) }, tx, ty, { dx: -3, solid: [tx, ty, tx, ty] });
     else if (p < 0.58) { if (L.solid[i + 1] || occ[i + 1]) continue; place(L, 'log', {}, tx, ty, { solid: [tx, ty, tx + 1, ty] }); occ[i + 1] = 1; }
@@ -214,8 +217,8 @@ function buildForest() {
   place(L, 'campfire', {}, 8, 27, { anim: 4, fps: 6, solid: [8, 27, 8, 27], light: { r: 44, col: '#ff9030', a: 0.85, fl: 0.25, dy: -4 } }); place(L, 'woodpile', {}, 9, 25, { solid: [9, 25, 10, 25] }); place(L, 'log', {}, 10, 27, {});
   spot(L, 'f_gate', 3, 30, 'right'); spot(L, 'f_fire', 8, 28, 'up'); spot(L, 'f_lodge', 5, 27, 'down'); spot(L, 'f_dogs', 6, 30, 'right');
   door(L, 0, 27, 0, 33, 'yard', 71 * CT + 8, 10 * CT + 16, 'left', { label: 'Назад, в замок' });
-  const nm = ['Поляна у сторожки', 'Оленья поляна', 'Тихий пруд', 'Кабанья балка', 'Волчий лог', 'Поляна у брода', 'Дальняя поляна'];
-  L.rooms = CL.map(([cx, cy, rx, ry], i) => [cx - rx, cy - ry, cx + rx, cy + ry, nm[i]]).concat([[0, 21, 12, 37, 'Охотничья сторожка'], [0, 0, W0 - 1, H0 - 1, 'Королевский лес']]);
+  const nm = ['Поляна у сторожки', 'Оленья поляна', 'Тихий пруд', 'Кабанья балка', 'Волчий лог', 'Поляна у брода', 'Дальняя поляна', 'Ольховый овраг', 'Медвежий угол', 'Глухариный бор', 'Старая гарь', 'Лосиная топь'];
+  L.rooms = CL.map(([cx, cy, rx, ry], i) => [cx - rx, cy - ry, cx + rx, cy + ry, nm[i]]).concat([[71, 51, 91, 79, 'Чаща'], [0, 21, 12, 37, 'Охотничья сторожка'], [0, 0, W0 - 1, H0 - 1, 'Королевский лес']]);
   L.clearings = CL; L.trail = trail; L.open = open; return L;
 }
 // ---------- new staff, beds, prisoners, animals ----------

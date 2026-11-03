@@ -100,20 +100,20 @@ function drawCourtTop() {
   rect(0, 0, W, 19, PAL.o); rect(0, 0, W, 18, '#2a1d16'); hline(0, 0, W, '#4a3020'); hline(0, 17, W, '#6a4428');
   let x = 4; spr('shield0', x, 3); hit(x, 2, 12, 14, { id: 'tb_realm', cursor: true, tip: 'Держава (R)', onClick: () => UI.open({ k: 'realm' }) }); x += 16;
   const bg = bookGold(), net = (r.inc || 0) - (r.exp || 0);
-  spr('i_gold', x, 7); txt(fmt(bg), x + 8, 6, bg < 0 ? UIC.bad : PAL.y); let x2 = x + 10 + tw(fmt(bg)); txt((net >= 0 ? '+' : '−') + Math.abs(net).toFixed(1), x2, 6, net >= 0 ? UIC.good : UIC.bad, { f: 's' });
+  sprBar('i_gold', x, 7); txt(fmt(bg), x + 8, 6, bg < 0 ? UIC.bad : PAL.y); let x2 = x + 10 + tw(fmt(bg)); txt((net >= 0 ? '+' : '−') + Math.abs(net).toFixed(1), x2, 6, net >= 0 ? UIC.good : UIC.bad, { f: 's' });
   hit(x, 2, x2 + 26 - x, 14, { id: 'tb_gold', tip: () => goldTip3() }); x = x2 + 30;
   const men = G.armies.filter(a => a.alive && a.realm === 0 && a.kind === 'lord').reduce((s, a) => s + armyMen(a), 0);
-  spr('i_men', x, 7); txt(fmt(men), x + 8, 6, PAL.w); hit(x, 2, 36, 14, { id: 'tb_men', tip: ['Войска державы в поле: ' + voin(men), 'Ими командуют ваши рыцари — приказы идут гонцами.', { t: 'V — войска и командиры', c: UIC.dim }], onClick: () => UI.open({ k: 'cmd' }) }); x += 42;
-  const gr = Math.round(G.court.grain || 0); spr('i_food', x, 7); txt(fmt(gr), x + 8, 6, gr < 300 ? UIC.warn : PAL.w); hit(x, 2, 40, 14, { id: 'tb_grain', tip: ['Амбары столицы: ' + gr + ' мер зерна (со слов сенешаля)', 'Запас на голодный год и для войска.'] }); x += 44;
+  sprBar('i_men', x, 7); txt(fmt(men), x + 8, 6, PAL.w); hit(x, 2, 36, 14, { id: 'tb_men', tip: ['Войска державы в поле: ' + voin(men), 'Ими командуют ваши рыцари — приказы идут гонцами.', { t: 'V — войска и командиры', c: UIC.dim }], onClick: () => UI.open({ k: 'cmd' }) }); x += 42;
+  const gr = Math.round(G.court.grain || 0); sprBar('i_food', x, 7); txt(fmt(gr), x + 8, 6, gr < granRes() || granFamine() ? UIC.warn : PAL.w); hit(x, 2, 44, 14, { id: 'tb_grain', tip: granTip(), onClick: () => UI.open({ k: 'supply' }) }); x += 48;
   // date, clock, weather
   const Wt = weatherOf(), ds = dateStr(G.day), clk = clockStr(), night = isNight();
   const endX = W - 266; let wn = Wt.n; let totW = tw(ds) + 6 + 8 + tw(clk) + 12 + 9 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = ''; totW -= tw(Wt.n, { f: 's' }); }
-  const cx0 = Math.max(x + 6, endX - totW); txt(ds, cx0, 6, '#fff2c8'); let x3 = cx0 + tw(ds) + 6; spr(night ? 'i_moon' : 'i_sun', x3, 7); txt(clk, x3 + 8, 6, night ? '#a8c8ff' : '#ffe8a0'); x3 += 12 + tw(clk); spr('i_' + Wt.ic, x3, 7); if (wn) txt(wn, x3 + 9, 6, '#c8d8e8', { f: 's' });
+  const cx0 = Math.max(x + 6, endX - totW); txt(ds, cx0, 6, '#fff2c8'); let x3 = cx0 + tw(ds) + 6; sprBar(night ? 'i_moon' : 'i_sun', x3, 7); txt(clk, x3 + 8, 6, night ? '#a8c8ff' : '#ffe8a0'); x3 += 12 + tw(clk); sprBar('i_' + Wt.ic, x3, 7); if (wn) txt(wn, x3 + 9, 6, '#c8d8e8', { f: 's' });
   hit(cx0, 2, x3 + 30 - cx0, 14, { id: 'tb_date', tip: () => [ds + ', ' + clk, 'Погода: ' + Wt.n, 'При дворе день длится ' + Math.round(COURT_SPD[Math.max(1, G.speed)] / 60 * 10) / 10 + ' мин. Ночью можно лечь спать в покоях.'].concat(calendarTip()) });
   let bx = W - 262;
   speedBtns(bx);
   bx += 62; const unread = (G.court.letters || []).filter(l => !l.read && l.arr <= G.day + G.frac).length;
-  const B = [['i_seal', 'Малый совет (K)', () => UI.open({ k: 'council' }), 'council'], ['i_flag', 'Войска и командиры (V)', () => UI.open({ k: 'cmd' }), 'cmd'], ['i_family', 'Семья и знатные дома (F)', () => UI.open({ k: 'dyn' }), 'dyn'], ['i_flask', 'Знания (J)', () => UI.open({ k: 'tech' }), 'tech'], ['i_chron', 'Летопись правления (T)', () => UI.open({ k: 'chron' }), 'chron'], ['i_wood', 'Замыслы и стройки (P)' + (projCur() ? ' — идёт: «' + PROJK[projCur().k].n + '»' : ''), () => UI.open({ k: 'proj' }), 'proj'], ['i_food', 'Снабжение и обоз (O)' + (typeof supStatus === 'function' && supStatus() ? ' — ' + supStatus() : ''), () => UI.open({ k: 'supply' }), 'supply'],
+  const B = [['i_seal', 'Малый совет (K)', () => UI.open({ k: 'council' }), 'council'], ['i_flag', 'Войска и командиры (V)', () => UI.open({ k: 'cmd' }), 'cmd'], ['i_family', 'Семья и знатные дома (F)', () => UI.open({ k: 'dyn' }), 'dyn'], ['i_flask', 'Знания (J)', () => UI.open({ k: 'tech' }), 'tech'], ['i_chron', 'Летопись правления (T)', () => UI.open({ k: 'chron' }), 'chron'], ['i_build', 'Замыслы и стройки (P)' + (projCur() ? ' — идёт: «' + PROJK[projCur().k].n + '»' : ''), () => UI.open({ k: 'proj' }), 'proj'], ['i_food', 'Снабжение и обоз (O)' + (typeof supStatus === 'function' && supStatus() ? ' — ' + supStatus() : ''), () => UI.open({ k: 'supply' }), 'supply'],
     ['i_raven', 'Письма (L)' + (unread ? ' — непрочитанных: ' + unread : ''), () => UI.open({ k: 'letters' }), 'letters'], G.visit ? ['i_map', 'Уехать отсюда (Tab)', () => visitLeave(), ''] : ['i_map', 'Карта королевства (Tab)', () => openMapFromCourt(), ''], ['i_book', 'Трактат «Искусство войны» (B)', () => UI.open({ k: 'book', ch: TUT.lastCh() }), 'book'], [Snd.muted() ? 'i_mute' : 'i_snd', 'Звук (M — без звука)', () => sndOpen(), 'sound'], ['i_scroll', 'Меню (Esc)', () => UI.open({ k: 'menu' }), 'menu']];
   B.forEach(([ic, tip, f, k], i) => { btn('ctb' + i, bx + i * 16, 2, 15, 14, { ic, style: 'dark', tip, onClick: f, active: !!(k && UI.win && UI.win.k === k) }); if (k === 'letters' && unread) { rect(bx + i * 16 + 10, 1, 6, 6, PAL.o); rect(bx + i * 16 + 11, 2, 4, 4, '#e04030'); } });
 }
@@ -185,7 +185,7 @@ function drawCourt() {
   if (typeof TUT !== 'undefined') TUT.drawPanel();
   drawWindow(); drawModals(); drawToast();
 }
-function courtSyncVisual() { const r = G.realms[0], C = G.court; COURT.goldPiles = clamp(Math.round(r.gold / 90), 0, 10); COURT.sacks = clamp(Math.round((C.grain || 0) / 250), 0, 6);
+function courtSyncVisual() { const r = G.realms[0], C = G.court; COURT.goldPiles = clamp(Math.round(r.gold / 90), 0, 10); COURT.sacks = clamp(Math.round((C.grain || 0) / (granCap() / 6)), 0, 6);
   const king = charOf(G.player.char), kids = (king.kids || []).map(charOf).filter(c => c && c.alive); COURT.hasBaby = kids.some(c => c.age < 3) ? 1 : 0; COURT.hasKids = kids.some(c => c.age >= 3 && c.age < 12) ? 1 : 0; }
 function courtEnter(spName) {
   if (G.visit) visitCleanup(); buildCourt(); projApply(); const king = charOf(G.player.char);
@@ -210,11 +210,11 @@ function doAct(a) {
     case 'gate': gateAct(); break;
     case 'stable': stableAct(); break;
     case 'dovecote': UI.open({ k: 'letters' }); break;
-    case 'granary': DLG.say(null, 'Амбар пахнет пылью и хлебом. ' + (G.court.seats.seneschal >= 0 ? 'Сенешаль ведёт счёт мерам: сейчас в закромах около ' + Math.round(G.court.grain || 0) + ' мер.' : 'Сенешаля нет — никто толком не знает, сколько здесь зерна.')); break;
+    case 'granary': DLG.say(null, granTalk()); break;
     case 'kitchen': DLG.say(null, R.pick(['Из кухни тянет луком, дымом и свежим хлебом. Повариха гремит котлами.', 'На кухне ощипывают кур. Кто-то напевает старую песню о походе на север.', 'Поварята при виде короля роняют половник.'])); break;
     case 'smithy': DLG.say(null, 'Кузнец бьёт молотом по раскалённой полосе. ' + (hasTech('mail') ? 'Вдоль стены висят новые кольчуги — по новому способу, частым плетением.' : 'Наконечники копий, подковы, гвозди — кузня работает на войско.')); break;
     case 'barracks': barracksAct(); break;
-    case 'dummy': if (P.c && P.c.wound > G.day) { { const n = P.c.wound - G.day; UI.toast(woundNot(P.c) + ': меч подождёт (ещё ' + n + ' ' + plural(n, 'день', 'дня', 'дней') + ').'); } break; } if (P.practiceT && NOW - P.practiceT < 1.2) break; P.practiceT = NOW; P.dir = 'up'; Snd.sfx('swish'); setTimeout(() => Snd.sfx('thud'), 180); COURT.parts.push({ k: 'puff', x: a.x, y: a.y - 10, vx: 0, vy: -6, t: 0, life: 0.6 });
+    case 'dummy': if (P.c && sickNot(P.c)) { UI.toast(sickNot(P.c) + ': меч подождёт.'); break; } if (P.c && P.c.wound > G.day) { { const n = P.c.wound - G.day; UI.toast(woundNot(P.c) + ': меч подождёт (ещё ' + n + ' ' + plural(n, 'день', 'дня', 'дней') + ').'); } break; } if (P.practiceT && NOW - P.practiceT < 1.2) break; P.practiceT = NOW; P.dir = 'up'; Snd.sfx('swish'); setTimeout(() => Snd.sfx('thud'), 180); COURT.parts.push({ k: 'puff', x: a.x, y: a.y - 10, vx: 0, vy: -6, t: 0, life: 0.6 });
       if (!G.court.drillDay || G.court.drillDay !== G.day) { G.court.drillDay = G.day; const k = charOf(G.player.char); k.mx = (k.mx || 0) + 1; if (k.mx >= 6) { k.mx = 0; k.mar = Math.min(20, k.mar + 1); UI.toast('Рука крепнет: Меч короля +1'); } else UI.toast('Упражнение с мечом. Солдаты одобрительно гудят.'); } break;
     case 'fountain': DLG.say(null, 'Вода в фонтане холодная и прозрачная. На дне блестят монеты — придворные бросают их на счастье.', { choices: [{ t: 'Бросить монету (1 зол.)', fx: () => { G.realms[0].gold -= 1; Snd.sfx('coin'); UI.toast(R.pick(['Монета булькнула. Говорят, к удаче.', 'Монета легла рядом с чужими желаниями.', 'Кто-то из служанок хихикнул за кустами.'])); } }, { t: 'Уйти', fx: () => { } }], esc: 1 }); break;
     case 'well': DLG.say(null, R.pick(['Глубокий колодец. Ведро скрипит на вороте.', 'Вода в колодце сладкая — замок выдержит долгую осаду.'])); break;

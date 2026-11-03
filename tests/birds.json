@@ -1,0 +1,19 @@
+[
+{"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+{"eval": "UI.win=null; window._d=(n)=>{ const errs=[]; for(let i=0;i<n;i++){ try{ G.day++; councilDaily(); researchDaily(); for (const f of DAILY_EXT) f(); }catch(e){ errs.push(String(e.stack||e).slice(0,240)); } } return errs; }; const ch=seatChar('chancellor'), e=seatChar('eye'); 'eye '+e.name+' intr '+e.intr+' chanc '+JSON.stringify(skSeen(ch,'dip'))+' traits '+traitsSeen(ch).s+' motive '+JSON.stringify(motiveOf(ch))"},
+{"expect": "skSeen(seatChar('chancellor'),'dip').ex && traitsSeen(seatChar('chancellor')).all && !motiveSeen(seatChar('chancellor'))", "label": "советники: навыки и нрав известны, мотив скрыт"},
+{"eval": "const PY=PETS.find(d=>d.k==='young'); let p=null; for(let i=0;i<40;i++){ const q=PY.mk(); if(q && !q.spy){ p=q; break; } } p.k='young'; window._p=p; const c=charOf(p.c); 'pet '+c.name+' claim '+c.claim+' text '+p.text+' imp '+impLine(c)+' rec '+JSON.stringify(birdRec(c))"},
+{"expect": "skSeen(charOf(_p.c),'mar').kn===0 && /–/.test(skSeen(charOf(_p.c),'mar').s) && !/умею военное/.test(_p.text)", "label": "проситель: навыки на глаз"},
+{"eval": "const ch=PETS.find(d=>d.k==='young').ch(_p); ch[0].fx(); const c=charOf(_p.c); const e=_d(40); 'errs '+e.join(' / ')+' lv '+birdRec(c).lv+' on '+JSON.stringify(G.court.birdOn)+' reps '+G.court.reports.filter(r=>/Пташки/.test(r.text)).slice(-6).map(r=>r.text).join(' | ')"},
+{"expect": "birdRec(charOf(_p.c)).lv>=3 && G.court.reports.some(r=>/Пташки/.test(r.text))", "label": "пташки узнали о новичке"},
+{"eval": "const PY=PETS.find(d=>d.k==='young'); let p=null; for(let i=0;i<200;i++){ const q=PY.mk(); if(q && q.spy){ p=q; break; } } p.k='young'; window._s=p; PY.ch(p)[0].fx(); const c=charOf(p.c); G.court.net[p.spy]=2; 'spy '+c.name+' for '+realmName(p.spy)+' claim '+c.claim+' intr '+c.intr+' hidden '+isHiddenSpy(c)+' imp '+impLine(c)"},
+{"expect": "isHiddenSpy(charOf(_s.c)) && G.court.secrets.some(s=>s.k==='spy'&&s.who[0]===_s.c)", "label": "шпион под видом просителя"},
+{"eval": "const c=charOf(_s.c); let n=0; while(!spyKnown(c) && n<200){ _d(1); n++; } 'days '+n+' lv '+birdRec(c).lv+' known '+spyKnown(c)+' net '+G.court.net[_s.spy]+' motive '+JSON.stringify(motiveSeen(c))+' letters '+G.court.letters.slice(0,2).map(l=>l.subj+': '+l.text).join(' | ')"},
+{"expect": "spyKnown(charOf(_s.c)) && G.court.net[_s.spy]<2", "label": "пташки раскрыли шпиона; он успел выдать осведомителей"},
+{"eval": "UI.open({k:'council'}); UI.tab=3; UI.win.sel=_s.c; 'ok'"}, {"wait": 400}, {"shot": "birds_cand_spy.png"},
+{"eval": "UI.win.sel=_p.c; UI.win.cs='lrn'; 'ok'"}, {"wait": 300}, {"shot": "birds_cand.png"},
+{"eval": "UI.tab=0; UI.win.seat='magister'; UI.win.app=1; 'ok'"}, {"wait": 300}, {"shot": "birds_council.png"},
+{"eval": "UI.win=null; const PY=PETS.find(d=>d.k==='young'); const q=PY.mk(); q.k='young'; q.id=G.nextId++; const c=charOf(q.c); const n={c, petition:q, key:'test'}; let er=''; try { petitionDialog(n); } catch(e) { er='ERR '+e; } er+'dlg '+(DLG.cur&&DLG.cur.pages.map(p=>p.join(' ')).join(' / '))"},
+{"wait": 600}, {"eval": "if (DLG.cur) { DLG.cur.page=DLG.cur.pages.length-1; DLG.cur.full=1; DLG.cur.shown=1e9; } 'ok'"}, {"wait": 300}, {"shot": "birds_petition.png"},
+{"eval": "DLG.q=[]; DLG.close(); UI.open({k:'eye'}); 'ok'"}, {"wait": 300}, {"shot": "birds_eye.png"}
+]

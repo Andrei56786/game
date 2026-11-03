@@ -1,0 +1,8 @@
+[
+{"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+{"eval": "UI.win=null; G.speed=1; npcSnap(false); COURT.loc='yard'; COURT.p.x=43*CT+8; COURT.p.y=34*CT+11; COURT.p.sit=null; snapCam(); walkTo(54*CT+8, 34*CT+11); 'path '+(COURT.path?COURT.path.map(p=>p.join(',')).join(' '):'none')"},
+{"expect": "COURT.path && COURT.path.every(p => p[1] === 34)", "label": "дорога у казарм идёт прямо, мимо башни"},
+{"wait": 3500},
+{"expect": "COURT.p.x/CT > 53", "label": "король прошёл между казармами и угловой башней"},
+{"shot": "yard_pass.png"}
+]

@@ -20,10 +20,8 @@ const TECH_SD = { rotation: 'Доход +8% · зерно +2', ledgers: 'Дох�
   drill: 'Учения: опыт ×2', mail: 'Рукопашная ≈+8%', crossbow: 'Стрелки метче на 15%', engines: 'Осада на 40% быстрее', ciphers: 'Шпионам труднее', pigeons: 'Вести за полдня',
   informants: 'Сеть Ока растёт сама', antidotes: 'Семья болеет реже', posts: 'Гонцы ×1,6', laws: 'Смута тише · суд лучше', chancery: 'Советники не обижаются', townhalls: 'Доход +6% · смута ниже',
   guilds: 'Доход +6%', banks: 'Доход +8%', plate: 'Латники и рыцари ≈+12%', bombards: 'Осада на 60% быстрее', surgery: 'Раны заживают быстрее', printing: 'Знания +25%', estates: 'Смута ниже · дома вернее', standing: 'Ополчение служит 60 дней' };
-{ const ta = techAvail; techAvail = function (k) { return ta(k) && (TECH[k].era || 0) <= eraNow(); }; }
 { const ti = techIncK; techIncK = function () { return ti() + (hasTech('guilds') ? 0.06 : 0) + (hasTech('banks') ? 0.08 : 0); }; }
 { const tx = techXp; techXp = function (realm, xp) { const o = tx(realm, xp); if (realm !== 0 || !G.tech || !hasTech('plate') || o === xp) return o; o.sword = (o.sword || 0) + 24; o.knight = (o.knight || 0) + 24; return o; }; }
-{ const tp = techProgress; techProgress = function (p) { return tp(hasTech('printing') ? p * 1.25 : p); }; }
 { const wk = woundKing; woundKing = function (sev, part, by) { const d = wk(sev, part, by); RST().hurt++; if (sev >= 2) chron('Король ранен' + (by === 'турнир' ? ' на турнире' : by === 'кабан' ? ' кабаном' : by === 'медведь' ? ' медведем' : '') + ': ' + part + '.', 'wound', 'hurt', 2);
   if (!hasTech('surgery')) return d; const cut = Math.floor(d / 3); kingC().wound -= cut; return d - cut; }; }
 // ---------- the chronicle ----------

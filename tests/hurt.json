@@ -10,7 +10,7 @@
 "wait": 1200
 },
 {
-"eval": "const HU=COURT.hunt, P=COURT.p, L=LOCS.forest; HU.wpn='bow'; const b=COURT.ani.find(x=>x.loc==='forest'&&x.game===1&&x.kind==='boar'&&x.st!=='dead'); window.__boar=b; const [tx,ty]=nearFree(L,Math.floor(b.x/CT)+5,Math.floor(b.y/CT)); __go(tx*CT+8,ty*CT+12); P.dir='left'; for (const n of COURT.npcs) if (n.follow) { n.x=P.x+300; n.y=P.y; n.path=null; } gameCharge(b); __run(25); G.speed=0; 'wind: '+b.st+'/'+b.cp+' kd '+Math.round(Math.hypot(b.x-P.x,b.y-P.y))+' parts '+COURT.parts.length"
+"eval": "const HU=COURT.hunt, P=COURT.p, L=LOCS.forest; HU.wpn='bow'; const b=COURT.ani.find(x=>x.loc==='forest'&&x.game===1&&x.kind==='boar'&&x.st!=='dead'); window.__boar=b; const clear=(x0,y0,x1,y1)=>{ for (let k=0; k<=32; k++) if (!aniFree(L, x0+(x1-x0)*k/32, y0+(y1-y0)*k/32, b)) return false; return true; }; const lane=(bx,by,px,py)=>clear(bx,by,px+24,py-2) && clear(bx,by-4,px+24,py-6) && clear(bx,by+4,px+24,py+2); let spot=null; for (let r=5; r<=7 && !spot; r++) { const px=b.x+r*CT, py=b.y+2; if (lane(b.x,b.y,px,py)) spot=[px,py]; } if (!spot) { const t0x=Math.floor(b.x/CT), t0y=Math.floor(b.y/CT); let bd=1e9; for (let ty=3; ty<L.h-3; ty++) for (let tx=3; tx<L.w-10; tx++) { const d=Math.abs(tx-t0x)+Math.abs(ty-t0y); if (d>=bd) continue; const bx=tx*CT+8, by=ty*CT+10; if (lane(bx,by,bx+5*CT,by+2)) { bd=d; spot=[bx+5*CT,by+2]; b.x0=bx; b.y0=by; } } if (spot) { b.x=b.x0; b.y=b.y0; } } __go(spot[0],spot[1]); P.dir='left'; for (const n of COURT.npcs) if (n.follow) { n.x=P.x+300; n.y=P.y; n.path=null; } gameCharge(b); __run(25); G.speed=0; 'wind: '+b.st+'/'+b.cp+' kd '+Math.round(Math.hypot(b.x-P.x,b.y-P.y))+' parts '+COURT.parts.length"
 },
 {
 "shot": "hurt_wind.png"

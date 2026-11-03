@@ -72,7 +72,7 @@ function newGame3(seed, opt) {
   // the king's retinue: lives at court (not on the map) until the king rides out
   const ret = mkArmy(0, 'player', king.id, capW.x, capW.y, { sword: 10, knight: 6, horse: 6, archer: 8 }); Object.assign(ret, { food: 340, fodder: 80, water: 4, arrows: 300, weap: 10, horses: 2, wagons: 1, morale: 70 });
   G.armies = G.armies.filter(a => a !== ret); G.player.army = ret.id;
-  G.court = { seats: {}, orders: {}, hidden: 0, susp: 0, reports: [], letters: [], secrets: [], grain: 1200, wards: [ward.id], regent: -1, prestige: 0, net: { 1: 0, 2: 1, 3: 0, 4: 0 }, known: {}, guard: 0, incK: 1, taxK: 1, retinue: ret, meetDay: -1, meetDone: -1, musters: [], royals: [], view: 0 };
+  G.court = { seats: {}, orders: {}, hidden: 0, susp: 0, reports: [], letters: [], secrets: [], grain: 6000, wards: [ward.id], regent: -1, prestige: 0, net: { 1: 0, 2: 1, 3: 0, 4: 0 }, known: {}, guard: 0, incK: 1, taxK: 1, retinue: ret, meetDay: -1, meetDone: -1, musters: [], royals: [], view: 0 };
   for (const s of SEATS) G.court.seats[s.k] = -1; for (const k in seat) { G.court.seats[k] = seat[k].id; seat[k].seat = k; }
   G.tech = { done: {}, cur: null, prog: 0, bank: 4 }; G.couriers = []; G.atCourt = 1;
   for (const c of G.chars) if (c.realm === 0 && c.loy === undefined) c.loy = 60;

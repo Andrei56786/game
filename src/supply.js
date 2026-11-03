@@ -28,33 +28,35 @@ const supHorses = a => mountedN(a.u) + (a.horses || 0) + (a.wagons || 0) * 2;
 const supGraze = () => [0.55, 0.7, 0.4, 0][seasonOf(G.day)] * 0.8;       // what the grass gives on an average road, a little cautious
 const supWagMax = a => Math.max(2, Math.floor(4 * (armyMen(a) / 100 + 1)));  // beyond that the train slows the march by a quarter
 function supDaysOf(a) { const m = Math.max(1, supMen(a)), h = supHorses(a), r = rangedN(a.u);
-  return { food: a.food / m, fodder: h ? a.fodder / Math.max(0.05, h * (1 - supGraze())) : 99, water: a.water, arrows: r ? a.arrows / r : -1 }; }
+  return { food: a.food / (m * eatK()), fodder: h ? a.fodder / Math.max(0.05, h * (1 - supGraze())) : 99, water: a.water, arrows: r ? a.arrows / r : -1 }; }
 function supWant(a, D) { const r = rangedN(a.u);
-  return { food: Math.max(0, Math.ceil(supMen(a) * D - a.food)), fodder: Math.max(0, Math.ceil(supHorses(a) * D * (1 - supGraze()) - a.fodder)), arrows: r ? Math.max(0, r * 30 - a.arrows) : 0 }; }
+  return { food: Math.max(0, Math.ceil(supMen(a) * D * eatK() - a.food)), fodder: Math.max(0, Math.ceil(supHorses(a) * D * (1 - supGraze()) - a.fodder)), arrows: r ? Math.max(0, r * 30 - a.arrows) : 0 }; }
 function supBuy(S, sid, k, want, budget) { let n = Math.floor(Math.min(want, S.mk[k] || 0)); if (n <= 0 || budget <= 0) return { n: 0, cost: 0 };
   const K = PRICE_K(sid); let cost = buyCost(S, k, n) * K;
   for (let i = 0; i < 14 && n > 0 && cost > budget; i++) { n = Math.floor(n * clamp(budget / cost * 0.98, 0.3, 0.98)); cost = buyCost(S, k, n) * K; }
   if (n <= 0) return { n: 0, cost: 0 }; mkTake(S, k, n); if (S.ctrl !== G.player.realm) dutyTo(S.ctrl, cost * 0.05); return { n, cost }; }
 // what filling a force up to D days would take: wagons to buy, grain from the crown granary, gold for the market
 const SUP_N = { food: 'еды', fodder: 'фуража', arrows: 'стрел', wagons: 'повозок' };
-function supCost(a, D, S, sid, grain) { const o = supS(), w = supWant(a, D), room = Math.max(0, armyCap(a) - armyLoad(a)), extra = w.food + w.fodder + w.arrows / 10;
-  const k = o.wag && extra > room ? clamp(Math.ceil((extra - room) / WAGON_CAP), 0, Math.max(0, Math.min(supWagMax(a) - (a.wagons || 0), S ? Math.floor(S.mk.wagons || 0) : 0))) : 0;
-  const fod = w.fodder + Math.ceil(k * 2 * D * (1 - supGraze())), g = Math.min(w.food, grain), K = S ? PRICE_K(sid) : 1;
-  return { k, g, cost: S ? (buyCost(S, 'wagons', k) + buyCost(S, 'food', w.food - g) + buyCost(S, 'fodder', fod) + buyCost(S, 'arrows', w.arrows)) * K : 0 }; }
-// fill one force up to D days: the crown granary first (keeps 400 for a siege), then the market; wagons when the load will not fit.
+function supCost(a, D, S, sid, grain, carts) { carts = carts || 0; const o = supS(), w = supWant(a, D), room = Math.max(0, armyCap(a) - armyLoad(a)), extra = w.food + w.fodder + w.arrows / 10;
+  const k = o.wag && extra > room ? clamp(Math.ceil((extra - room) / WAGON_CAP), 0, Math.max(0, Math.min(supWagMax(a) - (a.wagons || 0), (S ? Math.floor(S.mk.wagons || 0) : 0) + carts))) : 0;
+  const own = Math.min(k, carts), fod = w.fodder + Math.ceil(k * 2 * D * (1 - supGraze())), g = Math.min(w.food, grain), K = S ? PRICE_K(sid) : 1;
+  return { k, own, g, fod, cost: S ? (buyCost(S, 'wagons', k - own) + buyCost(S, 'food', w.food - g) + buyCost(S, 'fodder', fod) + buyCost(S, 'arrows', w.arrows)) * K : 0 }; }
+// fill one force up to D days: the crown granary first (above the untouchable reserve, granary.js), then the market; wagons when the load
+// will not fit — at the capital the crown's carts from the villages first, free.
 // When the gold will not stretch to D days, the quartermaster plans for fewer days rather than buying wagons he cannot fill.
 function supFill(a, D, src) { const o = supS(), r = G.realms[G.player.realm], S = src.S, C = G.court, lack = {};
-  let budget = Math.max(0, r.gold - o.res), spent = 0; const got = { food: 0, grain: 0, fodder: 0, arrows: 0, wagons: 0 }, D0 = D;
-  const grain = src.grain && C ? Math.max(0, Math.floor((C.grain || 0) - 400)) : 0;
-  if (S && supCost(a, D, S, src.sid, grain).cost > budget) { let lo = Math.min(D, Math.max(0, Math.floor(supDaysOf(a).food))), hi = D;
-    if (lo < hi) { while (hi - lo > 1) { const m = (lo + hi) >> 1; if (supCost(a, m, S, src.sid, grain).cost <= budget) lo = m; else hi = m; } if (lo >= 1 && lo < D0) { D = lo; lack.gold = 'на ' + dn(D0) + ' золота не хватило — взял на ' + dn(D); } } }
+  let budget = Math.max(0, r.gold - o.res), spent = 0; const got = { food: 0, grain: 0, fodder: 0, arrows: 0, wagons: 0, carts: 0 }, D0 = D;
+  const grain = src.grain && C ? granFree() : 0, gs = src.grain && C ? granS() : null, carts = gs ? gs.carts || 0 : 0;
+  if (S && supCost(a, D, S, src.sid, grain, carts).cost > budget) { let lo = Math.min(D, Math.max(0, Math.floor(supDaysOf(a).food))), hi = D;
+    if (lo < hi) { while (hi - lo > 1) { const m = (lo + hi) >> 1; if (supCost(a, m, S, src.sid, grain, carts).cost <= budget) lo = m; else hi = m; } if (lo >= 1 && lo < D0) { D = lo; lack.gold = 'на ' + dn(D0) + ' золота не хватило — взял на ' + dn(D); } } }
   const room = () => Math.max(0, Math.floor(armyCap(a) - armyLoad(a)));
   const buy = (k, n) => { if (n <= 0) return 0; if (!S) { lack.mk = 'рынка нет'; return 0; } const q = supBuy(S, src.sid, k, n, budget); budget -= q.cost; spent += q.cost; r.gold -= q.cost; got[k] += q.n;
     if (q.n < n) { if ((S.mk[k] || 0) < 1) lack['e' + k] = 'на рынке нет ' + SUP_N[k]; else if (!lack.gold) lack.gold = 'не хватило золота'; } return q.n; };
   let w = supWant(a, D); const need = w.food + w.fodder + w.arrows / 10;
   if (need > room()) { const k = Math.min(Math.ceil((need - room()) / WAGON_CAP), supWagMax(a) - (a.wagons || 0));
     if (!o.wag) lack.room = 'обоз полон (покупка повозок выключена)'; else if (k <= 0) lack.room = 'обоз полон: больше повозок замедлят марш';
-    else { const n = buy('wagons', k); a.wagons = (a.wagons || 0) + n; if (n < k && !lack.gold && !lack.ewagons) lack.room = 'обоз полон'; }
+    else { const own = gs ? Math.min(k, gs.carts || 0) : 0; if (own) { gs.carts -= own; a.wagons = (a.wagons || 0) + own; got.carts = own; }
+      const n = k > own ? buy('wagons', k - own) : 0; a.wagons = (a.wagons || 0) + n; if (own + n < k && !lack.gold && !lack.ewagons) lack.room = 'обоз полон'; }
     w = supWant(a, D); }
   let f = Math.min(w.food, room()); if (f < w.food && !lack.room) lack.room = 'обоз полон';
   if (grain && f > 0) { const g = Math.min(f, grain); if (g > 0) { C.grain -= g; a.food += g; got.grain = g; f -= g; } }
@@ -63,9 +65,9 @@ function supFill(a, D, src) { const o = supS(), r = G.realms[G.player.realm], S 
   const ar = Math.min(w.arrows, room() * 10); if (ar > 0) a.arrows += buy('arrows', ar);
   a.water = waterCap(a); return { got, spent, lack }; }
 function supLine(a, q) { const d = supDaysOf(a), r = rangedN(a.u);
-  let s = 'еда на ' + dn(Math.floor(d.food)) + (supHorses(a) ? ', фураж на ' + dn(Math.min(99, Math.floor(d.fodder))) : '') + (r ? ', стрел ' + fmt(a.arrows) : '') + ', бочки полны, повозок ' + (a.wagons || 0) + (q && q.got.wagons ? ' (+' + q.got.wagons + ')' : '');
+  let s = 'еда на ' + dn(Math.floor(d.food)) + (supHorses(a) ? ', фураж на ' + dn(Math.min(99, Math.floor(d.fodder))) : '') + (r ? ', стрел ' + fmt(a.arrows) : '') + ', бочки полны, повозок ' + (a.wagons || 0) + (q && (q.got.wagons || q.got.carts) ? ' (+' + ((q.got.wagons || 0) + (q.got.carts || 0)) + ')' : '');
   const L = q ? [...new Set(Object.values(q.lack))] : []; return s + (L.length ? ' — ' + L.join('; ') : '') + '.'; }
-function supBought(q) { const g = q.got, p = []; if (g.grain) p.push(g.grain + ' мер из амбара'); if (g.food) p.push('еды ' + fmt(g.food)); if (g.fodder) p.push('фуража ' + fmt(g.fodder)); if (g.arrows) p.push('стрел ' + fmt(g.arrows)); if (g.wagons) p.push(g.wagons + ' ' + plural(g.wagons, 'повозку', 'повозки', 'повозок')); return p.join(', '); }
+function supBought(q) { const g = q.got, p = []; if (g.grain) p.push(fmt(g.grain) + ' мер из амбара'); if (g.carts) p.push(podv(g.carts) + ' с обозного двора'); if (g.food) p.push('еды ' + fmt(g.food)); if (g.fodder) p.push('фуража ' + fmt(g.fodder)); if (g.arrows) p.push('стрел ' + fmt(g.arrows)); if (g.wagons) p.push(g.wagons + ' ' + plural(g.wagons, 'повозку', 'повозки', 'повозок')); return p.join(', '); }
 // the forces the quartermaster looks after: the king's army in the field, or (at court) the army at the capital and the king's retinue
 function supForces() { const pa = playerArmy(); if (pa) return [{ a: pa, n: 'Войско короля' }]; const C = G.court, out = [];
   if (C) out.push({ a: C.retinue || null, n: 'Свита короля', ret: 1 }); // the king always rides with it: supplied first
@@ -226,7 +228,7 @@ WIN_EXT.supply = function (w) { const X = 14, Y = 21, WW = 612, HH = 326, o = su
     txt('цель ' + dn(D), LX + LW - 6, ly + 5, P3.lab, { al: 'r', f: 's' }); hit(LX + LW - 70, ly + 2, 66, 10, { id: 'st' + f.n, tip: ['Цель обоза: на ' + dn(D), 'Светлая черта на полосах — эта цель.'] });
     let yy = ly + 16; if (f.who) { txt('ведёт ' + f.who, LX + 6, yy, UIC.dim, { f: 's' }); hit(LX + 4, yy - 2, LW - 8, 10, { id: 'sw' + f.n, tip: 'Если король возглавит это войско, свита вольётся в него вместе с обозом.' }); yy += 9; }
     const cw = (LW - 20) / 2, c2 = LX + 14 + cw, h = supHorses(a), rn = rangedN(a.u), wl = wd.full || wd.d >= 0 ? null : a.water / -wd.d, ld = armyLoad(a) / Math.max(1, armyCap(a));
-    supBar(LX + 6, yy, cw, d.food, D, 'i_food', dn(Math.floor(d.food)), lv(d.food), ['Еда: ' + fmt(a.food), 'Каждый ест 1 в день — раненые и больные тоже. Человек несёт 3, повозка — 400.'], 'sb0' + f.n);
+    supBar(LX + 6, yy, cw, d.food, D, 'i_food', dn(Math.floor(d.food)), lv(d.food), ['Еда: ' + fmt(a.food), 'Каждый ест 1 в день, зимой 1,2 — раненые и больные тоже. Человек несёт 3, повозка — 400.'], 'sb0' + f.n);
     supBar(c2, yy, cw, h ? Math.min(99, d.fodder) : 0, h ? D : 0, 'i_fodder', h ? dn(Math.min(99, Math.floor(d.fodder))) : 'коней нет', h ? lv(d.fodder) : 3, ['Фураж: ' + fmt(a.fodder), 'Коней, вьючных и упряжных: ' + h + '. Трава даёт часть корма, зимой — ничего.'], 'sb1' + f.n); yy += 11;
     supBar(LX + 6, yy, cw, a.water, 0, 'i_water', Math.round(a.water) + '/' + waterCap(a), wl === null || wl >= 3 ? 2 : wl >= 1.5 ? 1 : 0, ['Вода: бочки ' + Math.round(a.water) + ' из ' + waterCap(a) + (wl !== null ? ' — хватит ≈ на ' + dn(Math.floor(wl)) : ''), 'Сегодня: ' + wd.s + '.'], 'sb2' + f.n, Math.max(1, waterCap(a)));
     supBar(c2, yy, cw, rn ? a.arrows / rn : 0, rn ? 30 : 0, 'i_arrows', rn ? 'по ' + Math.floor(a.arrows / rn) : 'стрелков нет', rn ? (a.arrows >= rn * 25 ? 2 : a.arrows >= rn * 10 ? 1 : 0) : 3, ['Стрелы: ' + fmt(a.arrows) + (rn ? ', по ' + Math.floor(a.arrows / rn) + ' на стрелка' : ''), 'Стрелку в поход — колчан с запасом: 30 стрел.'], 'sb3' + f.n); yy += 11;
@@ -240,11 +242,17 @@ WIN_EXT.supply = function (w) { const X = 14, Y = 21, WW = 612, HH = 326, o = su
     if (m) line('i_gold', 'Рынок: ' + m.name + ', ' + kmDir(pa, m.x + 0.5, m.y + 0.5));
     if (pa.path && pa.pi < pa.path.length - 1 && o.route) { const md = pathDays(pa, pa.path, pa.pi); if (isFinite(md)) line('i_hourglass', 'В пути ≈' + dn(Math.max(1, Math.round(md))) + ' — запас держим на ' + dn(supTarget(pa))); }
     if (wf > 0.005) line('i_wagon', 'Обоз замедляет марш на ' + Math.round(wf * 100) + '%'); }
-  if (!pa && C) { const S = G.setts[G.realms[G.player.realm].capital], cap = S.id; let fo = 0, fd = 0, ar = 0; for (const f of F) { const a = f.a || { u: { sword: 8, knight: 4, horse: 4, archer: 6 }, food: 300, fodder: 0, arrows: 0, wagons: 1, horses: 0 }; const q = supWant(a, o.days); fo += q.food; fd += q.fodder; ar += q.arrows; }
-    const gr = Math.min(fo, Math.max(0, Math.floor((C.grain || 0) - 400))), cost = (buyCost(S, 'food', Math.max(0, fo - gr)) + buyCost(S, 'fodder', fd) + buyCost(S, 'arrows', ar)) * PRICE_K(cap);
-    const ls = []; if (fo) ls.push('еда ' + fmt(fo) + (gr ? ' (амбар даст ' + fmt(gr) + ')' : '')); if (fd) ls.push('фураж ' + fmt(fd)); if (ls.length && ar) ls.push('стрелы ' + fmt(ar)); else if (ar) ls.push('стрелы ' + fmt(ar));
-    if (ls.length) line('i_gold', 'На ' + dn(o.days) + ' не хватает: ' + ls.join(', ') + ' — на рынке ≈' + Math.round(cost) + ' зол.', '#e8dcc0', 'Снабженец докупит на рынке столицы (и возьмёт повозки, если не влезет).', 'sup_lack');
-    else line('i_star', 'Припасов на ' + dn(o.days) + ' хватает', UIC.good); }
+  if (!pa && C) { const S = G.setts[G.realms[G.player.realm].capital], cap = S.id, gs = granS(); let fo = 0, fd = 0, ar = 0, wg = 0, own = 0, gr = 0, cost = 0, grL = granFree(), cL = gs.carts || 0;
+    for (const f of F) { const a = f.a || { u: { sword: 8, knight: 4, horse: 4, archer: 6 }, food: 300, fodder: 0, arrows: 0, wagons: 1, horses: 0 }, q = supWant(a, o.days), c = supCost(a, o.days, S, cap, grL, cL);
+      fo += q.food; fd += c.fod; ar += q.arrows; wg += c.k; own += c.own; gr += c.g; grL -= c.g; cL -= c.own; cost += c.cost; }
+    const ls = []; if (fo) ls.push('еда ' + fo + (gr ? ' (амбар даст ' + (gr >= fo ? 'всё' : gr) + ')' : '')); if (fd) ls.push('фураж ' + fmt(fd)); if (ar) ls.push('стрелы ' + fmt(ar));
+    if (wg) ls.push(wg + ' ' + plural(wg, 'повозка', 'повозки', 'повозок') + (own ? ' (' + (own >= wg ? 'все' : own) + ' — с обозного двора)' : ''));
+    if (ls.length) line('i_gold', 'На ' + dn(o.days) + ' не хватает: ' + ls.join(', ') + ' — ' + (cost >= 1 ? 'на рынке ≈' + Math.round(cost) + ' зол.' : 'казну не тронем.'), '#e8dcc0', ['Снабженец возьмёт зерно из амбара (сверх неприкосновенного запаса) и подводы с обозного двора, а остальное докупит на рынке столицы.', 'Повозка на рынке — ≈' + Math.round(priceOf(S, 'wagons')) + ' зол.'], 'sup_lack');
+    else line('i_star', 'Припасов на ' + dn(o.days) + ' хватает', UIC.good);
+    ly += 3; const g = Math.round(C.grain || 0), res = granRes();
+    line('i_food', 'Амбар: ' + g + ' из ' + granCap() + ' мер · в поход можно ' + granFree() + (res ? ' (запас ' + res + ' не трогаем)' : ''), g < res ? UIC.warn : '#e8dcc0', granTip(), 'sup_gran');
+    line('i_wagon', 'Обозный двор: ' + podv(gs.carts || 0) + ' от деревень — даром', '#e8dcc0', ['Деревни дают подводы для королевского обоза: до ' + GRAN_CARTS + ' на дворе, по три новых весной, летом и осенью.', 'Недостающие повозки снабженец покупает на рынке.'], 'sup_carts');
+    line('i_hourglass', 'Двор ест ' + merA(granEat()) + ' в день' + (seasonOf(G.day) === 3 ? ' (зима)' : ', зимой ' + granEat(3)) + '. Подвоз: ' + granNext() + '.', '#c8b898', ['Зимой и весной ничего не растёт: двор живёт тем, что засыпали осенью.', 'Войско в поле зимой ест на пятую часть больше.'], 'sup_eat'); }
   // right: the campaign
   const RX = X + 322, RW = WW - 334; let ry = y; txt('На сколько дней', RX, ry, P3.lab, { f: 's' }); ry += 10; const sw0 = Math.floor((RW - 6) / 4);
   SUP_DAYS.forEach((d, i) => btn('sd' + d, RX + i * (sw0 + 2), ry, sw0, 13, { label: dn(d), style: o.days === d && o.dest < 0 ? 'wood' : 'dark', active: o.days === d && o.dest < 0, onClick: () => { o.days = d; o.dest = -1; } })); ry += 18;
@@ -259,7 +267,9 @@ WIN_EXT.supply = function (w) { const X = 14, Y = 21, WW = 612, HH = 326, o = su
   tg('ss_rt', o.route, 'Считать по дороге', 'Когда войско идёт: оставшиеся дни пути ×1,3 + 3, а перед вражеским городом ещё +7 на осаду. Стоим — цель по числу дней.', () => { o.route = o.route ? 0 : 1; });
   tg('ss_wg', o.wag, 'Брать повозки, если не влезает', 'Не больше, чем позволяет скорость марша.', () => { o.wag = o.wag ? 0 : 1; });
   txt('Казна не ниже', RX, ry + 3, '#c8b898', { f: 's' }); const rw = Math.floor((RW - 74) / SUP_RES.length);
-  SUP_RES.forEach((v, i) => btn('ss_r' + v, RX + 72 + i * rw, ry, rw - 2, 12, { label: '' + v, style: o.res === v ? 'wood' : 'dark', active: o.res === v, tip: 'Снабженец не тратит казну ниже ' + v + ' зол.', onClick: () => { o.res = v; } })); ry += 18;
+  SUP_RES.forEach((v, i) => btn('ss_r' + v, RX + 72 + i * rw, ry, rw - 2, 12, { label: '' + v, style: o.res === v ? 'wood' : 'dark', active: o.res === v, tip: 'Снабженец не тратит казну ниже ' + v + ' зол.', onClick: () => { o.res = v; } })); ry += 16;
+  if (C) { const gs = granS(), gw = Math.floor((RW - 74) / GRAN_RES.length); txt('Запас зерна', RX, ry + 3, '#c8b898', { f: 's' });
+    GRAN_RES.forEach((v, i) => btn('ss_g' + v, RX + 72 + i * gw, ry, gw - 2, 12, { label: fmt(v), style: gs.res === v ? 'wood' : 'dark', active: gs.res === v, tip: ['Неприкосновенный запас амбара: ' + fmt(v) + ' мер.', 'Снабженец не берёт его в поход, казначей не продаёт. Он кормит двор до новой жатвы, столицу в осаде и деревни в голодный год.'], onClick: () => { gs.res = v; } })); ry += 18; }
   if (pa) { const sid = settNear(pa.x, pa.y, 1.2), S = sid >= 0 ? G.setts[sid] : null, can = !!S && !hostile(G.player.realm, S.ctrl) && !S.siege;
     btn('ss_buy', RX, ry, RW / 2 - 2, 15, { label: 'Пополнить здесь', ic: 'i_gold', style: can ? 'wood' : 'dark', disabled: !can, tip: can ? 'Докупить на рынке «' + WD.setts[sid].name + '» — на ' + dn(supTarget(pa)) : 'Нужен свой или нейтральный город рядом.', onClick: () => { const t = supTopUp(pa, sid, true); if (t) UI.toast(t.length > 96 ? t.slice(0, 94) + '…' : t); } });
     const wt = supWaterTile(pa), wd = waterDay(pa), canW = wt >= 0 && !wd.full;
@@ -274,6 +284,6 @@ WIN_EXT.supply = function (w) { const X = 14, Y = 21, WW = 612, HH = 326, o = su
 REFS.push({ s: 'Снабжение', t: 'Снабженец, обоз и поручения', b: () => 'Снабженец Готфрид живёт при амбаре во дворе. Он считает еду, фураж, стрелы, воду и повозки и сам их докупает. Окно снабжения — клавиша O (и кнопка на верхней панели).\n' +
   '• Как приказать. Подойдите к любому слуге — пажу, служанке, посыльным Мирко и Оде, поварихе, конюху, садовнику, кузнецу — и дайте поручение «к снабженцу — собрать обоз в поход». Слуга побежит к амбару, снабженец соберёт обоз (час-другой, дольше для большого войска и долгого похода), и слуга вернётся с докладом. Можно поговорить со снабженцем самому или отдать приказ в окне O.\n' +
   '• Длина похода. Назовите число дней (7, 14, 21, 30) или скажите, куда идёте: снабженец посчитает дорогу, неделю на осаду и запас на обратный путь.\n' +
-  '• Откуда берёт. Зерно — из амбара короны (400 мер остаются на случай осады), остальное — с рынка столицы. Казну ниже заданного остатка не тратит. Если груз не влезает, покупает повозки, но не больше, чем позволяет скорость марша. Если король выедет раньше — отдаст, что успел.\n' +
+  '• Откуда берёт. Зерно — из амбара короны (неприкосновенный запас он не трогает; его размер — в окне O), повозки — сперва подводы с обозного двора, которые дают деревни, остальное — с рынка столицы. Казну ниже заданного остатка не тратит. Если груз не влезает, покупает повозки, но не больше, чем позволяет скорость марша. Если король выедет раньше — отдаст, что успел.\n' +
   '• В походе снабженец едет с обозом: в каждом своём или нейтральном городе докупает до цели (когда войско идёт — по оставшейся дороге). Когда еды, воды или фуража остаётся на день-два, он предупреждает и говорит, где ближайшая вода и рынок; в окне O есть «Пополнить здесь» и «Вести к воде».\n' +
   '• Вода. У рек, озёр и поселений бочки наполняются. В лесах, на болотах и в холмах ручьи и родники покрывают почти всю нужду, в полях — около половины, в степи — почти ничего; летом ручьи мелеют, а большому войску их не хватает.' });

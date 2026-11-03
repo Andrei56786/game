@@ -1,0 +1,15 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"waitFor": "VF.ok", "timeout": 10000},
+ {"expect": "RS === 2 && cv.width === 1280", "label": "холст в разрешении экрана (×2 при окне 1280×720)"},
+ {"eval": "UI.win=null; G.speed=0; snapCam(); 'rs '+RS"},
+ {"wait": 400}, {"shot": "font_court.png"},
+ {"eval": "UI.open({k:'council'}); ''"}, {"wait": 300}, {"shot": "font_council.png"},
+ {"eval": "UI.shut(); UI.open({k:'supply'}); ''"}, {"wait": 300}, {"shot": "font_supply.png"},
+ {"eval": "UI.shut(); UI.open({k:'tech'}); ''"}, {"wait": 300}, {"shot": "font_tech.png"},
+ {"eval": "UI.shut(); UI.open({k:'menu'}); ''"}, {"wait": 300}, {"shot": "font_menu.png"},
+ {"eval": "UI.shut(); const p=mkPetition(); ''"},
+ {"eval": "setBookFont(false); UI.open({k:'council'}); ''"}, {"wait": 300}, {"shot": "font_council_px.png"},
+ {"expect": "RS === 1 && cv.width === 640", "label": "пиксельный шрифт — прежний холст 640×360"},
+ {"eval": "setBookFont(true); UI.shut(); ''"}
+]

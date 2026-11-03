@@ -149,7 +149,7 @@ function dailyArmy(a) {
     const y = forageYield(a) * (a.mode === 'forage' ? 1 : a.mode === 'siege' ? 0.6 : 0.5); a.food += y; if (p >= 0) { G.provs[p].dev = Math.min(0.9, G.provs[p].dev + y / 9000); if (isP && ownerOfProv(p) === a.realm) G.provs[p].unrest = Math.min(100, G.provs[p].unrest + 3); }
     a.foraged = y;
   }
-  let eat = men + a.wounded + a.sick; a.townFed = 0;
+  let eat = (men + a.wounded + a.sick) * eatK(); a.townFed = 0; // winter: a fifth more (granary.js)
   if (isP && inOwn) { // quartered in our own town: it feeds the army at market price while the treasury can pay
     const S = G.setts[sid], R0 = G.realms[a.realm], pr = priceOf(S, 'food'); const n = Math.max(0, Math.floor(Math.min(eat, S.mk.food || 0, (R0.gold - 20) / pr)));
     if (n > 0) { mkTake(S, 'food', n); R0.gold -= n * pr; eat -= n; a.townFed = n; }
@@ -169,7 +169,7 @@ function dailyArmy(a) {
   let sr = 0.0012; if (WD.ter[t] === TR.MARSH) sr *= 5; if (season === 3 && !inOwn) sr *= 2.5; if (a.hunger) sr *= 3; if (a.thirst) sr *= 4; if (Wt.sick) sr *= Wt.sick; if (gr === 'difficult') sr *= 1.5; if (a.stay > 12 && !inOwn) sr *= 2; if (a.mode === 'siege' && a.stay > 15) sr *= 1.6;
   const ns = men * sr * R.range(0.5, 1.5); if (ns >= 1) { const k = takeMen(a, Math.round(ns)); a.sick += k; }
   // sick & wounded: recover / die
-  if (a.sick > 0) { const rec = a.sick * (inOwn ? 0.14 : 0.06) * (a.realm === 0 && hasTech('surgery') ? 1.4 : 1), die = a.sick * (WD.ter[t] === TR.MARSH ? 0.03 : 0.012) * (a.hunger ? 2 : 1); a.sick = Math.max(0, a.sick - rec - die); a.u.levy += 0; returnMen(a, rec); a.deaths = (a.deaths || 0) + die; }
+  if (a.sick > 0) { const rec = a.sick * (inOwn ? 0.14 : 0.06) * (a.realm === 0 && hasTech('surgery') ? 1.4 : 1) * (a.kind === 'player' && docInCamp() ? 1.25 : 1), die = a.sick * (WD.ter[t] === TR.MARSH ? 0.03 : 0.012) * (a.hunger ? 2 : 1); a.sick = Math.max(0, a.sick - rec - die); a.u.levy += 0; returnMen(a, rec); a.deaths = (a.deaths || 0) + die; }
   if (a.wounded > 0) { const rec = a.wounded * (inOwn ? 0.09 : 0.035), die = a.wounded * 0.006; a.wounded = Math.max(0, a.wounded - rec - die); returnMen(a, rec); }
   // starvation / thirst deaths
   if (a.hunger > 3) { const k = takeMen(a, Math.ceil(men * 0.01 * (a.hunger - 3))); if (isP && k) log('Голод: ' + (k % 10 === 1 && k % 100 !== 11 ? 'умер ' : 'умерли ') + k + ' ' + plural(k, 'воин', 'воина', 'воинов') + '.', 'bad'); }
@@ -246,7 +246,7 @@ function siegeDaily(a) {
   const gen = charOf(a.gen);
   const wood = woodNear(ws.i); const rate = (wood > 6 ? 12 : wood > 0 ? 8 : 4) * Math.min(1.2, armyMen(a) / 150) * (gen && gen.traits.includes('patient') ? 1.3 : 1) * (a.realm === 0 && hasTech('engines') ? 1.4 : 1) * (a.realm === 0 && hasTech('bombards') ? 1.6 : 1);
   sg.works = Math.min(sg.need, sg.works + rate);
-  S.food -= 1; if (S.food <= 0) { S.food = 0; sg.starve = (sg.starve || 0) + 1; const k = takeU(S.gar, Math.ceil(menOf(S.gar) * 0.04)); }
+  if (!granSiegeFeed(S)) S.food -= 1; if (S.food <= 0) { S.food = 0; sg.starve = (sg.starve || 0) + 1; const k = takeU(S.gar, Math.ceil(menOf(S.gar) * 0.04)); }
   // AI attacker decisions (player decides via UI)
   if (a.kind !== 'player') aiSiegeDecision(a, S);
   if (menOf(S.gar) <= 0) captureSett(a, S, 'гарнизон истаял');
