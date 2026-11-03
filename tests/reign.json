@@ -9,7 +9,7 @@
 {"expect": "eraNow()===1 && UI.modals.some(m=>m.k==='event'&&m.d.e.id==='era') && techAvail('guilds') && techAvail('plate')", "label": "эпоха II наступила"},
 {"wait": 300},
 {"shot": "reign_era.png"},
-{"eval": "UI.modals=[]; G.tech.cur='plate'; G.tech.prog=20; UI.open({k:'tech'}); 'ok'"},
+{"eval": "UI.modals=[]; G.tech.cur='plate'; techInit().pp.plate=20; UI.open({k:'tech'}); 'ok'"},
 {"wait": 300},
 {"shot": "reign_tech1.png"},
 {"eval": "UI.win=null; declareWar(0,1); const a=G.armies.find(x=>x.realm===0&&x.kind==='lord'&&x.alive); const b=G.armies.find(x=>x.realm===1&&x.alive); let r='no armies'; if(a&&b){ const res=autoBattle(a,b); r='battle win '+res.winA; } makePeace(0,1,false,0); const S=G.setts.find(S=>S.owner===1&&WD.setts[S.id].type==='castle'); if (a&&S) captureSett(a,S,'storm'); r+' chron '+G.reign.chron.map(c=>c.t).join(' | ')"},

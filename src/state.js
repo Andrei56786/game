@@ -103,11 +103,11 @@ function mkChar(realm, cul, role, rng, o) {
 }
 // ---------- weather ----------
 const WEATHER = {
-  clear: { n: 'Ясно', ic: 'star', mv: 1, vis: 1 }, cloud: { n: 'Облачно', ic: 'smoke', mv: 1, vis: 0.95 },
-  rain: { n: 'Дождь', ic: 'water', mv: 1.15, vis: 0.8, wet: 1 }, storm: { n: 'Ливень', ic: 'water', mv: 1.3, vis: 0.6, wet: 1, sick: 1.5 },
-  fog: { n: 'Туман', ic: 'smoke', mv: 1.05, vis: 0.5 }, snow: { n: 'Снегопад', ic: 'water', mv: 1.25, vis: 0.7, cold: 1 },
-  blizzard: { n: 'Метель', ic: 'water', mv: 1.6, vis: 0.45, cold: 1, sick: 2 }, heat: { n: 'Зной', ic: 'fire', mv: 1.05, vis: 1, heat: 1, dry: 1 },
-  wind: { n: 'Сухой ветер', ic: 'fire', mv: 1, vis: 1, dry: 1, windy: 1 },
+  clear: { n: 'Ясно', ic: 'star', mv: 1, vis: 1 }, cloud: { n: 'Облачно', ic: 'cloud', mv: 1, vis: 0.95 },
+  rain: { n: 'Дождь', ic: 'rain', mv: 1.15, vis: 0.8, wet: 1 }, storm: { n: 'Ливень', ic: 'storm', mv: 1.3, vis: 0.6, wet: 1, sick: 1.5 },
+  fog: { n: 'Туман', ic: 'fog', mv: 1.05, vis: 0.5 }, snow: { n: 'Снегопад', ic: 'snow', mv: 1.25, vis: 0.7, cold: 1 },
+  blizzard: { n: 'Метель', ic: 'blizz', mv: 1.6, vis: 0.45, cold: 1, sick: 2 }, heat: { n: 'Зной', ic: 'heat', mv: 1.05, vis: 1, heat: 1, dry: 1 },
+  wind: { n: 'Сухой ветер', ic: 'wind', mv: 1, vis: 1, dry: 1, windy: 1 },
 };
 const WTAB = [
   { clear: 30, cloud: 25, rain: 25, storm: 6, fog: 14 },

@@ -1,0 +1,21 @@
+[
+ {"waitFor": "SCREEN==='court' && G && COURT.p", "timeout": 60000},
+ {"waitFor": "VF.ok", "timeout": 10000},
+ {"expect": "RS > 1", "label": "книжный шрифт: холст крупнее ×1 (в 1920×1080 — ×3)"},
+ {"eval": "UI.win=null; G.speed=0; snapCam(); ''"},
+ {"wait": 400}, {"shot": "ic_new_court.png"},
+ {"expect": "hiIc('i_gold') && hiIc('i_build') && !hiIc('i_nosuch') && HIB.size > 5", "label": "значки рисуются векторно"},
+ {"expect": "Object.keys(HI).every(k => SPR['i_' + k])", "label": "у каждого рисунка есть пиксельный значок (размер и режим ×1)"},
+ {"expect": "Object.keys(SPR).filter(k => /^i_[a-z0-9]+$/.test(k)).every(k => HI[k.slice(2)])", "label": "у каждого пиксельного значка есть рисунок"},
+ {"expect": "Object.values(WEATHER).every(w => SPR['i_' + w.ic])", "label": "значки погоды есть"},
+ {"eval": "UI.open({k:'supply'}); ''"}, {"wait": 300}, {"shot": "ic_new_supply.png"},
+ {"eval": "UI.shut(); UI.open({k:'sound'}); ''"}, {"wait": 300}, {"shot": "ic_new_sound.png"},
+ {"eval": "UI.shut(); UI.open({k:'goods', id: G.setts.findIndex(s => s && s.ctrl === 0)}); ''"}, {"wait": 300}, {"shot": "ic_new_goods.png"},
+ {"eval": "UI.shut(); UI.open({k:'chron'}); ''"}, {"wait": 300}, {"shot": "ic_new_chron.png"},
+ {"eval": "UI.shut(); spr(tinted('i_crown', '#4a0810'), 10, 30); ''", "out": false},
+ {"eval": "UI.shut(); openMapFromCourt(); ''"}, {"wait": 800}, {"shot": "ic_new_map.png"},
+ {"eval": "setBookFont(false); ''"}, {"wait": 400}, {"shot": "ic_new_map_px.png"},
+ {"expect": "RS === 1 && !hiIc('i_gold')", "label": "пиксельный шрифт — прежние пиксельные значки"},
+ {"eval": "setBookFont(true); ''"}, {"wait": 300},
+ {"expect": "RS > 1 && hiIc('i_gold')", "label": "снова книжный шрифт"}
+]
