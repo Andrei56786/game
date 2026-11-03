@@ -1,0 +1,124 @@
+name: Сборки для Windows
+# Две сборки .exe: полная браузерная игра в окне Electron и Godot-срез «Двор».
+# В PR — только сборка и проверка; после слияния в main — выпуск «windows» на странице Releases.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    name: Браузерная игра в окне (Electron)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Собрать игру (dist/index.html)
+        run: python tools/build.py
+      - name: Собрать .exe
+        working-directory: desktop
+        run: |
+          npm install --no-audit --no-fund
+          npm run win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slovo-electron
+          path: desktop/out/*.exe
+          if-no-files-found: error
+
+  godot:
+    name: Godot-срез «Двор» (проверка, веб, Windows)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GV: 4.7.2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/cache@v4
+        id: gcache
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GV }}-web-win-v1
+      - name: Скачать Godot и шаблоны экспорта
+        if: steps.gcache.outputs.cache-hit != 'true'
+        run: |
+          T=~/.local/share/godot/export_templates/$GV.stable
+          mkdir -p ~/godot "$T"
+          cd ~/godot
+          curl -sSL -o g.zip "https://github.com/godotengine/godot/releases/download/$GV-stable/Godot_v$GV-stable_linux.x86_64.zip"
+          unzip -q g.zip && rm g.zip
+          curl -sSL -o t.tpz "https://github.com/godotengine/godot/releases/download/$GV-stable/Godot_v$GV-stable_export_templates.tpz"
+          unzip -j -q t.tpz templates/version.txt templates/web_nothreads_release.zip templates/web_nothreads_debug.zip templates/windows_release_x86_64.exe templates/windows_debug_x86_64.exe -d "$T"
+          rm t.tpz
+          ls -la ~/godot "$T"
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Самопроверка и экспорт (веб и Windows)
+        run: GODOT=~/godot/Godot_v${GV}-stable_linux.x86_64 sh godot/slovo/build.sh
+      - name: Веб-сборка в Chromium (снимки, разговор, день и ночь)
+        run: node godot/slovo/test_web.mjs
+      - name: Назвать .exe
+        run: |
+          V=$(sed -n 's/^config\/version="\(.*\)"/\1/p' godot/slovo/project.godot)
+          mkdir -p out && cp godot/slovo/build/win/slovo.exe "out/Slovo-korolya-Dvor-$V-Godot.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slovo-godot
+          path: out/*.exe
+          if-no-files-found: error
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-shots
+          path: godot/slovo/build/shots/
+          if-no-files-found: ignore
+
+  release:
+    name: Выпуск «windows» на странице Releases
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [browser, godot]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: slovo-*
+          path: files
+          merge-multiple: true
+      - name: Обновить выпуск
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -la files
+          cat > notes.md <<NOTES
+          Две сборки для Windows 10/11 (64 бит). Установка не нужна: скачайте файл и запустите.
+
+          - **Slovo-korolya-*.exe** — вся игра «Слово короля» (браузерная версия) в своём окне. F11 или Alt+Enter — во весь экран. Сохранения лежат в %APPDATA%\\Slovo korolya.
+          - **Slovo-korolya-Dvor-*-Godot.exe** — первый срез новой версии на Godot 4.7: заставка и живой королевский двор (день и ночь, факелы, пятеро придворных со своим распорядком, разговоры). WASD — идти, E — говорить, Пробел — пауза, 1–3 — скорость, Esc — назад.
+
+          Файлы не подписаны, поэтому Windows SmartScreen может предупредить о неизвестном издателе: «Подробнее» → «Выполнить в любом случае».
+
+          Собрано автоматически из коммита ${GITHUB_SHA::7}.
+          NOTES
+          gh release delete windows -y --cleanup-tag || true
+          gh release create windows files/*.exe --target "$GITHUB_SHA" --title "Слово короля для Windows" --notes-file notes.md --latest
