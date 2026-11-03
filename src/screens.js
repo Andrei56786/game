@@ -4,7 +4,7 @@ const INK = '#3a2614', INK2 = '#7a5a3a';
 function winFrame(x, y, w, h, title, parch, noClose) {
   blocker(); dim(0.45);
   if (parch) panelParch(x, y, w, h); else panelWood(x, y, w, h);
-  if (title) { if (parch) { txt(title, x + w / 2, y + 7, INK, { al: 'c' }); hline(x + 10, y + 17, w - 20, '#b89a68'); } else { txt(title, x + w / 2, y + 8, PAL.y, { al: 'c', sh: PAL.o }); } }
+  if (title) { if (parch) { txt(title, x + w / 2, y + 7, INK, { al: 'c', px: 1 }); hline(x + 10, y + 17, w - 20, '#b89a68'); } else { txt(title, x + w / 2, y + 8, PAL.y, { al: 'c', sh: PAL.o, px: 1 }); } }
   if (!noClose) btn('w_close', x + w - 17, y + 4, 13, 12, { ic: 'i_close', style: 'dark', tip: 'Закрыть (Esc)', onClick: () => UI.shut() });
 }
 function tabs(x, y, list, w) { list.forEach((t, i) => btn('tab' + i, x + i * (w + 2), y, w, 13, { label: t, style: 'parch', active: UI.tab === i, onClick: () => { UI.tab = i; UI.scroll = 0; } })); }
