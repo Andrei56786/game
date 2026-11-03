@@ -70,7 +70,7 @@ function aiOfferPeace(r, t, ws) {
   else if (ws >= 30) terms = { cede: true, gold: 0, win: r, lose: t, d: 'уступить им захваченные земли' };
   else terms = { cede: false, gold: 0, win: ws >= 0 ? r : t, lose: ws >= 0 ? t : r, d: 'белый мир — всё как было' };
   msg({ kind: 'peace', from: r, terms, text: rulerOf(r).title + ' ' + rulerOf(r).name + ' предлагает мир: ' + terms.d + '.' });
-  if (typeof Snd !== 'undefined') Snd.sfx('raven');
+  if (typeof Snd !== 'undefined') Snd.sfx('gallop');
 }
 function checkRealms() {
   for (let r = 0; r < 5; r++) {
