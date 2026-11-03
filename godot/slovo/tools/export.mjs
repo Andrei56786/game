@@ -5,6 +5,7 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url)), root = path.resolve(here, '../../..'), out = path.resolve(here, '../art');
 const html = path.join(root, 'dist/index.html');
@@ -110,6 +111,36 @@ function pageExport() {
   res.uic = Object.assign({}, UIC);
   // пергамент окна разговора (как DLG в HTML): 608×122
   { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, 640, 130); panelParch(0, 0, 608, 122); const c = document.createElement('canvas'); c.width = 608; c.height = 122; c.getContext('2d').drawImage(cv, 0, 0, 608, 122, 0, 0, 608, 122); files['ui_parch.png'] = png(c); }
+  // ===== мир: данные генератора (тот же WD, что у HTML-игры с этим зерном) и спрайты карты =====
+  {
+    const b64 = ta => { const u8 = new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength); let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+    const f64 = v => Array.from(new Uint32Array(new Float64Array([v]).buffer)); // точное число: два слова по 32 бита
+    const AR = { ter: 'u8', elev: 'f32', rel: 'f32', moist: 'f32', temp: 'f32', river: 'u8', down: 'i32', acc: 'f32', road: 'u8', bridge: 'u8', ford: 'u8', prov: 'i32', ocean: 'u8', lake: 'u8', fwd: 'u8', dOcean: 'u8', main: 'u8' };
+    const w = { wv: WD.wv, seed: WD.seed, sea: f64(WD.sea), MW, MH, TS, arrays: AR };
+    for (const k in AR) files['wd_' + k] = b64(k === 'prov' ? Int32Array.from(WD.prov) : WD[k]);
+    w.provs = WD.provs.map(P => ({ id: P.id, seat: P.seat, x: P.x, y: P.y, area: P.area, cx: f64(P.cx), cy: f64(P.cy), nb: Array.from(P.nb), mix: b64(P.mix), coast: P.coast, river: P.river, villages: P.villages.slice(), name: P.name, cul: P.cul }));
+    w.setts = WD.setts.map(s => ({ id: s.id, name: s.name, type: s.type, x: s.x, y: s.y, i: s.i, prov: s.prov, coast: s.coast }));
+    w.lairs = WD.lairs.map(l => [l.x, l.y, l.i, l.prov]); w.owner = Array.from(WD.owner); w.caps = WD.caps.slice();
+    w.labels = WD.labels.map(L => ({ t: L.t, x: f64(L.x), y: f64(L.y), kind: L.kind, n: L.n || 0 }));
+    w.rivers = WD.rivers.map(p => Array.from(p)); w.roads = WD.roadList.map(r => [r.lvl, ...r.p]);
+    // для генератора в Godot: таблицы имён и числа, которые HTML считает через Math.pow (берём точные)
+    w.gen = { CULT, LAKEN, MOUNTN, SEAT_K: f64(SEAT_K), ED: f64(34 * Math.pow(WSCALE, 0.8)), WSCALE: f64(WSCALE), ms: WD.ms, tt: WD.tt };
+    // для отрисовки: палитры местности, цвета рек и дорог, державы
+    const u32 = a => Array.from(a);
+    w.tpal = {}; for (const k in TPAL) w.tpal[k] = k === 'crops' ? TPAL[k].map(p => p.map(u32)) : TPAL[k].map(u32);
+    w.cols = { FOAM: C_FOAM, FOAM2: C_FOAM2, WET: C_WET, HEDGE: C_HEDGE, WAVE: C_WAVE, RIV: C_RIV, RIVL: C_RIVL, BANK: C_BANK, RD: C_RD, RDE: C_RDE, TR: C_TR };
+    w.rwid = RWID.slice(); w.realms = REALM_DEF.map(d => ({ key: d.key, name: d.name, adj: d.adj, col: d.col, dark: d.dark, light: d.light }));
+    w.tinfo = TINFO.map(t => ({ n: t.n, cost: t.cost, water: t.water || 0, mc: t.mc }));
+    // спрайты карты (деревья, горы, холмы, камыш…) и их уменьшенные копии для обзора; поселения 4 вида × 5 народов × 3
+    if (!MSPR.oak) initMapSprites();
+    w.mspr = {}; for (const k of ['oak', 'pine', 'spine', 'birch', 'mount', 'mountS', 'peak', 'hill', 'hillW', 'hillC', 'reed', 'pud', 'tuft', 'rock', 'bush']) w.mspr[k] = MSPR[k].map(add);
+    w.msprq = {}; if (MSPR.q) for (const k in MSPR.q) w.msprq[k] = MSPR.q[k].map(add);
+    w.sett = {}; for (const ty of ['village', 'castle', 'town', 'capital']) for (const cu of ['K', 'C', 'R', 'T', 'E']) for (let v = 0; v < 3; v++) { const s = settSprite(ty, cu, v); w.sett[ty + cu + v] = { s: add(s.c), flags: s.flags }; }
+    w.crown = SPR.i_crown ? add(SPR.i_crown) : -1;
+    // обзорная карта HTML (1 точка = 4 точки мира) — только для сверки на глаз, в игру не идёт
+    if (MAPR.quarter) files['ref_overview.png'] = png(MAPR.quarter);
+    res.world = w;
+  }
   // атлас спрайтов: полки по высоте, страницы 2048×2048
   const order = spr.map((c, i) => i).sort((a, b) => spr[b].height - spr[a].height || spr[b].width - spr[a].width);
   const PW = 2048, PH = 2048, rects = new Array(spr.length), pages = [];
@@ -133,7 +164,16 @@ fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, '.gitignore'), '*\n');
 let bytes = 0;
-for (const [n, b64] of Object.entries(files)) { const b = Buffer.from(b64, 'base64'); bytes += b.length; fs.writeFileSync(path.join(out, n), b); }
+// мир: массивы клеток — одним файлом world.bin (каждый сжат gzip), оглавление и списки — world.json
+const world = res.world; delete res.world; const parts = []; let off = 0;
+// игре нужны не все: высоты, влага, стоки и сток воды (elev, moist, acc, down) — только для сверки генератора (world_ref.bin, в сборку не идёт)
+const REF = { elev: 1, moist: 1, acc: 1, down: 1 }, refParts = []; let refOff = 0;
+for (const k of Object.keys(world.arrays)) { const raw = Buffer.from(files['wd_' + k], 'base64'), gz = zlib.gzipSync(raw, { level: 9 }); delete files['wd_' + k];
+  if (REF[k]) { world.arrays[k] = [world.arrays[k], raw.length, refOff, gz.length, 'ref']; refParts.push(gz); refOff += gz.length; continue; }
+  world.arrays[k] = [world.arrays[k], raw.length, off, gz.length]; parts.push(gz); off += gz.length; }
+fs.writeFileSync(path.join(out, 'world.bin'), Buffer.concat(parts)); bytes += off;
+fs.writeFileSync(path.join(out, 'world_ref.bin'), Buffer.concat(refParts));
+for (const [n, b64] of Object.entries(files)) { const b = Buffer.from(b64, 'base64'); if (n.startsWith('ref_')) { fs.mkdirSync(path.join(here, '../build'), { recursive: true }); fs.writeFileSync(path.join(here, '../build', n), b); continue; } bytes += b.length; fs.writeFileSync(path.join(out, n), b); }
 // BMFont (.fnt, текст) для пиксельных шрифтов — Godot импортирует их как FontFile
 for (const [fk, F] of Object.entries(res.fonts)) {
   const chars = [], seen = new Set();
@@ -148,6 +188,7 @@ for (const [fk, F] of Object.entries(res.fonts)) {
   delete F.map; delete F.lat;
 }
 fs.writeFileSync(path.join(out, 'court.json'), JSON.stringify(res));
+fs.writeFileSync(path.join(out, 'world.json'), JSON.stringify(world));
 const nl = Object.keys(res.locs).length, np = res.people.length;
-console.log(`EXPORT OK: мест ${nl}, людей ${np}, животных ${res.animals.length}, спрайтов ${res.spr.length} на ${res.pages} стр., файлов ${Object.keys(files).length + 3}, ${(bytes / 1048576).toFixed(1)} МБ, ${((Date.now() - t0) / 1000).toFixed(1)} с`);
+console.log(`EXPORT OK: мест ${nl}, людей ${np}, животных ${res.animals.length}, мир ${world.seed}: провинций ${world.provs.length}, поселений ${world.setts.length}, спрайтов ${res.spr.length} на ${res.pages} стр., файлов ${Object.keys(files).length + 3}, ${(bytes / 1048576).toFixed(1)} МБ, ${((Date.now() - t0) / 1000).toFixed(1)} с`);
 process.exit(0);
