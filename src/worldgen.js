@@ -1,9 +1,9 @@
 'use strict';
 // ===== WORLDGEN: deterministic world from seed =====
-const MW = 720, MH = 450, TS = 8, WPW = MW * TS, WPH = MH * TS, NT = MW * MH;
+const MW = 1080, MH = 675, TS = 8, WPW = MW * TS, WPH = MH * TS, NT = MW * MH;
 const WSCALE = Math.sqrt(NT / 64000); // linear size against the first world (320×200)
 const SEAT_K = Math.pow(WSCALE, 0.62); // castles, towns and the big shapes of the land grow slower than the map: more room between fortresses
-const KM_PER_TILE = 3, WORLD_V = 2; // a tile is about 3 km: ~20 km a day off the roads, ~35 km on them
+const KM_PER_TILE = 3, WORLD_V = 3; // a tile is about 3 km: ~20 km a day off the roads, ~35 km on them
 const TR = { DEEP: 0, SHALLOW: 1, LAKE: 2, BEACH: 3, GRASS: 4, FARM: 5, FOREST: 6, DFOREST: 7, HILLS: 8, MOUNT: 9, PEAK: 10, MARSH: 11, STEPPE: 12, SNOW: 13 };
 const TINFO = [
   { n: 'Море', cost: 0, water: 1, mc: '#22467a' },
@@ -273,7 +273,7 @@ function genWorld(seed) {
     siteScore[i] = s + hash2(x, y, seed) * 0.8;
   }
   const cands = []; for (let i = 0; i < NT; i++) if (siteScore[i] > 0.8) cands.push(i);
-  { const keys = new Float64Array(cands.length); for (let k = 0; k < cands.length; k++) keys[k] = Math.round((10 - siteScore[cands[k]]) * 1e5) * 524288 + cands[k]; keys.sort(); for (let k = 0; k < cands.length; k++) cands[k] = keys[k] % 524288; }
+  { const keys = new Float64Array(cands.length); for (let k = 0; k < cands.length; k++) keys[k] = Math.round((10 - siteScore[cands[k]]) * 1e5) * 2097152 + cands[k]; keys.sort(); for (let k = 0; k < cands.length; k++) cands[k] = keys[k] % 2097152; }
   const blk = new Uint8Array(NT);
   const disc = (x, y, r) => { const r2 = r * r, ri = Math.ceil(r); for (let dy = -ri; dy <= ri; dy++) { const yy = y + dy; if (yy < 0 || yy >= MH) continue; const w = Math.sqrt(Math.max(0, r2 - dy * dy)), x0 = Math.max(0, Math.ceil(x - w)), x1 = Math.min(MW - 1, Math.floor(x + w)); if (x1 >= x0) blk.fill(1, yy * MW + x0, yy * MW + x1 + 1); } };
   let seats = []; const R0 = 29 * SEAT_K, wantS = landMain / (R0 * R0) * 0.9;
@@ -378,7 +378,7 @@ function genWorld(seed) {
   const rcost = new Float32Array(14).fill(Infinity); for (const t in RC) rcost[t] = RC[t];
   const roadCost = j => { let k = rcost[ter[j]]; if (k === Infinity) return k; if (river[j]) k += 9 + river[j] * 4; if (road[j]) k = k * 0.22; return k; };
   const roadList = [];
-  const build = (a, b, lvl) => { const p = astar(a, b, roadCost, { hw: 0.9, river, maxN: 400000 }); if (!p) return false; for (const t of p) { road[t] = Math.max(road[t], lvl); if (river[t]) bridge[t] = 1; } roadList.push({ p, lvl }); return true; };
+  const build = (a, b, lvl) => { const p = astar(a, b, roadCost, { hw: 0.9, river, maxN: 900000 }); if (!p) return false; for (const t of p) { road[t] = Math.max(road[t], lvl); if (river[t]) bridge[t] = 1; } roadList.push({ p, lvl }); return true; };
   {
     const edges = []; provs.forEach((P, k) => { for (const nb of P.nb) if (nb > k) edges.push([Math.hypot(P.x - provs[nb].x, P.y - provs[nb].y), k, nb]); });
     edges.sort((a, b) => a[0] - b[0]);
