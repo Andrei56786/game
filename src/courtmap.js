@@ -164,17 +164,22 @@ function buildYard() {
   return L;
 }
 // ---------- prerender static layers ----------
-function bakeLoc(L) {
-  const b = new PB(L.w * CT, L.h * CT); paintGround(b, L.ter, L.w, L.h, L.seed);
-  if (L.out) { paintCurtain(b, L.ter, L.w, L.h, L.seed); if (L.keep) L.keepMeta = paintKeepFacade(b, L.keep.x, L.keep.y, L.keep.w, L.seed); }
+function bakeLoc(L) { // v3.5: outdoors the season is baked in too — the bare ground is kept and the season repainted over it (seaGround etc. in season.js)
+  const first = !L.bakeObjs, sv = L.out ? seaVarOf(L) : '', b = new PB(L.w * CT, L.h * CT);
+  if (first || !L.gnd) { const gid = paintGround(b, L.ter, L.w, L.h, L.seed); if (L.out) { L.gid = gid; L.gnd = b.d.slice(); } } else b.d.set(L.gnd);
+  if (L.out && sv) seaGround(b, L, sv);
+  SEA_PB = L.out && sv ? (k, what) => seaStruct(k, sv, what) : null;
+  if (L.out) { paintCurtain(b, L.ter, L.w, L.h, L.seed); if (sv) seaCurtain(b, L, sv); if (L.keep) { const m = paintKeepFacade(b, L.keep.x, L.keep.y, L.keep.w, L.seed); if (first) L.keepMeta = m; } }
   else paintWalls(b, L.ter, L.w, L.h, L.seed, { wains: L.wains });
+  SEA_PB = null;
   for (const c of L.carpets || []) paintCarpet(b, c[0] * CT, c[1] * CT, c[2] * CT, c[3] * CT, c[4], c[5]);
   for (const r of L.rugs || []) paintRug(b, r[0] * CT, r[1] * CT, r[2] * CT, r[3] * CT, r[4]);
-  for (const o of L.objs) if (o.shadow) shadowEll(b, o.x + o.w / 2, o.sy - 2, o.shadow[0], o.shadow[1]);
-  for (const o of L.objs.filter(o => o.bake).sort((p, q) => p.sy - q.sy)) b.blit(objSprite(o.k, o.o, 0).pb, o.x, o.y);
-  L.objs = L.objs.filter(o => !o.bake);
-  if (L.keepMeta) { for (const p of L.keepMeta.wins) L.wins.push({ x: p[0], y: p[1], big: 1 }); for (const p of L.keepMeta.banners) L.deco.push(L.keepHB ? { k: 'housebanner', o: L.keepHB, x: p[0] - 7, y: p[1] + 3, w: 14, h: 26, anim: 4, fps: 3 } : { k: 'banner', o: L.keepRealm ? { realm: L.keepRealm, ck: 'r' + L.keepRealm } : { realm: 0 }, x: p[0] - 8, y: p[1], w: 16, h: 32, anim: 4, fps: 3 }); for (const p of L.keepMeta.sconces) { L.deco.push({ k: 'sconce', o: {}, x: p[0] - 5, y: p[1] - 7, w: 10, h: 14, anim: 3, fps: 7 }); lightAt(L, p[0], p[1] - 6, 40, '#ffb050', 0.8, { fl: 0.15, night: 1 }); } }
-  L.cv = b.canvas(); L.pb = b;
+  if (first) { L.shObjs = L.objs.filter(o => o.shadow); L.bakeObjs = L.objs.filter(o => o.bake).sort((p, q) => p.sy - q.sy); }
+  for (const o of L.shObjs) shadowEll(b, o.x + o.w / 2, o.sy - 2, o.shadow[0], o.shadow[1]);
+  const sv0 = SEAV; SEAV = sv; for (const o of L.bakeObjs) b.blit(objSprite(o.k, sv ? seaObjOpt(o) : o.o, 0).pb, o.x, o.y); SEAV = sv0;
+  if (first) L.objs = L.objs.filter(o => !o.bake);
+  if (first && L.keepMeta) { for (const p of L.keepMeta.wins) L.wins.push({ x: p[0], y: p[1], big: 1 }); for (const p of L.keepMeta.banners) L.deco.push(L.keepHB ? { k: 'housebanner', o: L.keepHB, x: p[0] - 7, y: p[1] + 3, w: 14, h: 26, anim: 4, fps: 3 } : { k: 'banner', o: L.keepRealm ? { realm: L.keepRealm, ck: 'r' + L.keepRealm } : { realm: 0 }, x: p[0] - 8, y: p[1], w: 16, h: 32, anim: 4, fps: 3 }); for (const p of L.keepMeta.sconces) { L.deco.push({ k: 'sconce', o: {}, x: p[0] - 5, y: p[1] - 7, w: 10, h: 14, anim: 3, fps: 7 }); lightAt(L, p[0], p[1] - 6, 40, '#ffb050', 0.8, { fl: 0.15, night: 1 }); } }
+  L.cv = b.canvas(); L.pb = b; L.sv = sv; L.sk = L.out ? seaKeyOf(L) : '';
 }
 function buildCourt() { const sd = G ? G.seed : 0; if (LOCS.keep && LOCS.yard && LOCS.upper && COURT.bSeed === sd) return; for (const k in LOCS) delete LOCS[k]; COURT.npcs = []; COURT.ani = []; const t0 = performance.now();
   for (const f of [buildKeep, buildYard, buildUpper, buildDungeon, buildHall, buildChapel, buildForest]) { const L = f(); L.site = 'home'; bakeLoc(L); }
