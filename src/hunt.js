@@ -174,7 +174,7 @@ function huntGored(a) { const HU = COURT.hunt, k = kingC(); if (!HU || HU.ended)
     { name: 'Беда на охоте', choices: [{ t: 'Домой, на носилках', fx: () => huntEnd('wound') }], esc: 0 }); }
 // ---------- start: at the kennels or with the huntsman ----------
 function huntWhyNot() { const k = kingC(), h = hourAbs(), C = G.court, w = G.weather && G.weather.k;
-  if (k.wound > G.day) { const n = k.wound - G.day; return 'Рана ещё не зажила, государь. Лекарь велел беречься — ещё ' + n + ' ' + plural(n, 'день', 'дня', 'дней') + '.'; }
+  if (k.wound > G.day) { const n = k.wound - G.day; return woundNot(k) + ', государь. Лекарь велел беречься — ещё ' + n + ' ' + plural(n, 'день', 'дня', 'дней') + '.'; }
   if (C.huntDay === G.day) return 'Собаки сегодня уже набегались, государь. Завтра на рассвете — хоть на медведя!';
   if (h < 6) return 'Ещё темно, государь. Выедем с рассветом, к шести.';
   if (h >= 16) return 'Поздно, государь: до темноты зверя не поднять. Завтра с утра.';
