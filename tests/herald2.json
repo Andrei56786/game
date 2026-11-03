@@ -1,0 +1,58 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"eval": "UI.win=null; G.speed=1; declareWar(1, 0); const n=COURT.npcs.find(n=>n.key==='herald1'); 'loc '+COURT.loc+' war '+G.rel[1][0].war+' modals '+UI.modals.length+' herald '+(n? n.loc+' '+Math.round(n.x)+','+Math.round(n.y)+' path '+!!n.path : '-')+' P '+Math.round(COURT.p.x)+','+Math.round(COURT.p.y)"
+},
+{
+"expect": "G.rel[1][0].war===1 && COURT.npcs.some(n=>n.herald===1) && !UI.modals.some(m=>m.k==='war')",
+"label": "чужой герольд идёт к королю"
+},
+{
+"wait": 2500
+},
+{
+"shot": "hrd_in_walk.png"
+},
+{
+"waitFor": "UI.modals.some(m=>m.k==='war')",
+"timeout": 30000
+},
+{
+"wait": 400
+},
+{
+"shot": "hrd_in_modal.png"
+},
+{
+"eval": "const n=COURT.npcs.find(n=>n.key==='herald1'); 'herald at '+Math.round(n.x)+','+Math.round(n.y)+' dist '+Math.round(Math.hypot(n.x-COURT.p.x,n.y-COURT.p.y))"
+},
+{
+"eval": "UI.close(); 'closed'"
+},
+{
+"wait": 3000
+},
+{
+"expect": "(()=>{const n=COURT.npcs.find(n=>n.key==='herald1'); return !n || !!n.path;})()",
+"label": "герольд уходит"
+},
+{
+"eval": "const n=COURT.npcs.find(n=>n.key==='herald1'); 'after: '+(n? 'leaving '+!!n.path+' loc '+n.loc : 'gone')"
+},
+{
+"eval": "SCREEN='map'; G.court.view=1; declareWar(2, 0); 'modals '+UI.modals.map(m=>m.k).join(',')"
+},
+{
+"expect": "UI.modals.some(m=>m.k==='war' && m.d===2)",
+"label": "на карте — грамота сразу"
+},
+{
+"wait": 300
+},
+{
+"shot": "hrd_in_map.png"
+}
+]
