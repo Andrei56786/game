@@ -347,16 +347,16 @@ function drawTopBar() {
     spr('i_fat', x, 7); bar(x + 8, 7, 24, 6, pa.fat / 100, pa.fat > 70 ? '#c0353f' : '#c9a060'); hit(x, 2, 34, 14, { id: 'tb_fat', tip: ['Усталость: ' + Math.round(pa.fat) + '%', 'Растёт на марше (форсированный ×3), спадает на отдыхе. Усталые медленнее и слабее в бою.'] }); x += 36;
   }
   // date & weather (center-right)
-  const Wt = weatherOf(); const ds = dateStr(G.day); const endX = G.court ? W - 186 - 4 * 13 - 4 : W - 186; let wn = Wt.n, totW = tw(ds) + 14 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = ''; totW = tw(ds) + 12; } const dx0 = Math.max(x + 6, endX - totW);
+  const Wt = weatherOf(); const ds = dateStr(G.day); const endX = G.court ? W - 186 - 5 * 13 - 4 : W - 186; let wn = Wt.n + (G.mudOn ? ' · распутица' : ''), totW = tw(ds) + 14 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = G.mudOn ? 'распутица' : ''; totW = tw(ds) + 14 + tw(wn, { f: 's' }); if (x + 6 + totW > endX) { wn = ''; totW = tw(ds) + 12; } } const dx0 = Math.max(x + 6, endX - totW);
   txt(ds, dx0, 6, '#fff2c8'); spr('i_' + Wt.ic, dx0 + tw(ds) + 4, 7); if (wn) txt(wn, dx0 + tw(ds) + 13, 6, '#c8d8e8', { f: 's' });
-  hit(dx0, 2, totW, 14, { id: 'tb_date', tip: () => [ds, 'Погода: ' + Wt.n + (Wt.mv > 1 ? ' — марш медленнее ×' + Wt.mv : '') + (Wt.vis < 1 ? ', обзор ×' + Wt.vis : '') + (Wt.wet ? ', стрелы бьют хуже' : '') + (Wt.dry ? ', сухо — огонь силён' : '')].concat(calendarTip()) });
+  hit(dx0, 2, totW, 14, { id: 'tb_date', tip: () => [ds, 'Погода: ' + Wt.n + (Wt.mv > 1 ? ' — марш медленнее ×' + Wt.mv : '') + (Wt.vis < 1 ? ', обзор ×' + Wt.vis : '') + (Wt.wet ? ', стрелы бьют хуже' : '') + (Wt.dry ? ', сухо — огонь силён' : '')].concat(G.mud >= 0.3 ? [{ t: 'Распутица: вне дорог войска идут медленнее (до ' + Math.round(55 * G.mud) + '%), обозы вязнут.', c: UIC.warn }] : []).concat(calendarTip()) });
   // speed
   let bx = W - 182;
   speedBtns(bx);
   bx += 64;
-  const B = [['i_book', 'Трактат «Искусство войны» (B)', () => UI.open({ k: 'book', ch: TUT.lastCh() })], ['i_dip', 'Дипломатия (N)', () => UI.open({ k: 'diplo', t: firstForeign() })], ['i_crown', 'Держава (R)', () => UI.open({ k: 'realm' })], ['i_map', 'Режим карты: ' + (G.mode === 'pol' ? 'политическая' : 'местность') + ' (Tab)', () => { G.mode = G.mode === 'pol' ? 'ter' : 'pol'; }], [typeof Snd !== 'undefined' && Snd.muted() ? 'i_mute' : 'i_snd', 'Звук и музыка (M)', () => Snd.toggle()], ['i_scroll', 'Меню (Esc)', () => UI.open({ k: 'menu' })]];
+  const B = [['i_book', 'Трактат «Искусство войны» (B)', () => UI.open({ k: 'book', ch: TUT.lastCh() })], ['i_dip', 'Дипломатия (N)', () => UI.open({ k: 'diplo', t: firstForeign() })], ['i_crown', 'Держава (R)', () => UI.open({ k: 'realm' })], ['i_map', 'Режим карты: ' + (G.mode === 'pol' ? 'политическая' : 'местность') + ' (Tab)', () => { G.mode = G.mode === 'pol' ? 'ter' : 'pol'; }], [typeof Snd !== 'undefined' && Snd.muted() ? 'i_mute' : 'i_snd', 'Звук (M — без звука)', () => sndOpen()], ['i_scroll', 'Меню (Esc)', () => UI.open({ k: 'menu' })]];
   B.forEach(([ic, tip, f], i) => btn('tb' + i, bx + i * 16, 2, 15, 14, { ic, style: 'dark', tip, onClick: f, active: (i === 0 && UI.win && UI.win.k === 'book') || (i === 1 && UI.win && UI.win.k === 'diplo') || (i === 2 && UI.win && UI.win.k === 'realm') || (i === 3 && G.mode === 'pol') }));
-  if (G.court) { const B3 = [['i_seal', 'Малый совет (K)', 'council'], ['i_family', 'Династия и дома (Y)', 'dyn'], ['i_flask', 'Знания (J)', 'tech'], ['i_scroll', 'Письма (L)', 'letters']]; let x3 = W - 182 - 4 * 13 - 3;
+  if (G.court) { const B3 = [['i_seal', 'Малый совет (K)', 'council'], ['i_family', 'Династия и дома (Y)', 'dyn'], ['i_flask', 'Знания (J)', 'tech'], ['i_chron', 'Летопись (T)', 'chron'], ['i_scroll', 'Письма (L)', 'letters']]; let x3 = W - 182 - 5 * 13 - 3;
     B3.forEach(([ic, tip, k], i) => btn('tb3' + i, x3 + i * 13, 2, 12, 14, { ic, style: 'dark', tip, active: !!(UI.win && UI.win.k === k), onClick: () => { if (UI.win && UI.win.k === k) UI.shut(); else UI.open({ k }); } })); }
 }
 function firstForeign() { for (const t of [1, 2, 3, 4]) if (alive(t) && G.rel[G.player.realm][t].war) return t; return 1; }
@@ -419,7 +419,7 @@ function drawFeed() {
 function drawMsgs() {
   const L = G.msgs.filter(m => !m.done && (m.kind === 'peace' || m.kind === 'call' || m.kind === 'ransom' || m.kind === 'offer'));
   let x = W / 2 - L.length * 9; const y = 21;
-  for (const m of L) { const bob = Math.round(Math.sin(NOW * 4 + m.id) * 1); btn('msg' + m.id, x, y + bob, 17, 15, { ic: 'i_raven', style: 'parch', tip: [{ t: 'Ворон: ' + realmName(m.from), ic: 'shield' + m.from }, m.text, { t: 'Щелчок — ответить', c: UIC.dim }], onClick: () => UI.alert('msg', m) }); x += 19; }
+  for (const m of L) { const bob = Math.round(Math.sin(NOW * 4 + m.id) * 1); btn('msg' + m.id, x, y + bob, 17, 15, { ic: 'i_raven', style: 'parch', tip: [{ t: 'Гонец: ' + realmName(m.from), ic: 'shield' + m.from }, m.text, { t: 'Щелчок — ответить', c: UIC.dim }], onClick: () => UI.alert('msg', m) }); x += 19; }
 }
 function drawStatus() {
   const t = UI.hoverTile; let s = '';
