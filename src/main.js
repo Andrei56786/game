@@ -28,7 +28,7 @@ function mapKeys() {
     if (blocked) continue;
     if (G.court) { // v3: the court's windows are reachable from the map too
       if (c === 'Tab' && G.atCourt && !playerArmy()) { backToCourt(); continue; }
-      const pa0 = playerArmy(); const wk = { KeyK: 'council', KeyJ: 'tech', KeyL: 'letters', KeyG: 'cmd', KeyP: 'proj', KeyO: 'supply' }[c] || (c === 'KeyV' && !pa0 ? 'cmd' : null) || (c === 'KeyF' && !pa0 ? 'dyn' : null) || (c === 'KeyY' ? 'dyn' : null);
+      const pa0 = playerArmy(); const wk = { KeyK: 'council', KeyJ: 'tech', KeyL: 'letters', KeyG: 'cmd', KeyP: 'proj', KeyO: 'supply', KeyT: 'chron' }[c] || (c === 'KeyV' && !pa0 ? 'cmd' : null) || (c === 'KeyF' && !pa0 ? 'dyn' : null) || (c === 'KeyY' ? 'dyn' : null);
       if (wk) { if (UI.win && UI.win.k === wk) UI.shut(); else UI.open({ k: wk }); continue; }
     }
     if (c === 'Space') { if (UI.win) UI.shut(); setSpeed(G.speed > 0 ? 0 : (UI.lastSpeed || 1)); }
@@ -96,7 +96,7 @@ function frame(ts) {
     else if (SCREEN === 'battle') { battleKeys(); dispatchClicks(); battleUpdate(DT); if (SCREEN === 'battle') { drawBattle(); drawModals(); drawToast(); } else if (G) drawMapScreen(); else drawModals(); cv.style.cursor = HOVER && HOVER.cursor ? 'pointer' : 'default'; }
     else if (SCREEN === 'art') { for (const k of input.keys) { if (k.code === 'ArrowRight') DEVP++; if (k.code === 'ArrowLeft') DEVP = Math.max(0, DEVP - 1); } input.keys.length = 0; drawArtSheet(); }
     else if (SCREEN === 'loading') { input.keys.length = 0; input.clicks.length = 0; drawLoading(); }
-    else { for (const k of input.keys) { if (k.code === 'Escape') { if (UI.modals.length) UI.modals.shift(); else if (SCREEN === 'newgame') SCREEN = 'title'; } if (k.code === 'KeyM') Snd.toggle(); } input.keys.length = 0; dispatchClicks(); drawTitle(); cv.style.cursor = HOVER && HOVER.cursor ? 'pointer' : 'default'; }
+    else { for (const k of input.keys) { if (k.code === 'Escape') { if (UI.win) UI.shut(); else if (UI.modals.length) UI.modals.shift(); else if (SCREEN === 'newgame') SCREEN = 'title'; } if (k.code === 'KeyM') Snd.toggle(); } input.keys.length = 0; dispatchClicks(); drawTitle(); cv.style.cursor = HOVER && HOVER.cursor ? 'pointer' : 'default'; }
     // tooltip
     if (HOVER && HOVER.tip && !input.down[0]) { const tp = typeof HOVER.tip === 'function' ? HOVER.tip() : HOVER.tip; if (tp) drawTipBox(tp, input.mx, input.my); }
   } catch (e) { onErr(e); input.clicks.length = 0; input.keys.length = 0; }

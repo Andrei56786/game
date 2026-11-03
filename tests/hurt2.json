@@ -1,0 +1,57 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"eval": "UI.win=null; G.speed=1; G.frac=0.3; COURT.loc='yard'; const Y=LOCS.yard; const [tx,ty]=nearFree(Y,30,40); COURT.p.x=tx*CT+8; COURT.p.y=ty*CT+11; snapCam(); woundKing(2,'плечо','турнир'); healQueue({from:'tourney'}); 'ok '+tx+','+ty"
+},
+{
+"wait": 2500
+},
+{
+"expect": "HEAL.on && HEAL.sh==='litter' && COURT.loc==='yard'",
+"label": "турнир: носилки"
+},
+{
+"eval": "'path '+JSON.stringify(HEAL.path[0])+' cap '+HEAL.cap"
+},
+{
+"shot": "hurt_tour.png"
+},
+{
+"key": "Space"
+},
+{
+"wait": 1200
+},
+{
+"shot": "hurt_bed2.png"
+},
+{
+"key": "Space"
+},
+{
+"wait": 600
+},
+{
+"key": "Space"
+},
+{
+"waitFor": "!HEAL.on",
+"timeout": 60000
+},
+{
+"wait": 500
+},
+{
+"eval": "'toast '+UI.toastS+' dlg '+(DLG.cur?DLG.cur.name:'-')"
+},
+{
+"shot": "hurt_badge.png"
+},
+{
+"expect": "!HEAL.on && kingC().alive && kingC().wound>G.day",
+"label": "после носилок и кровати король встал, рана ещё заживает"
+}
+]

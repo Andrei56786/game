@@ -1,0 +1,115 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"eval": "UI.win=null; G.speed=1; G.frac=0.125; window.__go=(x,y)=>{COURT.p.x=x; COURT.p.y=y; COURT.path=null; snapCam();}; window.__run=(n,cb)=>{ for (let i=0;i<n;i++) { for (const f of UPD_EXT) f(1/60); if (cb && cb()) return i; } return -1; }; huntStart('deer', null); 'ok'"
+},
+{
+"wait": 1200
+},
+{
+"eval": "const HU=COURT.hunt, P=COURT.p, L=LOCS.forest; HU.wpn='bow'; const b=COURT.ani.find(x=>x.loc==='forest'&&x.game===1&&x.kind==='boar'&&x.st!=='dead'); window.__boar=b; const [tx,ty]=nearFree(L,Math.floor(b.x/CT)+5,Math.floor(b.y/CT)); __go(tx*CT+8,ty*CT+12); P.dir='left'; for (const n of COURT.npcs) if (n.follow) { n.x=P.x+300; n.y=P.y; n.path=null; } gameCharge(b); __run(25); G.speed=0; 'wind: '+b.st+'/'+b.cp+' kd '+Math.round(Math.hypot(b.x-P.x,b.y-P.y))+' parts '+COURT.parts.length"
+},
+{
+"shot": "hurt_wind.png"
+},
+{
+"eval": "const b=__boar, P=COURT.p, HU=COURT.hunt; G.speed=1; const f0=R.f; R.f=()=>0.7; window.__ph=[b.cp]; const i=__run(400, ()=>{ if (__ph[__ph.length-1]!==b.cp) __ph.push(b.cp); return P.downT>0 || b.st!=='charge'; }); R.f=f0; const k=kingC(); 'phases '+__ph.join('>')+' after '+i+' st '+b.st+' downT '+(P.downT>NOW)+' woundK '+k.woundK+' part '+k.woundP+' days '+(k.wound-G.day)+' pend '+!!HEAL.pend"
+},
+{
+"expect": "COURT.p.downT>NOW && kingC().woundK===2 && HEAL.pend && kingC().wound>G.day",
+"label": "кабан: бросок → рана (2), король сбит с ног"
+},
+{
+"wait": 300
+},
+{
+"shot": "hurt_down.png"
+},
+{
+"wait": 2400
+},
+{
+"expect": "DLG.cur && DLG.cur.name==='Беда на охоте'",
+"label": "диалог «Беда на охоте»"
+},
+{
+"eval": "DLG.cur.pages.flat().join(' ')"
+},
+{
+"eval": "'before: dlg '+JSON.stringify(Object.keys(DLG.cur||{}))+' page '+DLG.cur.pi+' typed '+DLG.cur.t"
+},
+{
+"eval": "DLG.key({code:'Space'}); DLG.key({code:'Digit1'}); 'ok'"
+},
+{
+"wait": 900
+},
+{
+"eval": "'dlg '+(DLG.cur?DLG.cur.name:'-')+' heal '+HEAL.on+'/'+HEAL.sh+' loc '+COURT.loc+' hunt '+!!COURT.hunt+' fade '+COURT.fade"
+},
+{
+"expect": "HEAL.on && HEAL.sh==='litter' && COURT.loc==='yard' && !COURT.hunt",
+"label": "носилки во дворе"
+},
+{
+"wait": 2500
+},
+{
+"shot": "hurt_litter.png"
+},
+{
+"eval": "'litter path left '+HEAL.path.length+' cap '+HEAL.cap+' P '+Math.round(COURT.p.x)+','+Math.round(COURT.p.y)"
+},
+{
+"key": "Space"
+},
+{
+"wait": 1000
+},
+{
+"expect": "HEAL.sh==='bed' && COURT.loc==='keep'",
+"label": "покои: кровать"
+},
+{
+"shot": "hurt_bed.png"
+},
+{
+"wait": 4500
+},
+{
+"expect": "HEAL.sh==='days'",
+"label": "дни болезни"
+},
+{
+"wait": 2000
+},
+{
+"shot": "hurt_days.png"
+},
+{
+"eval": "'day '+(G.day-HEAL.d0)+' of '+Math.round(HEAL.end-HEAL.d0)+' cap '+HEAL.cap"
+},
+{
+"key": "Space"
+},
+{
+"waitFor": "!HEAL.on",
+"timeout": 60000
+},
+{
+"wait": 800
+},
+{
+"eval": "const k=kingC(); 'after: wound left '+(k.wound-G.day)+' toast '+UI.toastS+' dlg '+(DLG.cur?DLG.cur.name:'-')+' loc '+COURT.loc"
+},
+{
+"expect": "!HEAL.on && kingC().alive && kingC().wound>G.day && DLG.cur && DLG.cur.name==='Итоги охоты'",
+"label": "король встал, итоги охоты"
+},
+{
+"shot": "hurt_end.png"
+}
+]

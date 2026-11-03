@@ -48,7 +48,7 @@ function planPath(a, goal) {
   const men = Math.max(1, armyMen(a)), T = costTable(seasonOf(G.day), mountedN(a.u) > men * 0.5), road = WD.road, prov = WD.prov;
   const wf = a.wagons ? 1 + Math.min(0.35, a.wagons / (men / 100 + 1) * 0.06) : 1, gp = a.realm === G.player.realm ? G.provs : null, day = G.day;
   const cf = j => { const c = T[j]; if (road[j] || c === Infinity) return c; let k = c * wf; if (gp) { const p = prov[j]; if (p >= 0 && gp[p].guides > day) k *= 0.8; } return k; }; // = stepCost(a, j)
-  const t0 = performance.now(), p = astar(start, goal, cf, { river: WD.river, maxN: 260000 });
+  const t0 = performance.now(), p = astar(start, goal, cf, { river: WD.river, maxN: 600000 });
   PATHST.n++; PATHST.ms += performance.now() - t0; PATHST.nodes = AST.last; return p;
 }
 function pathDays(a, path, from) {
@@ -169,7 +169,7 @@ function dailyArmy(a) {
   let sr = 0.0012; if (WD.ter[t] === TR.MARSH) sr *= 5; if (season === 3 && !inOwn) sr *= 2.5; if (a.hunger) sr *= 3; if (a.thirst) sr *= 4; if (Wt.sick) sr *= Wt.sick; if (gr === 'difficult') sr *= 1.5; if (a.stay > 12 && !inOwn) sr *= 2; if (a.mode === 'siege' && a.stay > 15) sr *= 1.6;
   const ns = men * sr * R.range(0.5, 1.5); if (ns >= 1) { const k = takeMen(a, Math.round(ns)); a.sick += k; }
   // sick & wounded: recover / die
-  if (a.sick > 0) { const rec = a.sick * (inOwn ? 0.14 : 0.06), die = a.sick * (WD.ter[t] === TR.MARSH ? 0.03 : 0.012) * (a.hunger ? 2 : 1); a.sick = Math.max(0, a.sick - rec - die); a.u.levy += 0; returnMen(a, rec); a.deaths = (a.deaths || 0) + die; }
+  if (a.sick > 0) { const rec = a.sick * (inOwn ? 0.14 : 0.06) * (a.realm === 0 && hasTech('surgery') ? 1.4 : 1), die = a.sick * (WD.ter[t] === TR.MARSH ? 0.03 : 0.012) * (a.hunger ? 2 : 1); a.sick = Math.max(0, a.sick - rec - die); a.u.levy += 0; returnMen(a, rec); a.deaths = (a.deaths || 0) + die; }
   if (a.wounded > 0) { const rec = a.wounded * (inOwn ? 0.09 : 0.035), die = a.wounded * 0.006; a.wounded = Math.max(0, a.wounded - rec - die); returnMen(a, rec); }
   // starvation / thirst deaths
   if (a.hunger > 3) { const k = takeMen(a, Math.ceil(men * 0.01 * (a.hunger - 3))); if (isP && k) log('Голод: ' + (k % 10 === 1 && k % 100 !== 11 ? 'умер ' : 'умерли ') + k + ' ' + plural(k, 'воин', 'воина', 'воинов') + '.', 'bad'); }
@@ -244,7 +244,7 @@ function siegeDaily(a) {
   const sg = S.siege; const ws = WD.setts[S.id];
   if (S.ctrl === a.realm || !(hostile(a.realm, S.ctrl) || S.ctrl === 5)) { endSiege(a); return; }
   const gen = charOf(a.gen);
-  const wood = woodNear(ws.i); const rate = (wood > 6 ? 12 : wood > 0 ? 8 : 4) * Math.min(1.2, armyMen(a) / 150) * (gen && gen.traits.includes('patient') ? 1.3 : 1) * (a.realm === 0 && hasTech('engines') ? 1.4 : 1);
+  const wood = woodNear(ws.i); const rate = (wood > 6 ? 12 : wood > 0 ? 8 : 4) * Math.min(1.2, armyMen(a) / 150) * (gen && gen.traits.includes('patient') ? 1.3 : 1) * (a.realm === 0 && hasTech('engines') ? 1.4 : 1) * (a.realm === 0 && hasTech('bombards') ? 1.6 : 1);
   sg.works = Math.min(sg.need, sg.works + rate);
   S.food -= 1; if (S.food <= 0) { S.food = 0; sg.starve = (sg.starve || 0) + 1; const k = takeU(S.gar, Math.ceil(menOf(S.gar) * 0.04)); }
   // AI attacker decisions (player decides via UI)

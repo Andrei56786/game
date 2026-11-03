@@ -37,13 +37,12 @@ function drawRealmWin() {
 }
 // ---------- menu ----------
 function drawMenuWin() {
-  const X = W / 2 - 90, Y = 60, WW = 180, HH = 234; winFrame(X, Y, WW, HH, 'Меню', false);
+  const X = W / 2 - 90, Y = 60, WW = 180, HH = 214; winFrame(X, Y, WW, HH, 'Меню', false);
   let y = Y + 26; const B = (id, label, f, o) => { btn(id, X + 20, y, WW - 40, 16, Object.assign({ label, onClick: f }, o || {})); y += 20; };
   B('m_cont', 'Продолжить', () => UI.shut());
   B('m_save', 'Сохранить', () => { UI.toast(saveGame() ? 'Сохранено.' : 'Не удалось сохранить.'); UI.shut(); });
   B('m_load', 'Загрузить', () => { UI.shut(); startLoad(); }, { disabled: !saveOk(), tip: hasSave() && !saveOk() ? OLDSAVE_TIP : undefined });
-  B('m_mus', 'Музыка: ' + (Snd.musOn() ? 'вкл' : 'выкл'), () => Snd.toggleMusic());
-  B('m_sfx', 'Звуки: ' + (Snd.sfxOn() ? 'вкл' : 'выкл'), () => Snd.toggleSfx());
+  B('m_snd', 'Звук…', () => sndOpen());
   B('m_tut', 'Обучение: ' + (G.tut.on ? 'вкл' : 'выкл'), () => { G.tut.on = !G.tut.on; });
   B('m_ap', 'Автопауза: ' + (OPTS.autoPause ? 'вкл' : 'выкл'), () => { OPTS.autoPause = !OPTS.autoPause; saveOpts(); }, { tip: ['Автопауза', 'Время само встаёт на паузу, когда войско короля дошло до цели или остановилось, когда вы выходите из города, выезжаете из замка и после битвы.', { t: 'Пробел — снять паузу.', c: UIC.dim }] });
   B('m_help', 'Управление', () => { UI.shut(); UI.alert('help'); });
@@ -97,7 +96,7 @@ function drawEncounter(m) {
   if (b.kind !== 'bandit' && b.kind !== 'caravan' && b.realm < 5) btn('e_dip', x + 234, by, bw, 15, { label: 'Переговоры (дипломатия)', ic: 'i_dip', onClick: () => { UI.close(); G.encCool[b.id] = G.day + G.frac + 1; UI.open({ k: 'diplo', t: b.realm }); } });
 }
 function drawMsgModal(m) {
-  const o = m.d; if (o.done) { UI.close(); return; } const [x, y] = dlg(380, 170, 'Ворон с письмом');
+  const o = m.d; if (o.done) { UI.close(); return; } const [x, y] = dlg(380, 170, 'Гонец с письмом');
   const ru = rulerOf(o.from); drawPortrait(ru, x + 14, y + 26, 1); spr('shield' + o.from, x + 26, y + 78);
   txt(ru.title + ' ' + ru.name + ' (' + realmName(o.from) + ')', x + 72, y + 26, INK); para(o.text, x + 72, y + 40, 294, INK, { lh: 10 });
   const yes = o.kind === 'peace' ? 'Принять мир' : o.kind === 'call' ? 'Выступить на помощь' : o.kind === 'ransom' ? 'Принять выкуп' : 'Согласиться', no = o.kind === 'call' ? 'Отказать (союз будет разорван)' : 'Отказать';
@@ -145,7 +144,8 @@ function drawReckon(m) {
   let yy = y + 30 + qh; rk.lines.forEach((l, i) => { if (!l.tie) spr(l.win ? 'i_star' : 'i_close', x + 16, yy + 1); txt(l.q, x + 28, yy, INK); txt(l.tie ? 'поровну' : l.win ? 'мы' : 'они', x + 300, yy, l.tie ? INK2 : l.win ? '#2a6a2a' : '#a0302a'); hit(x + 14, yy - 2, 440, 11, { id: 'rk' + i, tip: [l.q, l.d, 'Мы: ' + Math.round(l.a) + ' · они: ' + (rk.intel || i !== 4 ? Math.round(l.b) : '~' + Math.round(l.b))] }); yy += 13; });
   yy += 4; txt('В нашу пользу: ' + rk.wins + ' из 7', x + 14, yy, rk.wins >= 5 ? '#2a6a2a' : rk.wins <= 2 ? '#a0302a' : INK); yy += 12;
   para(rk.wins >= 5 ? 'Расчёты сулят победу.' : rk.wins >= 4 ? 'Перевес невелик. Победа возможна, но потребует искусства.' : 'Расчёты против нас. «Кто мало рассчитывает — не побеждает».', x + 14, yy, 442, INK, { lh: 10 }); if (!rk.intel) txt('Без внутреннего лазутчика их силы известны лишь примерно.', x + 14, yy + 12, INK2, { f: 's' });
-  if (m.d.declare) { btn('rk_war', x + 30, y + 244, 190, 16, { label: 'Объявить войну', ic: 'i_sword', onClick: () => { UI.close(); declareWar(G.player.realm, t); if (typeof TUT !== 'undefined') TUT.ev('declare', t); } }); btn('rk_no', x + 250, y + 244, 190, 16, { label: 'Повременить', onClick: () => UI.close() }); }
+  if (m.d.declare && typeof heraldTo === 'function' && heraldTo(t)) { const hh = heraldTo(t); txt('Герольд уже в пути: ещё ≈' + hdn(heraldLeft(hh)) + '.', x + 235, y + 232, INK2, { al: 'c', f: 's' }); btn('rk_recall', x + 30, y + 244, 190, 16, { label: 'Вернуть герольда', onClick: () => { UI.close(); heraldRecall(hh); } }); btn('rk_no', x + 250, y + 244, 190, 16, { label: 'Пусть скачет', onClick: () => UI.close() }); }
+  else if (m.d.declare) { btn('rk_war', x + 30, y + 244, 190, 16, { label: 'Объявить войну', ic: 'i_sword', tip: 'Подписать грамоту — герольд отвезёт её', onClick: () => { UI.close(); heraldDeclare(t); } }); btn('rk_no', x + 250, y + 244, 190, 16, { label: 'Повременить', onClick: () => UI.close() }); }
   else btn('rk_ok', x + 155, y + 244, 160, 16, { label: 'Понятно', onClick: () => { UI.close(); if (typeof TUT !== 'undefined') TUT.ev('reckon', t); } });
 }
 function drawHelp() {
@@ -209,7 +209,7 @@ function drawTitle() {
   if (hasSave()) B('t_cont', 'Продолжить правление', () => startLoad(), saveOk() ? undefined : { disabled: true, tip: OLDSAVE_TIP });
   B('t_new', 'Новая игра', () => { SCREEN = 'newgame'; });
   B('t_help', 'Управление', () => UI.alert('help'));
-  B('t_snd', 'Звук: ' + (Snd.muted() ? 'выкл' : 'вкл'), () => Snd.toggle());
+  B('t_snd', 'Звук…', () => sndOpen());
   txt('Вся графика нарисована кодом, музыка и звуки синтезируются в браузере — без чужих ассетов.', W / 2, H - 12, '#c8a8a0', { al: 'c', f: 's' });
   if (UI.modals.length) drawModals();
 }

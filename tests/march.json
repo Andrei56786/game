@@ -1,0 +1,93 @@
+[
+{
+"waitFor": "SCREEN==='court' && G && COURT.p",
+"timeout": 60000
+},
+{
+"eval": "UI.win=null; const a0=G.armies.find(x=>x.realm===0&&x.kind==='lord'&&x.alive); leaveCourt(a0); const a=playerArmy(); window.__a=a; const cap=WD.setts[G.realms[0].capital]; 'army '+a.x.toFixed(1)+','+a.y.toFixed(1)+' men '+armyMen(a)+' levy '+a.u.levy+' wagons '+a.wagons+' cap '+cap.x+','+cap.y+' day '+G.day+' season '+seasonOf(G.day)+' w '+G.weather.k"
+},
+{
+"eval": "const a=__a; let jr=-1,jo=-1; const t0=armyTile(a); for(let r=1;r<40&&(jr<0||jo<0);r++) for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){const j=t0+dy*MW+dx; if(j<0||j>=NT) continue; const T=WD.ter[j]; if(T!==TR.GRASS&&T!==TR.FARM) continue; if(WD.road[j]&&jr<0) jr=j; if(!WD.road[j]&&!WD.river[j]&&jo<0) jo=j;} G.mud=0; const r0=stepCost(a,jr), o0=stepCost(a,jo); G.mud=0.8; const r1=stepCost(a,jr), o1=stepCost(a,jo); G.mud=0; window.__jo=jo; 'road '+r0.toFixed(2)+'→'+r1.toFixed(2)+' off '+o0.toFixed(2)+'→'+o1.toFixed(2)"
+},
+{
+"expect": "(()=>{const a=__a; G.mud=0; const o0=stepCost(a,__jo); G.mud=0.8; const o1=stepCost(a,__jo); G.mud=0; return o1>o0*1.3;})()",
+"label": "распутица замедляет вне дорог"
+},
+{
+"eval": "const f=DAILY_EXT.find(f=>String(f).includes('Распутица')); window.__mf=f; G.day=G.day - dayOfYear(G.day) + 2; G.weather.k='rain'; G.mud=0; G.mudOn=0; for(let i=0;i<3;i++) f(); 'mud '+G.mud.toFixed(2)+' on '+G.mudOn+' log '+G.log.slice(-1).map(l=>l.t||l).join('')"
+},
+{
+"expect": "G.mudOn===1 && G.log.slice(-3).some(l=>String(l.t||l).includes('Распутица'))",
+"label": "весенняя распутица объявлена"
+},
+{
+"eval": "G.day=G.day - dayOfYear(G.day) + 10; G.weather.k='wind'; for(let i=0;i<4;i++) __mf(); 'mud '+G.mud.toFixed(2)+' on '+G.mudOn+' log '+G.log.slice(-1).map(l=>l.t||l).join('')"
+},
+{
+"expect": "G.mudOn===0 && G.log.slice(-2).some(l=>String(l.t||l).includes('подсохла'))",
+"label": "земля подсохла"
+},
+{
+"eval": "const a=__a; G.day=G.day - dayOfYear(G.day) + DAYS_SEASON*3 + 6; G.weather.k='snow'; const t0=armyTile(a); let j=-1; for(let r=3;r<60&&j<0;r++) for(let dx=-r;dx<=r&&j<0;dx++){const q=t0+r*MW+dx; if(q<0||q>=NT) continue; if(WD.ter[q]===TR.GRASS&&!WD.river[q]&&settNear(q%MW+0.5,((q/MW)|0)+0.5,1.5)<0) j=q;} a.x=j%MW+0.5; a.y=((j/MW)|0)+0.5; a.mode='camp'; a.path=null; const sid=settNear(a.x,a.y,1.2); 'season '+seasonOf(G.day)+' sid '+sid+' cold(moved) '+coldRisk(a,true).toFixed(4)+' cold(camp) '+coldRisk(a,false).toFixed(4)"
+},
+{
+"expect": "coldRisk(__a,true)>0",
+"label": "зимой в поле мороз"
+},
+{
+"eval": "const a=__a; const m0=armyMen(a), s0=a.sick; a.moved=1; G.weather.k='blizzard'; for(let i=0;i<3;i++){a.moved=1; dailyArmy(a);} 'men '+m0+'→'+armyMen(a)+' sick '+s0+'→'+a.sick+' log '+G.log.slice(-3).map(l=>l.t||l).join(' | ')"
+},
+{
+"expect": "G.log.slice(-6).some(l=>String(l.t||l).startsWith('Мороз'))",
+"label": "обморожения в журнале"
+},
+{
+"eval": "const a=__a; let jr=-1; const t0=armyTile(a); for(let r=1;r<80&&jr<0;r++) for(let dy=-r;dy<=r&&jr<0;dy++) for(let dx=-r;dx<=r;dx++){const j=t0+dy*MW+dx; if(j<0||j>=NT) continue; if(WD.river[j]&&!WD.bridge[j]&&!WD.ford[j]&&WD.ter[j]!==TR.LAKE){jr=j;break;}} window.__jr=jr; G.day=G.day - dayOfYear(G.day) + 3; G.weather.k='rain'; G.mud=0.7; a.food=Math.max(a.food,2000); a.arrows=Math.max(a.arrows||0,1500); const f0=a.food, m0=armyMen(a); let n=0; for(let i=0;i<5;i++) riverCross(a,jr); 'river '+jr+' big '+WD.river[jr]+' food '+f0+'→'+a.food+' men '+m0+'→'+armyMen(a)+' log '+G.log.slice(-2).map(l=>l.t||l).join(' | ')"
+},
+{
+"expect": "G.log.slice(-5).some(l=>String(l.t||l).includes('Переправа'))",
+"label": "переправа вплавь"
+},
+{
+"eval": "const a=__a; G.mud=0.6; G.weather.k='snow'; G.day=G.day - dayOfYear(G.day) + DAYS_SEASON*3 + 8; a.u.levy=Math.max(a.u.levy||0,120); const p=WD.prov[armyTile(a)]; 'prov '+p+' owner '+ownerOfProv(p)+' realm '+a.realm"
+},
+{
+"eval": "const a=__a; let jf=-1; for(let j=0;j<NT;j+=37){const p=WD.prov[j]; if(p>=0&&ownerOfProv(p)!==a.realm&&TINFO[WD.ter[j]].cost>0&&!WD.river[j]&&WD.ter[j]===TR.GRASS&&settNear(j%MW+0.5,((j/MW)|0)+0.5,3)<0){jf=j;break;}} a.x=jf%MW+0.5; a.y=((jf/MW)|0)+0.5; a.path=null; a.svc=SVC_DAYS-6; a.svcPaid=0; UI.modals=[]; dailyArmy(a); 'svc '+a.svc+' modals '+UI.modals.map(m=>m.k+':'+(m.d.e&&m.d.e.id)).join(',')"
+},
+{
+"expect": "UI.modals.some(m=>m.k==='event'&&m.d.e.id==='svc')",
+"label": "ополчение ропщет"
+},
+{
+"eval": "SCREEN='map'; const a=__a; const [wx,wy]=MAPR.warpPt(a.x*TS,a.y*TS); centerOn(wx,wy); 'ok'"
+},
+{
+"wait": 400
+},
+{
+"shot": "march_svc.png"
+},
+{
+"eval": "const R0=G.realms[G.player.realm]; R0.gold=Math.max(R0.gold,500); window.__g=R0.gold; const m=UI.modals.find(m=>m.k==='event'); m.d.e.opts[0].fx(); UI.close(); 'gold '+__g+'→'+R0.gold+' paid '+__a.svcPaid"
+},
+{
+"expect": "__a.svcPaid===20 && G.realms[G.player.realm].gold<__g",
+"label": "заплатили ополчению"
+},
+{
+"eval": "UI.modals=[]; UI.win={k:'army'}; G.mud=0.7; 'ok'"
+},
+{
+"wait": 400
+},
+{
+"shot": "march_army.png"
+},
+{
+"eval": "const a=__a; a.svc=SVC_DAYS+a.svcPaid+1; const l0=a.u.levy; dailyArmy(a); 'levy '+l0+'→'+a.u.levy+' log '+G.log.slice(-2).map(l=>l.t||l).join(' | ')"
+},
+{
+"expect": "G.log.slice(-4).some(l=>String(l.t||l).startsWith('Ополченцы уходят'))",
+"label": "ополченцы уходят после срока"
+}
+]

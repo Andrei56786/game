@@ -125,7 +125,7 @@ function playerUpdate(dt) {
   if (dx || dy) { COURT.path = null; COURT.onArrive = null; if (P.sit) standUp(); }
   else if (COURT.path && !courtBlocked()) { const pt = COURT.path[0]; if (!pt) { COURT.path = null; const f = COURT.onArrive; COURT.onArrive = null; if (f) f(); } else { const gx = pt[0] * CT + 8, gy = pt[1] * CT + 11, ex = gx - P.x, ey = gy - P.y, d = Math.hypot(ex, ey); if (d < 2) COURT.path.shift(); else { dx = ex / d; dy = ey / d; } } }
   if (P.sit) return;
-  if (dx || dy) { const n = Math.hypot(dx, dy), sp = (COURT.sneak ? 34 : 80) * (P.c && P.c.wound > G.day ? 0.62 : 1) * dt; const vx = dx / n * sp, vy = dy / n * sp;
+  if (dx || dy) { const n = Math.hypot(dx, dy), sp = (COURT.sneak ? 34 : 80) * (P.c && P.c.wound > G.day ? woundSpd(P.c) : 1) * dt; const vx = dx / n * sp, vy = dy / n * sp;
     if (canStand(L, P.x + vx, P.y)) P.x += vx;
     if (canStand(L, P.x, P.y + vy)) P.y += vy;
     P.f += sp; P.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'); P.moving = 1;

@@ -196,7 +196,7 @@ function drawArmyWin() {
   txt('Боевой дух ' + Math.round(pa.morale) + ' → ' + tg, RX, ry, PAL.y); bar(RX + 110, ry + 1, 80, 6, pa.morale / 100, pa.morale < 35 ? '#c0353f' : '#7fb04c'); ry += 11;
   L.slice(0, 7).forEach((l, i) => { txt((l.v > 0 ? '+' : '−') + Math.abs(l.v) + ' ' + l.t, RX + (i % 2) * 140, ry + Math.floor(i / 2) * 9, l.v > 0 ? UIC.good : UIC.bad, { f: 's' }); }); ry += Math.ceil(Math.min(7, L.length) / 2) * 9 + 4;
   txt('Усталость ' + Math.round(pa.fat) + '%', RX, ry, PAL.w, { f: 's' }); bar(RX + 70, ry, 60, 6, pa.fat / 100, '#c9a060'); txt('Скорость ' + armySpeed(pa).toFixed(1) + ' кл./день', RX + 140, ry, PAL.w, { f: 's' }); ry += 12;
-  const G0 = GROUNDS[pa.ground || 'open']; txt('Земля: ' + G0.n, RX, ry, '#c8d8a8'); ry += 10; ry += para('«' + G0.q + '» ' + G0.e, RX, ry, 270, '#e8d8b0', { f: 's', lh: 9 }) + 2;
+  const G0 = GROUNDS[pa.ground || 'open']; txt('Земля: ' + G0.n, RX, ry, '#c8d8a8'); ry += 10; ry += para('«' + G0.q + '» ' + G0.e, RX, ry, 270, '#e8d8b0', { f: 's', lh: 9 }) + 2; if (typeof marchHardLines === 'function') ry = marchHardLines(pa, RX, ry);
   // modes
   const my = Y + HH - 30; txt('Режим:', X + 14, my + 3, '#c8b898');
   const modes = ['camp', 'fort', 'hide', 'forage', 'drill']; modes.forEach((m, i) => btn('awm' + m, X + 52 + i * 78, my, 76, 13, { label: MODE_INFO[m].n.replace('Укреплённый лагерь', 'Укрепиться').replace('Скрытый лагерь', 'Затаиться'), ic: MODE_INFO[m].ic, active: !pa.path && pa.mode === m, tip: [MODE_INFO[m].n, MODE_INFO[m].d], onClick: () => setMode(m) }));
@@ -241,7 +241,7 @@ function drawDiploWin(w) {
   y += 4; const bx = RX, bw = 196; let by = y;
   const B = (id, label, f, o) => { sbtn(id, bx + (o && o.col ? bw + 6 : 0), by, bw, label, f, Object.assign({ style: 'parch' }, o)); if (o && o.col) by += 15; };
   btn('d_reck', bx, by, bw, 12, { label: 'Расчёт перед войной (гл. 1)', style: 'parch', onClick: () => UI.alert('reckon', { t, declare: false }), tip: 'Семь сопоставлений Сунь-цзы: кто победит?' });
-  if (!rr.war) { const broke = rr.truce > G.day || rr.pact > G.day || rr.ally; btn('d_war', bx + bw + 6, by, bw, 12, { label: 'Объявить войну', style: 'parch', onClick: () => UI.alert('reckon', { t, declare: true }), tip: broke ? ['Нарушение договора!', { t: 'Слава −25, мнение всех держав −12 (честных −25).', c: UIC.bad }] : ['Объявить войну', 'Сначала — Расчёт. Союзники врага вступятся.'] }); }
+  if (!rr.war) { const broke = rr.truce > G.day || rr.pact > G.day || rr.ally; btn('d_war', bx + bw + 6, by, bw, 12, { label: heraldTo(t) ? 'Герольд в пути · ≈' + hdn(heraldLeft(heraldTo(t))) : 'Объявить войну', style: 'parch', onClick: () => UI.alert('reckon', { t, declare: true }), tip: broke ? ['Нарушение договора!', { t: 'Слава −25, мнение всех держав −12 (честных −25).', c: UIC.bad }] : ['Объявить войну', 'Сначала — Расчёт. Союзники врага вступятся.'] }); }
   else { const a = acceptance('peace', t, {}); btn('d_peace', bx + bw + 6, by, bw, 12, { label: 'Предложить белый мир', style: 'parch', onClick: () => propose('peace', t, {}), tip: accTip('Белый мир: всё возвращается как было', a) }); }
   by += 15;
   if (rr.war) {
