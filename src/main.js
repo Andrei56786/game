@@ -107,7 +107,7 @@ function frame(ts) {
   if (FPS.show) txt(FPS.v + ' fps · ' + FPS.ms.toFixed(1) + ' мс' + (typeof MAPDIRTY !== 'undefined' && MAPDIRTY.ms ? ' · границы ' + MAPDIRTY.ms.toFixed(0) + ' мс' : ''), W - 4, H - 40, PAL.y, { al: 'r', sh: PAL.o, f: 's' });
 }
 function boot() {
-  initArt(); SCREEN = 'title'; Snd.music('title');
+  vfLoad(); initArt(); SCREEN = 'title'; Snd.music('title');
   { const m = /#art(\d*)/.exec(location.hash); if (m) { SCREEN = 'art'; DEVP = +(m[1] || 0); } }
   { const m = /#court(tut)?(\d*)/.exec(location.hash); if (m) { NEWG.tut = !!m[1]; if (m[2]) NEWG.seed = +m[2]; startNew(); } }
   addEventListener('beforeunload', () => { try { if (G && !G.over && (SCREEN === 'map' || SCREEN === 'court')) saveGame(); } catch (_) { } });
