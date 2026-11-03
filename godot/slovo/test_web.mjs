@@ -78,10 +78,21 @@ try {
       await cmd('cam 4320 2700 0.125'); await wait(1500); await shot('map_kingdom');
       let m = await mst();
       check(m && m.ok && m.cam[2] === 0.125, 'вся карта (' + (m && JSON.stringify(m.ms)) + ' мс)');
+      // 0.4: королевство посчитано (newGame3 + первый день экономики), туман войны, видимые войска
+      const R = m && m.realm;
+      check(R && R.fog && R.explored > 100000 && R.chars >= 100 && R.armies >= 50 && R.seen >= 4 && R.gold > 0 && R.net > 0 && (R.kinds.lord || 0) >= 1,
+        'королевство: люди, войска, туман, казна (' + JSON.stringify(R) + ')');
       await cmd('mode pol'); await wait(1000); await shot('map_realms'); await cmd('mode ter');
       await cmd('capital', 'zoom 1', 'zoom 1', 'zoom 1'); m = await settle(); await shot('map_capital');
       check(m && m.cam[2] === 1 && m.vis.n >= 4 && m.vis.miss === 0 && m.chunks >= m.vis.n, 'у столицы, масштаб 1: куски нарисованы (' + (m && JSON.stringify(m.vis)) + ', ' + (m && m.cms) + ' мс на кусок)');
       check(m && m.sea.join() === '1,1,2', '1-й день: оттепель на севере и в середине, цветение на юге (' + (m && m.sea) + ')');
+      check(m && m.realm.drawn >= 1, 'у столицы видны свои войска (' + (m && m.realm.drawn) + ')');
+      await cmd('hover 30 9'); await wait(600); await shot('map_gold_tip');
+      await cmd('hover 320 180'); m = await settle(); await shot('map_capital_tip');
+      check(m && m.hover !== '', 'подсказка у столицы: ' + (m && m.hover));
+      await cmd('hover -1 -1', 'army lord', 'zoom 1'); m = await settle(); await shot('map_army');
+      check(m && m.cam[2] === 2 && m.realm.drawn >= 1, 'войско вблизи (' + (m && JSON.stringify(m.cam)) + ', нарисовано ' + (m && m.realm.drawn) + ')');
+      await cmd('cam 4380 3046 0.25'); await wait(1500); await shot('map_fog');
       // середина королевства (тепло 0,54): лето → зима → осень, куски перекрашиваются
       await cmd('cam 4224 2688 1', 'day 30'); m = await settle(); const l0 = await lum(); await shot('map_summer');
       await cmd('day 70'); m = await settle(); const l1 = await lum(); await shot('map_winter');

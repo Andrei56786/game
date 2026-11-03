@@ -1,6 +1,6 @@
 extends Node
 # Общее состояние (как G в браузерной версии): день, доля суток, скорость, календарь, свет неба, шрифт.
-const VERSION := "0.3.0"
+const VERSION := "0.4.0"
 const DAY_SEC := [0.0, 360.0, 180.0, 60.0]   # секунд на игровые сутки при дворе (COURT_SPD в HTML)
 const DAYS_SEASON := 21
 const DAYS_YEAR := 84
