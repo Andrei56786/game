@@ -1,7 +1,10 @@
 'use strict';
 // ===== YARD ART: courtyard buildings, curtain walls, towers, trees & props (procedural pixel art) =====
 // ---------- surface textures for buildings ----------
+// v3.5: roofs mark their pixels (b.rm) — in winter the snow lies on them
+function roofMark(b, on) { if (!on) { delete b.set; return; } if (!b.rm) b.rm = new Uint8Array(b.w * b.h); b.set = function (x, y, c) { PB.prototype.set.call(this, x, y, c); x |= 0; y |= 0; if (c && x >= 0 && y >= 0 && x < this.w && y < this.h) this.rm[y * this.w + x] = 1; }; }
 function roofTex(b, x0, y0, w, h, kind, seed, flat) { // hipped roof in oblique view: back slope, ridge, front slope, lit left hip, shaded right hip
+  roofMark(b, 1);
   const R0 = RPK[kind === 'slate' ? 'slate' : kind === 'thatch' ? 'thatch' : kind === 'tile' ? 'rred' : 'wood'], N = R0.length - 1;
   const rb = flat ? 0 : Math.max(3, Math.round(h * 0.24)), hip = flat ? 0 : Math.min(w * 0.16, (h - rb) * 0.85);
   const hipW = y => y < rb ? hip * (y + 1) / rb : hip * (h - y) / (h - rb);
@@ -15,7 +18,7 @@ function roofTex(b, x0, y0, w, h, kind, seed, flat) { // hipped roof in oblique 
       b.set(x0 + x, y0 + y, c); }
     if (!flat) { b.set(x0 + Math.floor(hw), y0 + y, R0[N]); b.set(x0 + w - 1 - Math.floor(hw), y0 + y, R0[0]); } }
   if (rb) { for (let x = Math.floor(hip); x < w - hip; x++) { b.set(x0 + x, y0 + rb - 1, R0[N]); b.set(x0 + x, y0 + rb, R0[1]); } }
-  b.hl(x0, y0 + h - 1, w, R0[0]); b.vl(x0, y0, h, R0[0]); b.vl(x0 + w - 1, y0, h, R0[0]);
+  b.hl(x0, y0 + h - 1, w, R0[0]); b.vl(x0, y0, h, R0[0]); b.vl(x0 + w - 1, y0, h, R0[0]); roofMark(b, 0);
 }
 function wallTex(b, x0, y0, w, h, kind, seed) {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let c;
@@ -59,8 +62,9 @@ OBJP.bld = function (o, f) {
 };
 // ---------- keep facade (static, north side of the yard). local coords: w = 26 tiles, h = 10 tiles ----------
 function coneRoof(b, cx, y0, r, hgt, ramp) { const R0 = RPK[ramp || 'slate']; // conical roof seen from the front: triangle with radial shingles
+  roofMark(b, 1);
   for (let y = 0; y < hgt; y++) { const t = (y + 1) / hgt, half = r * t; for (let x = Math.floor(cx - half); x <= Math.ceil(cx + half); x++) { const u = (x + 0.5 - cx) / Math.max(1, half); if (Math.abs(u) > 1) continue; let i = u < -0.45 ? 4 : u < 0.1 ? 3 : u < 0.6 ? 2 : 1; const row = Math.floor((y + (x & 1) * 2) / 4); if ((y + (x & 1) * 2) % 4 === 3) i--; if (hsh(x, row, 9) > 0.8) i++; b.set(x, y0 + y, R0[clamp(i, 0, R0.length - 1)]); } }
-  for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) b.set(x, y0 + hgt - 1, R0[0]); }
+  for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) b.set(x, y0 + hgt - 1, R0[0]); roofMark(b, 0); }
 function towerBody(b, cx, y0, r, h, seed) { // cylinder of stone blocks with shading
   for (let y = 0; y < h; y++) for (let x = Math.floor(cx - r); x < Math.ceil(cx + r); x++) { const u = (x + 0.5 - cx) / r; if (Math.abs(u) > 1) continue; const row = Math.floor(y / 7), ly = y % 7, ang = Math.asin(clamp(u, -1, 1)), col = Math.floor((ang * r / 1.1 + (row & 1) * 6) / 12); let i = u < -0.55 ? 5 : u < 0.05 ? 4 : u < 0.55 ? 3 : 2; if (ly === 6 || Math.abs(((ang * r / 1.1 + (row & 1) * 6) % 12)) < 1) i -= 2; else if (ly === 0) i++; if (hsh(col, row, seed) > 0.85) i--; b.set(x, y0 + y, cmix(RPK.stone[clamp(i, 0, 6)], RPK.sand[clamp(i, 0, 5)], 0.28)); } }
 function crenel(b, x0, y0, w, hgt, mw, gap, ramp) { const S = RPK[ramp || 'stone']; for (let x = x0; x < x0 + w; x++) { const m = ((x - x0) % (mw + gap)) < mw; const top = m ? y0 : y0 + Math.round(hgt * 0.55); for (let y = top; y < y0 + hgt; y++) { const lx = (x - x0) % (mw + gap); let i = y === top ? 6 : lx === 0 && m ? 5 : lx === mw - 1 && m ? 3 : 4; b.set(x, y, cmix(S[i], RPK.sand[Math.min(5, i)], 0.25)); } } b.hl(x0, y0 + hgt - 1, w, S[2]); }
@@ -92,7 +96,7 @@ function paintKeepFacade(b, X0, Y0, wT, seed) { // draws into the location buffe
   for (let n = 0; n < 7; n++) { const ix = tw0 + 4 + hsh(n, 1, seed) * (W0 - tw0 * 2 - 8), top = 100 + hsh(n, 2, seed) * 40; if (ix > bay0 - 10 && ix < bay1 + 10) continue; for (let y = top; y < Hh - 3; y++) for (let x = ix - 6; x < ix + 6; x++) { const v = hsh(x, y, seed + n); const r0 = (Hh - y) / (Hh - top); if (v < 0.42 * (1 - Math.abs(x - ix) / 7) * (0.6 + r0 * 0.6)) k.set(x, y, RPK.leaf[v < 0.12 ? 5 : v < 0.25 ? 4 : 3]); } }
   // base plinth
   for (let x = 0; x < W0; x++) { if (k.get(x, Hh - 1)) for (let y = Hh - 4; y < Hh; y++) if (k.get(x, y) && !(x >= dx - 10 && x < dx + 44)) k.put(x, y, S[y === Hh - 4 ? 4 : 2]); }
-  k.outline(OUTL); for (let y = 0; y < Hh; y++) for (let x = 0; x < W0; x++) { const c = k.get(x, y); if (c) b.set(X0 + x, Y0 + y, c); }
+  k.outline(OUTL); if (typeof SEA_PB === 'function') SEA_PB(k, 'keep'); for (let y = 0; y < Hh; y++) for (let x = 0; x < W0; x++) { const c = k.get(x, y); if (c) b.set(X0 + x, Y0 + y, c); }
   return meta;
 }
 // ---------- curtain walls (painted into the ground layer) ----------
