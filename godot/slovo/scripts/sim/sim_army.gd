@@ -55,7 +55,7 @@ static func prep() -> void:
 	var bridge := W.bridge
 	var ford := W.ford
 	for j in NT:
-		var key: int = ter[j] | (road[j] << 4) | (river[j] << 5) | (bridge[j] << 13) | (ford[j] << 14)
+		var key: int = ter[j] | (road[j] << 8) | (river[j] << 16) | (bridge[j] << 24) | (ford[j] << 25)   # по байту: дорога бывает 2, река — до 3
 		var c: Variant = idx.get(key)
 		if c == null:
 			c = cls_key.size()
@@ -484,7 +484,7 @@ static func startSiege(a: Dictionary, sid: int) -> bool:
 		if not JS.t(S.get("dumK")):
 			S.dumK = {}
 		JS.oset(S.dumK, JS.s(a.realm), 1.0)
-		SimAI.dlog(armyLabel(a) + " осадил " + Sim.W.setts[sid].name + " и разглядел чучела на стенах.", "bad")
+		SimBel.dlog(armyLabel(a) + " осадил " + Sim.W.setts[sid].name + " и разглядел чучела на стенах.", "bad")
 	if JS.t(S.siege):
 		return false
 	S.siege = {"by": a.id, "realm": a.realm, "d0": G.day, "works": 0.0, "need": S.walls * 30 + 10, "asked": -99.0}
@@ -637,12 +637,12 @@ static func captureSett(a: Dictionary, S: Dictionary, how := "") -> void:
 	var st: Dictionary = RST()
 	if a.realm == p and prev != p:
 		if ws.type == "village":
-			st.vil += 1.0
+			st.vil = SimAI.nv(st, "vil") + 1.0
 		else:
-			st.took += 1.0
+			st.took = SimAI.nv(st, "took") + 1.0
 			chron(T0[1] + " " + ws.name + (" (" + Sim.realmName(own) + ")" if own != p and own >= 0 and own < 5 else "") + ".", "castle", "took", 3.0 if ws.type == "capital" else 2.0)
 	elif prev == p and a.realm != p and ws.type != "village":
-		st.fell += 1.0
+		st.fell = SimAI.nv(st, "fell") + 1.0
 		chron(T0[2] + " " + ws.name + " — взял" + ("и: " + Sim.realmName(a.realm) if a.realm >= 0 and a.realm < 5 else "и враги") + ".", "flag", "fell", 3.0 if ws.type == "capital" else 2.0)
 
 
@@ -764,7 +764,7 @@ static func quickRun(sides: Array, tile: int) -> Dictionary:
 			loot.food = JS.rnd(la.food * 0.4)
 			loot.arrows = JS.rnd(la.arrows * 0.3)
 			loot.horses = JS.rnd(la.horses * 0.5 + lostL * (Sim.mountedN(la.u) / maxf(1.0, Sim.armyMen(la) + lostL)) * 0.3)
-			loot.gold = JS.rnd(JS.n(la.get("goods")) * 0.8 + JS.n(la.get("loot")) + (10.0 if la.kind == "lord" else 0.0) + (SimAI.caravanLoot(la) if la.kind == "caravan" else 0.0))
+			loot.gold = JS.rnd(JS.n(la.get("goods")) * 0.8 + JS.n(la.get("loot")) + (10.0 if la.kind == "lord" else 0.0) + (SimEcon.caravanLoot(la) if la.kind == "caravan" else 0.0))
 			la.food -= loot.food
 			la.arrows -= loot.arrows
 			la.horses = maxf(0.0, la.horses - JS.rnd(la.horses * 0.5))
@@ -818,9 +818,9 @@ static func quickRun(sides: Array, tile: int) -> Dictionary:
 			var m1 := Sim.menOf(E.u)
 			var st := RST()
 			if won:
-				st.won += 1.0
+				st.won = SimAI.nv(st, "won") + 1.0
 			else:
-				st.lost += 1.0
+				st.lost = SimAI.nv(st, "lost") + 1.0
 			if m0 + m1 >= 60 or S.king:
 				chron(("Победа" if won else "Поражение") + " близ " + placeName(placeNear(tile)) + ": " + (Sim.realmName(E.realm) if E.realm < 5 else String(E.name)) + " (" + fmt(m0) + " против " + fmt(m1) + ")" + (" — король сам вёл войско." if S.king else "."),
 					"sword" if won else "flag", "won" if won else "lost", 3.0 if S.king or m0 + m1 >= 600 else 2.0)
@@ -862,7 +862,7 @@ static func aiContacts() -> void:
 			a.lastFight = G.day
 			b.lastFight = G.day
 			if G.has("court") and (a.realm == 0.0 or b.realm == 0.0):
-				SimAI.cmdBattle(a, b, res)
+				SimCmd.cmdBattle(a, b, res)
 			if a.realm == G.player.realm or b.realm == G.player.realm or G.vis[Sim.armyTile(a)] == 2:
 				Sim.glog("Битва: " + armyLabel(a) + " и " + armyLabel(b) + " — победа: " + armyLabel(a if res.winA else b) + ".", "info")
 			for q in n:
@@ -888,7 +888,7 @@ static func reignInit() -> Variant:
 	if JS.t(G.get("reign")):
 		return G.reign
 	var k: Dictionary = Sim.charOf(G.player.char)
-	var first := not (JS.t(G.get("reigns")) and G.reigns.size() > 0)
+	var first: bool = not (JS.t(G.get("reigns")) and G.reigns.size() > 0)
 	if not JS.t(G.get("reigns")):
 		G.reigns = []
 	G.reign = {"n": float(G.reigns.size() + 1), "king": k.id, "from": 0.0 if first else G.day, "age0": k.age, "era0": float(eraNow()), "lands0": float(landsN()), "chron": [], "goal": null,
@@ -901,7 +901,7 @@ static func reignInit() -> Variant:
 
 static func RST() -> Dictionary:
 	var r: Variant = reignInit()
-	return r.st if r != null else {"st": {}}
+	return r.st if r != null else {}
 
 
 static func chron(t: String, ic: String, k: String, imp: float) -> void:
