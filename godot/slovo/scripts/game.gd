@@ -37,6 +37,8 @@ const STEPS := 24        # шагов движения на сутки (pageStep
 var steps := 0           # шагов, сделанных за текущий день королевства (Sim.G.day)
 var step_at := 0.0       # к какому времени (день + доля) относится последний шаг
 var pos0 := {}           # войско (id) → Vector2: где оно было до последнего шага
+var stepping := false    # шаг движения ещё идёт: бой без экрана считается кусками по кадрам (SimDay.due/pause)
+var step_done := -1      # кадр, в котором такой шаг досчитан
 var steps_n := 0         # для проверок: шагов с начала игры и время последнего, мс
 var step_ms := 0.0
 var b_ms := 0.0          # для проверок: доля кадра на счёт королевства в последнем кадре и сколько ушло, мс
@@ -93,16 +95,20 @@ func _process(dt: float) -> void:
 		sh = SHARE_MAP3
 	var b := int(clampf(sh * dt_avg * 1e6, 3000.0, cap))
 	b_ms = b / 1000.0
-	if SimDay.busy:
-		SimDay.budget_us = b                 # следующий кусок дня — в начале следующего кадра (process_frame)
+	if SimDay.busy or stepping:
+		SimDay.budget_us = b                 # следующий кусок дня или боя — в начале следующего кадра (process_frame)
 		return
-	# день мог досчитаться в этом кадре (последний кусок — до _process): его время — в счёт этого кадра
-	var t0 := SimDay.slice_t if SimDay.done_frame == f else Time.get_ticks_usec()
+	# день или шаг с боем мог досчитаться в этом кадре (последний кусок — до _process): его время — в счёт этого кадра
+	var t0 := SimDay.slice_t if SimDay.done_frame == f or step_done == f else Time.get_ticks_usec()
+	SimDay.slice_t = t0                      # бой в шаге движения (SimCapt.runHeadless) делится на куски по той же доле кадра
+	SimDay.budget_us = b
 	while true:
 		lag = day - int(Sim.G.day)
 		var want := STEPS if lag > 0 else mini(STEPS - 1, int(frac * STEPS))
 		while steps < want and Time.get_ticks_usec() - t0 < b:
 			step()
+			if stepping:
+				return
 		var left := b - (Time.get_ticks_usec() - t0)
 		work_ms = (b - left) / 1000.0
 		if steps < want or lag <= 0 or left <= 0:
@@ -119,11 +125,16 @@ func _process(dt: float) -> void:
 ## шаг движения: войска идут 1/24 суток, встречи врагов (aiContacts); положения до шага — для плавного рисования
 func step() -> void:
 	var t0 := Time.get_ticks_usec()
+	stepping = true
 	pos0.clear()
 	for a: Dictionary in Sim.G.armies:
 		if JS.t(a.alive):
 			pos0[a.id] = Vector2(a.x, a.y)
-	SimArmy.substep(1.0 / STEPS)
+	var f0 := Engine.get_process_frames()
+	await SimArmy.substep(1.0 / STEPS)
+	stepping = false
+	if Engine.get_process_frames() != f0:
+		step_done = Engine.get_process_frames()
 	steps += 1
 	steps_n += 1
 	step_at = Sim.G.day + float(steps) / STEPS

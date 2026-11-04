@@ -53,17 +53,22 @@ func _initialize() -> void:
 	var bad_day := -1
 	var steps := int(meta.get("steps", 24.0))
 	var ms_steps := 0.0
+	# -- --pauses: шаги и дни кусками по кадрам (бюджет 3 мс), как в игре, — итог должен быть тот же
+	var pz := 3000 if "--pauses" in OS.get_cmdline_user_args() else 0
+	var fr0 := Engine.get_process_frames()
 	for d in range(1, days + 1):
 		# шаги движения дня (pageStep в HTML: походы войск и встречи), затем сам день
 		t0 = Time.get_ticks_usec()
 		for k in steps:
-			SimArmy.substep(1.0 / steps)
+			SimDay.budget_us = pz
+			SimDay.slice_t = Time.get_ticks_usec()
+			await SimArmy.substep(1.0 / steps)
 		ms_steps += (Time.get_ticks_usec() - t0) / 1000.0
 		var pos := 0.0
 		for a in Sim.G.armies:
 			pos = pos + a.x * 7 + a.y * 13
 		t0 = Time.get_ticks_usec()
-		await SimDay.dailyTick(0)
+		await SimDay.dailyTick(pz)
 		var ms := (Time.get_ticks_usec() - t0) / 1000.0
 		ms_days += ms
 		ms_max = maxf(ms_max, ms)
@@ -92,6 +97,8 @@ func _initialize() -> void:
 		for k in SimDay.prof:
 			pr.append("%s %.1f" % [k, SimDay.prof[k] / 1000.0 / days])
 		print("части дня, мс на день: ", ", ".join(pr), "; путей %d (%.1f мс на день, %d узлов на путь, самый долгий %.1f мс)" % [SimArmy.path_n, SimArmy.path_us / 1000.0 / days, SimArmy.path_nodes / maxi(1, SimArmy.path_n), SimArmy.path_max_us / 1000.0])
+	if pz > 0:
+		print("кусками по %d мкс: кадров %d" % [pz, Engine.get_process_frames() - fr0])
 	var ok := n1 + n2 + n3 == 0
 	print("STATE CHECK ", "OK" if ok else "FAIL (newGame %d, newGame3 %d, дни %d%s)" % [n1, n2, n3, ", первый день расхождения %d" % bad_day if bad_day > 0 else ""])
 	quit(0 if ok else 1)

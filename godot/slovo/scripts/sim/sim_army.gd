@@ -1,9 +1,8 @@
 class_name SimArmy
 ## Походы войск — army.js с обёртками march.js (распутица, переправы), deceit.js (чучела на стенах), reign.js (летопись),
 ## astar и moveCost из worldgen.js, onCapture из events.js: пути, движение по шагам, осады и взятие поселений, отход после
-## боя; встречи войск ИИ (aiContacts из ai.js). Бой до среза 0.7 — «на счётах» (quickRun): по силе, духу, усталости, стенам
-## и удаче, без поля боя; в HTML-эталоне (pageQuick в tools/sim_export.mjs) — тот же. Шаг движения substep — worldAdvance из
-## command.js без короля в поле; сутки — STEPS шагов, затем день королевства (SimDay.dailyTick).
+## боя; встречи войск ИИ (aiContacts из ai.js) — бой на поле без экрана (SimCapt.autoBattle). Шаг движения substep —
+## worldAdvance из command.js без короля в поле; сутки — STEPS шагов, затем день королевства (SimDay.dailyTick).
 
 const MW := WorldData.MW
 const MH := WorldData.MH
@@ -13,7 +12,6 @@ const DX8: Array[int] = [1, -1, 0, 0, 1, 1, -1, -1]
 const DY8: Array[int] = [0, 0, 1, -1, 1, -1, 1, -1]
 const MUDT := {WorldData.GRASS: 1.0, WorldData.FARM: 1.2, WorldData.MARSH: 1.3, WorldData.STEPPE: 0.8, WorldData.FOREST: 0.7, WorldData.DFOREST: 0.7,
 	WorldData.HILLS: 0.5, WorldData.MOUNT: 0.3, WorldData.PEAK: 0.0, WorldData.BEACH: 0.4, WorldData.SNOW: 0.5}
-const GXP := {"levy": 10.0, "spear": 15.0, "sword": 20.0, "archer": 15.0, "xbow": 15.0, "horse": 15.0, "harch": 15.0, "knight": 25.0}
 const STYPE := {"capital": ["столица", "Взята столица", "Пала столица"], "castle": ["замок", "Взят замок", "Пал замок"], "town": ["город", "Взят город", "Пал город"], "village": ["деревня", "Взята деревня", "Пала деревня"]}
 const ROMAN := ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
 const ERA_Y := [1, 4, 8]
@@ -452,7 +450,7 @@ static func advanceArmy(a: Dictionary, dd: float) -> void:
 	if path == null or a.pi >= path.size() - 1:
 		return
 	var p0 := int(a.pi)
-	_advance(a, dd)
+	await _advance(a, dd)
 	if not JS.t(a.alive) or int(a.pi) <= p0:
 		return
 	var W := Sim.W
@@ -503,7 +501,7 @@ static func _advance(a: Dictionary, dd: float) -> void:
 		if isKingArmy(a) and Sim.G.player.follow < 0:
 			SimDay.alerts.append({"k": "pause", "t": "" if JS.t(f) else "Войско прибыло"})
 		if JS.t(f):
-			runArrive(a, f)
+			await runArrive(a, f)
 
 
 static func isKingArmy(a: Dictionary) -> bool:
@@ -517,7 +515,7 @@ static func runArrive(a: Dictionary, f: Dictionary) -> void:
 			var r: float = f.r if f.has("r") else a.realm
 			var c: float = Sim.G.setts[int(f.s)].ctrl
 			if c != r and (Sim.hostile(r, c) or c == 5.0):
-				SimAI.aiArriveSett(a, int(f.s))
+				await SimAI.aiArriveSett(a, int(f.s))
 		"loot":
 			SimAI.banditLoot(a, Sim.G.setts[int(f.s)])
 		"sett":
@@ -622,7 +620,7 @@ static func siegeDaily(a: Dictionary) -> void:
 		sg.starve = JS.n(sg.get("starve")) + 1
 		takeU(S.gar, ceilf(Sim.menOf(S.gar) * 0.04))
 	if a.kind != "player":
-		SimAI.aiSiegeDecision(a, S)
+		await SimAI.aiSiegeDecision(a, S)
 	if Sim.menOf(S.gar) <= 0:
 		captureSett(a, S, "гарнизон истаял")
 
@@ -782,138 +780,6 @@ static func retreatArmy(a: Dictionary, from: Variant) -> void:
 		a.ai.t = 2.0
 
 
-# ---------- бой «на счётах» (до среза 0.7; в HTML-эталоне — pageQuick) ----------
-static func _qpow(s: Dictionary) -> float:
-	return SimDay.powerU(s.u, s.xp) * (0.55 + s.morale / 200.0) * (1 - minf(60.0, s.fat) / 300.0) * s.wall
-
-
-static func _qside(a: Dictionary) -> Dictionary:
-	var G := Sim.G
-	return {"army": a.id, "u": Sim.assign(Sim.emptyU(), a.u), "xp": a.xp, "morale": a.morale, "fat": a.fat, "wall": 1.0, "realm": a.realm, "name": armyLabel(a), "king": a.kind == "player" and a.gen == G.player.char}
-
-
-static func _qgar(S: Dictionary, assault: bool) -> Dictionary:
-	var wall := 1.0
-	if assault and S.walls > 0:
-		wall = 1 + S.walls * 0.5 * (1 - 0.6 * (minf(1.0, S.siege.works / maxf(1.0, S.siege.need)) if JS.t(S.siege) else 1.0))
-	return {"sett": S.id, "u": Sim.assign(Sim.emptyU(), S.gar), "xp": GXP, "morale": 65.0 if S.food > 0 else 35.0, "fat": 0.0, "realm": S.ctrl, "name": "гарнизон " + Sim.W.setts[int(S.id)].name, "king": false, "wall": wall}
-
-
-static func autoBattle(a: Dictionary, b: Dictionary) -> Dictionary:
-	var res := quickRun([_qside(a), _qside(b)], Sim.armyTile(a))
-	res.winA = res.win == 0
-	return res
-
-
-static func autoBattleGarrison(a: Dictionary, S: Dictionary, assault := false) -> Dictionary:
-	var res := quickRun([_qside(a), _qgar(S, assault)], int(Sim.W.setts[int(S.id)].i))
-	res.win = res.win == 0
-	return res
-
-
-static func quickRun(sides: Array, tile: int) -> Dictionary:
-	var G := Sim.G
-	var pa := _qpow(sides[0]) * (0.85 + Sim.R.f() * 0.3)
-	var pb := _qpow(sides[1]) * (0.85 + Sim.R.f() * 0.3)
-	var win := 0 if pa >= pb else 1
-	var r := minf(pa, pb) / maxf(1e-9, maxf(pa, pb))
-	var kw := 0.26 * r
-	var kl := 0.3 + 0.5 * (1 - r) * (1 - r)
-	var res := {"win": win, "sides": []}
-	for si in 2:
-		var s: Dictionary = sides[si]
-		var winner := si == win
-		var a: Variant = Sim.armyById(s.army) if s.has("army") else null
-		var u: Dictionary = a.u if a != null else G.setts[int(s.sett)].gar
-		var m0 := Sim.menOf(u)
-		takeU(u, JS.rnd(m0 * (kw if winner else kl)))
-		var lost := m0 - Sim.menOf(u)
-		var o := {"lost": lost, "killed": 0.0, "wounded": JS.rnd(lost * (0.42 if winner else 0.25)), "prisoners": 0.0}
-		o.killed = lost - o.wounded
-		if a != null:
-			a.wounded += o.wounded
-			a.arrows = maxf(0.0, a.arrows - Sim.rangedN(s.u) * 6)
-			a.morale = JS.clp(a.morale + (8.0 if winner else -18.0), 0, 100)
-			a.vict = 12.0 if winner else -15.0
-			a.fat = JS.clp(a.fat + 15, 0, 100)
-			for t in Sim.UT:
-				a.xp[t] = minf(100.0, JS.n(a.xp.get(t)) + (6.0 if winner else 3.0))
-			a.lastFight = G.day
-		res.sides.append(o)
-	var W0: Dictionary = sides[win]
-	var L0: Dictionary = sides[1 - win]
-	var wa: Variant = Sim.armyById(W0.army) if W0.has("army") else null
-	var la: Variant = Sim.armyById(L0.army) if L0.has("army") else null
-	var lostL: float = res.sides[1 - win].lost
-	if wa != null:
-		var loot := {"food": 0.0, "arrows": 0.0, "weap": JS.rnd(lostL * 0.3), "horses": 0.0, "gold": 0.0, "prisoners": JS.rnd(lostL * 0.18)}
-		if la != null:
-			loot.food = JS.rnd(la.food * 0.4)
-			loot.arrows = JS.rnd(la.arrows * 0.3)
-			loot.horses = JS.rnd(la.horses * 0.5 + lostL * (Sim.mountedN(la.u) / maxf(1.0, Sim.armyMen(la) + lostL)) * 0.3)
-			loot.gold = JS.rnd(JS.n(la.get("goods")) * 0.8 + JS.n(la.get("loot")) + (10.0 if la.kind == "lord" else 0.0) + (SimEcon.caravanLoot(la) if la.kind == "caravan" else 0.0))
-			la.food -= loot.food
-			la.arrows -= loot.arrows
-			la.horses = maxf(0.0, la.horses - JS.rnd(la.horses * 0.5))
-			la.goods = 0.0
-			la.loot = 0.0
-		loot.food = minf(loot.food, maxf(0.0, Sim.armyCap(wa) - SimDay.armyLoad(wa)))
-		wa.food += loot.food
-		wa.arrows += loot.arrows
-		wa.weap += loot.weap
-		wa.horses += loot.horses
-		wa.prisoners = JS.n(wa.get("prisoners")) + loot.prisoners
-		if wa.realm < 5:
-			G.realms[int(wa.realm)].gold += loot.gold
-		res.loot = loot
-	if la != null:
-		var m := Sim.armyMen(la)
-		if m < 15 or (lostL > m * 2.5 and la.kind != "player"):
-			SimDay.destroyArmy(la, "разбито")
-		else:
-			retreatArmy(la, wa)
-	if wa != null and Sim.armyMen(wa) <= 0:
-		SimDay.destroyArmy(wa, "погибло")
-	var ra: float = W0.realm
-	var rb: float = L0.realm
-	var p: float = G.player.realm
-	if ra < 5 and rb < 5 and ra != rb:
-		var v := JS.clp(lostL / 25.0, 2, 20)
-		var r1: Dictionary = G.rel[int(ra)][int(rb)]
-		var r2: Dictionary = G.rel[int(rb)][int(ra)]
-		r1.bs = JS.n(r1.get("bs")) + v
-		r2.bs = JS.n(r2.get("bs")) - v
-	if ra == p or rb == p:
-		G.stats.battles += 1.0
-		if ra == p:
-			G.stats.won += 1.0
-		var PR: Dictionary = G.realms[int(p)]
-		PR.fear = JS.n(PR.get("fear")) + (3.0 if ra == p else -2.0)
-		var pw := ra == p
-		var mine: Dictionary = W0 if pw else L0
-		var foe: Dictionary = L0 if pw else W0
-		if W0.has("sett") or L0.has("sett"):
-			Sim.glog(mine.name + (" отбился от: " if pw else " не устоял: ") + foe.name, "good" if pw else "bad")
-		else:
-			Sim.glog(("Победа над: " if pw else "Поражение от: ") + foe.name + " · наши потери " + JS.s(res.sides[win if pw else 1 - win].lost) + ", вражеские " + JS.s(res.sides[1 - win if pw else win].lost), "good" if pw else "bad")
-		var s0 := 0 if sides[0].realm == p else 1
-		if sides[1 - s0].realm != p:
-			var S: Dictionary = sides[s0]
-			var E: Dictionary = sides[1 - s0]
-			var won := win == s0
-			var m0 := Sim.menOf(S.u)
-			var m1 := Sim.menOf(E.u)
-			var st := RST()
-			if won:
-				st.won = SimAI.nv(st, "won") + 1.0
-			else:
-				st.lost = SimAI.nv(st, "lost") + 1.0
-			if m0 + m1 >= 60 or S.king:
-				chron(("Победа" if won else "Поражение") + " близ " + placeName(placeNear(tile)) + ": " + (Sim.realmName(E.realm) if E.realm < 5 else String(E.name)) + " (" + fmt(m0) + " против " + fmt(m1) + ")" + (" — король сам вёл войско." if S.king else "."),
-					"sword" if won else "flag", "won" if won else "lost", 3.0 if S.king or m0 + m1 >= 600 else 2.0)
-	return res
-
-
 # ---------- встречи войск ИИ и шаг движения ----------
 ## aiContacts (ai.js): враждебные войска ИИ в пределах клетки бьются (не чаще раза в два дня)
 static func aiContacts() -> void:
@@ -945,7 +811,7 @@ static func aiContacts() -> void:
 				continue
 			if G.day - maxf(a.lastFight, b.lastFight) < 2:
 				continue
-			var res := autoBattle(a, b)
+			var res: Dictionary = await SimCapt.autoBattle(a, b)
 			a.lastFight = G.day
 			b.lastFight = G.day
 			if G.has("court") and (a.realm == 0.0 or b.realm == 0.0):
@@ -963,8 +829,8 @@ static func substep(dd: float) -> void:
 	prep()                                       # цены клеток для _advance
 	for a in Sim.G.armies:
 		if a.path != null and JS.t(a.alive):      # без пути advanceArmy ничего не делает
-			advanceArmy(a, dd)
-	aiContacts()
+			await advanceArmy(a, dd)
+	await aiContacts()
 	step_us = Time.get_ticks_usec() - t0
 
 
