@@ -9,7 +9,8 @@ const SPD_X := W - 262.0                # кнопки скорости во д�
 var court: Node2D
 var dark := 0.0
 var help := true
-var dlg = null                          # {c, name, sub, port, pages, page, shown, full}
+var dlg = null                          # {c, name, sub, port, pages, page, shown, full, choices, sel, esc}
+var dlg_rows: Array = []                # строки выбора, нарисованные последними: [Rect2, номер]
 var toast_s := ""
 var toast_t := -10.0
 var help_auto := true                  # строка помощи прячется сама через 40 с, пока не нажали H
@@ -85,15 +86,32 @@ func _hi(k: String, use: String, X: float, Y: float, a: float = 1.0) -> bool:
 	draw_texture_rect_region(Art.page(i), Rect2(X - p, Y - p, r.size.x / V, r.size.y / V), r, Color(1, 1, 1, a))
 	return true
 
-# ---------- разговор ----------
-func say(who, text: String) -> void:
+# ---------- разговор (dialog.js: DLG.say) ----------
+## o — {choices: [{t, fx: Callable, tip}], name, esc: номер выбора по Esc}; выбор — на последней странице
+func say(who, text: String, o: Dictionary = {}) -> void:
 	var has_p: bool = who != null and int(who.get("port", -1)) >= 0
 	var tw0 := W - 32 - 124 if has_p else W - 32 - 24
 	var pages: Array = []
 	var lines := wrap_text(text, tw0)
 	for i in range(0, lines.size(), 6):
 		pages.append(lines.slice(i, i + 6))
-	dlg = {"c": who, "name": "" if who == null else String(who["name"]), "sub": "" if who == null else String(who.get("sub", "")), "port": int(who.get("port", -1)) if who != null else -1, "pages": pages, "page": 0, "shown": 0.0, "full": false}
+	if pages.is_empty():
+		pages = [PackedStringArray([""])]
+	var ch: Array = o.get("choices", [])
+	if not ch.is_empty():
+		var last: PackedStringArray = pages[-1]
+		var room := 8 - ch.size()
+		if last.size() > room and room > 0:
+			pages[-1] = last.slice(0, room)
+			pages.append(last.slice(room))
+	var nm: String = o.get("name", "") if o.get("name", "") != "" else ("" if who == null else String(who["name"]))
+	dlg = {"c": who, "name": nm, "sub": "" if who == null else String(who.get("sub", "")), "port": int(who.get("port", -1)) if who != null else -1, "pages": pages, "page": 0, "shown": 0.0, "full": false,
+		"choices": ch, "sel": 0, "esc": int(o.get("esc", -1))}
+	dlg_rows = []
+
+## на последней странице, текст показан целиком, есть выбор
+func dlg_choosing() -> bool:
+	return dlg != null and dlg["full"] and dlg["page"] == (dlg["pages"] as Array).size() - 1 and not (dlg["choices"] as Array).is_empty()
 
 func advance() -> void:
 	if dlg == null:
@@ -107,10 +125,67 @@ func advance() -> void:
 		dlg["shown"] = 0.0
 		dlg["full"] = false
 		return
+	if not (dlg["choices"] as Array).is_empty():
+		choose(int(dlg["sel"]))
+		return
 	close_dlg()
+
+func choose(i: int) -> void:
+	if dlg == null or i < 0 or i >= (dlg["choices"] as Array).size():
+		return
+	var ch: Dictionary = dlg["choices"][i]
+	dlg = null
+	var fx: Variant = ch.get("fx")
+	if fx is Callable and (fx as Callable).is_valid():
+		(fx as Callable).call()
+
+## клавиша в разговоре (DLG.keys): true — разговор её забрал
+func dlg_key(k: int) -> bool:
+	if dlg == null:
+		return false
+	var n: int = (dlg["choices"] as Array).size()
+	if dlg_choosing():
+		if k == KEY_UP or k == KEY_W:
+			dlg["sel"] = (int(dlg["sel"]) + n - 1) % n
+			return true
+		if k == KEY_DOWN or k == KEY_S:
+			dlg["sel"] = (int(dlg["sel"]) + 1) % n
+			return true
+		if k >= KEY_1 and k <= KEY_9:
+			if k - KEY_1 < n:
+				choose(k - KEY_1)
+			return true
+		if k == KEY_ESCAPE and int(dlg["esc"]) >= 0:
+			choose(int(dlg["esc"]))
+			return true
+	if k == KEY_E or k == KEY_ENTER or k == KEY_SPACE or k == KEY_KP_ENTER:
+		advance()
+	elif k == KEY_ESCAPE:
+		if n == 0:
+			close_dlg()
+		else:
+			dlg["page"] = (dlg["pages"] as Array).size() - 1
+			dlg["shown"] = 1e9
+			dlg["full"] = true
+	return true
+
+## щелчок в разговоре: по строке выбора — выбрать, иначе — дальше
+func dlg_click(p: Vector2) -> void:
+	if dlg == null:
+		return
+	if dlg_choosing():
+		for r in dlg_rows:
+			if (r[0] as Rect2).has_point(p):
+				choose(int(r[1]))
+				return
+		return
+	advance()
 
 func close_dlg() -> void:
 	dlg = null
+
+func _clock() -> float:
+	return court.t if court != null else Time.get_ticks_msec() / 1000.0
 
 func toast(s: String) -> void:
 	toast_s = s
@@ -232,10 +307,11 @@ func _top() -> void:
 	txt(loc_s, W - 6, 6, Color8(200, 184, 152), "m", "r")
 
 ## кнопки скорости (speedBtns в HTML): пауза и три скорости; нажатая и та, что под мышью, — светлее
-func speed_btns(bx: float, m: Vector2) -> void:
+## held — время стоит, пока открыто окно (timeHeld): светится пауза
+func speed_btns(bx: float, m: Vector2, held := false) -> void:
 	for i in 4:
 		var bxx := bx + i * 15
-		var lit := Game.speed == i or Rect2(bxx, 2, 14, 14).has_point(m)
+		var lit := (i == 0 if held else Game.speed == i) or Rect2(bxx, 2, 14, 14).has_point(m)
 		box(bxx, 2, 14, 14, PO)
 		box(bxx + 1, 3, 12, 12, Color8(90, 64, 48) if lit else Color8(44, 32, 24))
 		var ik: String = SPD_IC[i]
@@ -343,9 +419,32 @@ func _dialog() -> void:
 		y += 11.0
 		if n < 0:
 			break
+	var last0: bool = d["page"] == (d["pages"] as Array).size() - 1
+	dlg_rows = []
+	if last0 and d["full"] and not (d["choices"] as Array).is_empty():
+		var tw0 := bw - 124.0 - 12.0 if has_p else bw - 24.0
+		var m := get_local_mouse_position()
+		y += 3.0
+		var tip: Variant = null
+		for i in (d["choices"] as Array).size():
+			var ch: Dictionary = d["choices"][i]
+			var r := Rect2(tx - 4, y - 2, tw0 + 4, 11)
+			if r.has_point(m):
+				d["sel"] = i
+				tip = ch.get("tip")
+			var sel: bool = d["sel"] == i
+			if sel:
+				box(tx - 4, y - 2, tw0 + 4, 11, Color(160 / 255.0, 110 / 255.0, 40 / 255.0, 0.28))
+				txt("▶", tx - 2, y, Color8(138, 58, 26))
+			txt(str(i + 1) + ". " + String(ch.t), tx + 7, y, Color8(90, 26, 10) if sel else Color8(58, 38, 20))
+			dlg_rows.append([r, i])
+			y += 11.0
+		if tip != null and has_method("tip_box"):
+			call("tip_box", tip, m)
+		return
 	if d["full"]:
-		var last: bool = d["page"] == (d["pages"] as Array).size() - 1
-		var b := 1.0 if sin(court.t * 6.0) > 0.0 else 0.0
+		var last: bool = last0
+		var b := 1.0 if sin(_clock() * 6.0) > 0.0 else 0.0
 		var mx := bx + (bw - 122.0 if has_p else bw - 14.0)
 		if has_p and d["sub"] != "":
 			mx = minf(mx, bx + bw - 112.0 - tw(_sub_s(d["sub"]), "s") - 10.0)
