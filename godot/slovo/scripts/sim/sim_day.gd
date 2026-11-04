@@ -75,7 +75,7 @@ static func dailyTick(budget := 0) -> void:
 	var pt := Time.get_ticks_usec()
 	for a in G.armies.duplicate():
 		if JS.t(a.alive):
-			dailyArmy(a)
+			await dailyArmy(a)
 		if due():
 			await pause()
 	pt = _prof("army", pt)
@@ -102,7 +102,7 @@ static func dailyTick(budget := 0) -> void:
 	pt = _prof("realm", pt)
 	for a in G.armies.duplicate():
 		if JS.t(a.alive) and a.kind != "player":
-			SimAI.aiArmy(a)
+			await SimAI.aiArmy(a)
 		if due():
 			await pause()
 	pt = _prof("aiArmy", pt)
@@ -729,7 +729,7 @@ static func _voinLost(k: float, one: String, many: String) -> String:
 ## учения, лагерь, боевой дух, дезертирство; затем обёртка march.js — мороз и сорок дней ополчения
 static func dailyArmy(a: Dictionary) -> void:
 	var moved0 := JS.n(a.get("moved")) > 0.3
-	_dailyArmy(a)
+	await _dailyArmy(a)
 	if not JS.t(a.alive) or a.kind == "caravan" or a.kind == "bandit":
 		return
 	var G := Sim.G
@@ -1001,7 +1001,7 @@ static func _dailyArmy(a: Dictionary) -> void:
 		if isP and lost > 0:
 			Sim.glog("Дезертирство: " + _voinLost(lost, "ушёл ", "ушли ") + ". Боевой дух слишком низок.", "bad")
 	if a.mode == "siege":
-		SimArmy.siegeDaily(a)
+		await SimArmy.siegeDaily(a)
 	if Sim.armyMen(a) <= 0 and JS.t(a.alive):
 		destroyArmy(a, "погибло")
 
