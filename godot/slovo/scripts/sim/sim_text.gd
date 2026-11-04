@@ -146,7 +146,13 @@ static func settTip(sid: int) -> Array:
 	if ml != null:
 		L.append(ml)
 	if pa == null:
-		L.append(row("Король в замке. Щелчок — коротко о месте; походы — в следующих версиях.", UIC.dim))
+		L.append(row("Король в замке. Щелчок — сведения: послать войско или поехать самому.", UIC.dim))
+	elif SimPlayer.settHere(pa) == sid:
+		L.append(row("Войско здесь. Щелчок — войти.", UIC.good))
+	elif Sim.hostile(G.player.realm, S.ctrl):
+		L.append(row("Враждебно. Щелчок — идти на приступ (осада по прибытии).", UIC.dim))
+	else:
+		L.append(row("Щелчок — идти и войти по прибытии · ПКМ — сведения.", UIC.dim))
 	return L
 
 
@@ -185,8 +191,17 @@ static func armyTip(a: Dictionary) -> Array:
 		L.append(row("Подойдите ближе или пошлите лазутчика, чтобы узнать точнее.", UIC.dim))
 	if a.kind == "caravan":
 		L.append_array(caravanTipLines(a, exact))
-	if not isP and Sim.hostile(G.player.realm, a.realm):
-		L.append(row("Враг.", UIC.dim))   # в HTML: «Враг. Щелчок — преследовать.» — походов пока нет
+	if not isP:
+		var pa: Variant = Sim.playerArmy()
+		if pa != null and a.kind != "caravan":
+			var r: float = SimAI.perceivedPower(a, G.player.realm) / maxf(1.0, SimDay.powerU(pa.u, pa.xp))
+			L.append(row("Сила против нас: " + ("намного слабее" if r < 0.5 else ("слабее" if r < 0.85 else ("равны" if r < 1.2 else ("сильнее" if r < 2 else "намного сильнее")))),
+				UIC.good if r < 0.85 else (UIC.warn if r < 1.2 else UIC.bad)))
+		if Sim.hostile(G.player.realm, a.realm):
+			L.append(row("Враг. Щелчок — преследовать.", UIC.dim))
+	else:
+		var sh := SimPlayer.settHere(a)
+		L.append(row("Щелчок — войти в " + String(Sim.W.setts[sh].name) + " · ПКМ или V — окно войска." if sh >= 0 and a.path == null else "Щелчок — подробности о войске.", UIC.dim))
 	# обёртка deceitui.js: свои уловки; что Око знает о замыслах чужого полководца
 	if a.realm == G.player.realm:
 		if JS.n(a.get("feign")) > G.day:
@@ -241,6 +256,9 @@ static func tileTip(t: int) -> String:
 	var p := W.prov[t]
 	if p >= 0:
 		s += " · пров. " + String(W.provs[p].name) + " (" + realmName(G.setts[int(W.provs[p].seat)].ctrl) + ")"
+	var pa: Variant = null if G.is_empty() else Sim.playerArmy()
+	if pa != null and SimDay.passable(T):
+		s += " · ход ×" + "%.1f" % SimArmy.stepCost(pa, t)
 	return s
 
 
@@ -307,3 +325,56 @@ static func bar_vals() -> Dictionary:
 	var C: Variant = G.get("court")
 	var gold: float = Sim.bookGold() if C != null else float(r.gold)
 	return {"gold": gold + net * maxf(0.0, Game.day - G.day), "net": net, "men": men, "grain": JS.n(C.get("grain")) if C != null else 0.0}
+
+
+## боевой дух: к чему он тянется и почему (moraleTarget, ui.js)
+static func moraleTarget(a: Dictionary) -> Array:
+	var G := Sim.G
+	var men := maxf(1.0, Sim.armyMen(a))
+	var gen: Variant = Sim.charOf(a.gen)
+	var L := []
+	var add := func(t: String, v: float) -> void:
+		v = JS.rnd(v)
+		if v != 0.0:
+			L.append({"t": t, "v": v})
+	add.call("Основа", 62.0)
+	if gen != null:
+		add.call("Полководец", Sim.traitSum(gen, "mor"))
+	if JS.t(a.get("hunger")):
+		add.call("Голод", -(18.0 + JS.n(a.hunger) * 3.0))
+	if JS.t(a.get("thirst")):
+		add.call("Жажда", -25.0)
+	add.call("Усталость", -JS.n(a.get("fat")) / 5.0)
+	add.call("Больные", -(JS.n(a.get("sick")) / men) * 60.0)
+	if a.realm < 5 and G.realms[int(a.realm)].gold < 0:
+		add.call("Нет жалованья", -25.0)
+	if JS.t(a.get("vict")):
+		add.call("Недавняя победа" if a.vict > 0 else "Недавнее поражение", a.vict)
+	var gr: Variant = a.get("ground")
+	if gr == "serious":
+		add.call("Тяжёлая земля: сплочённость", 5.0)
+	if gr == "dispersive":
+		add.call("Рассеивающая земля: тоска по дому", -3.0)
+	var sid := SimDay.settNear(a.x, a.y, 1.2)
+	var home: bool = sid >= 0 and G.setts[sid].ctrl == a.realm
+	if home:
+		add.call("В своём поселении", 6.0)
+	if a.mode == "fort" and JS.n(a.get("fortDays")) >= 2:
+		add.call("Укреплённый лагерь", 4.0)
+	if a.mode == "drill":
+		add.call("Учения", 2.0)
+	if Sim.seasonOf(G.day) == 3 and not home:
+		add.call("Зима в поле", -6.0)
+	return L
+
+
+static func moraleTip(a: Dictionary) -> Array:
+	var L := moraleTarget(a)
+	var s := 0.0
+	for l in L:
+		s += l.v
+	var out := [row("Боевой дух: " + JS.s(JS.rnd(a.morale)) + " → " + JS.s(JS.clp(s, 5, 100)))]
+	for l in L:
+		out.append(row(("+" if l.v > 0 else "−") + JS.s(absf(l.v)) + " " + String(l.t), UIC.good if l.v > 0 else UIC.bad))
+	out.append(row("Ниже 35 — дезертирство.", UIC.dim))
+	return out
