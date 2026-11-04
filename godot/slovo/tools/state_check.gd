@@ -87,6 +87,11 @@ func _initialize() -> void:
 				break
 	if days > 0:
 		print("дней %d по %d шагов: день %.1f мс в среднем, самый долгий %.1f мс, шаги %.1f мс на день (в HTML всё вместе %.1f мс на день)" % [days, steps, ms_days / maxf(1, days), ms_max, ms_steps / maxf(1, days), float(meta.get("ms", 0.0)) / maxf(1, days)])
+	if days > 0:
+		var pr := []
+		for k in SimDay.prof:
+			pr.append("%s %.1f" % [k, SimDay.prof[k] / 1000.0 / days])
+		print("части дня, мс на день: ", ", ".join(pr), "; путей %d (%.1f мс на день, %d узлов на путь, самый долгий %.1f мс)" % [SimArmy.path_n, SimArmy.path_us / 1000.0 / days, SimArmy.path_nodes / maxi(1, SimArmy.path_n), SimArmy.path_max_us / 1000.0])
 	var ok := n1 + n2 + n3 == 0
 	print("STATE CHECK ", "OK" if ok else "FAIL (newGame %d, newGame3 %d, дни %d%s)" % [n1, n2, n3, ", первый день расхождения %d" % bad_day if bad_day > 0 else ""])
 	quit(0 if ok else 1)
