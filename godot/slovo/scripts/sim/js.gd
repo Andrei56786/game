@@ -160,3 +160,36 @@ static func s(x: float) -> String:
 	if x == floorf(x) and absf(x) < 1e15:
 		return str(int(x))
 	return str(x)
+
+
+## Ключ-индекс массива по правилам JS ("0", "17"; без ведущих нулей, меньше 2³²−1)
+static func isIdx(k: String) -> bool:
+	var n := k.length()
+	if n == 0 or n > 10 or not k.is_valid_int() or k[0] == "-" or k[0] == "+" or (n > 1 and k[0] == "0"):
+		return false
+	return k.to_int() < 4294967295
+
+
+## obj[k] = v по правилам объекта JS: ключи-индексы ("0", "17"…) идут первыми по возрастанию, остальные — в порядке
+## добавления. Новый ключ-индекс встаёт на своё место (словарь перестраивается на месте — ссылки на него не теряются).
+static func oset(d: Dictionary, k: String, v: Variant) -> void:
+	if d.has(k) or not isIdx(k):
+		d[k] = v
+		return
+	var ki := k.to_int()
+	var keys := d.keys()
+	var at := -1
+	for i in keys.size():
+		var kk: String = keys[i]
+		if not isIdx(kk) or kk.to_int() > ki:
+			at = i
+			break
+	if at < 0:
+		d[k] = v
+		return
+	var vals := d.values()
+	d.clear()
+	for i in keys.size():
+		if i == at:
+			d[k] = v
+		d[keys[i]] = vals[i]
