@@ -158,8 +158,9 @@ func _sim_selftest() -> bool:
 	var wk := {}
 	var tu := Time.get_ticks_usec()
 	for i in 7:
+		SimDay.budget_us = 0
 		for k in Game.STEPS:
-			SimArmy.substep(1.0 / Game.STEPS)
+			await SimArmy.substep(1.0 / Game.STEPS)
 		await SimDay.dailyTick(0)
 		wk[String(G.weather.k)] = true
 	var ms7 := (Time.get_ticks_usec() - tu) / 7000.0
