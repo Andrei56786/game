@@ -1,12 +1,15 @@
 extends "res://scripts/hud.gd"
 ## Надписи экрана карты (ui.js: drawLabels, drawSetts, drawArmies, drawRealmNames, drawTopBar, drawMinimap, drawStatus,
 ## drawTipBox). Два слоя: part = "objs" — подписи озёр и гор, поселения, войска (под бумагой тумана, как в HTML);
-## part = "top" — названия держав, верхняя строка с казной, мини-карта с войсками, строка состояния, подсказки.
+## part = "top" — названия держав, верхняя строка с казной, датой, погодой и скоростью, мини-карта с войсками, лента летописи
+## (drawFeed), строка состояния, подсказки, «ПАУЗА».
 ## Состояние королевства — Sim.G: видно только разведанное (G.explored), чужие войска — в поле обзора (G.vis).
 const SETT_T := {"village": "Деревня", "castle": "Замок", "town": "Город", "capital": "Столица"}
 const CAMP := ["camp", "fort", "hide", "forage", "drill", "siege"]
 const MX := 509.0           # мини-карта 128×80 (W − 131, H − 83)
 const MY := 277.0
+const SPD_TIP := ["Пауза (Пробел)", "Скорость 1", "Скорость 2", "Скорость 3"]
+const FEED_C := {"good": "#9fe07a", "bad": "#ee7a6a", "war": "#ff8a6a", "season": "#bfe8f0", "info": "#e8dcc0"}
 var mv                      # MapView
 var part := "top"
 var hover_at := Vector2(-1, -1)   # для проверок: «мышь» в этой точке
@@ -136,7 +139,10 @@ func _draw() -> void:
 			hov_tile = mv.tile_at(m)
 	_top()
 	_mini()
+	_feed()
 	_status()
+	if Game.speed == 0:
+		pause_mark(now())
 	if hov_army >= 0:
 		var a: Variant = Sim.armyById(float(hov_army))
 		if a != null:
@@ -471,7 +477,7 @@ func _status() -> void:
 	if hov_tile >= 0:
 		s = tile_tip(hov_tile)
 	elif help:
-		s = "Перетаскивание или WASD — двигать · колесо, Q и E — масштаб · Tab — ко двору · H — подсказка"
+		s = "Мышь или WASD — двигать · колесо, Q и E — масштаб · Пробел — пауза · 1–3 — скорость · Tab — ко двору · H"
 	if s == "":
 		return
 	var w := tw(s, "s") + 10.0
@@ -508,23 +514,69 @@ func _top() -> void:
 		tips.append([Rect2(x, 2, x2 + 26 - x, 14), func(): return SimText.goldTip()])
 	x = x2 + 30.0
 	_btn("« Ко двору (Tab)", x, 2, 92, 14, func(): mv.leave.emit())
+	x += 92.0
 	var pol: bool = mv.mode == "pol"
 	_btn("Державы" if pol else "Местность", W - 70, 2, 66, 14, func(): mv.set_mode("ter" if mv.mode == "pol" else "pol"), pol)
+	# скорость: пауза и 1–3 (speedBtns)
+	var bx := W - 133.0
+	speed_btns(bx, mouse())
+	for i in 4:
+		var r := Rect2(bx + i * 15, 2, 14, 14)
+		btns.append([r, func(): Game.set_speed(i)])
+		tips.append([r, func(): return [SimText.row(SPD_TIP[i])]])
+	# дата и погода королевства (weatherOf), с распутицей; не влезает — сначала короче, потом без названия погоды
+	var end_x := bx - 6.0
 	var ds := Game.date_text()
-	var wx := W - 78.0 - tw(ds)
+	var tot := tw(ds)
+	var wn := ""
+	var ic := ""
 	if sim_on():
-		# погода королевства (weatherOf): значок и название, как у даты в HTML
 		var Wt := Sim.weatherOf()
-		var wn := String(Wt.n)
-		wx -= 12.0 + tw(wn, "s")
-		txt(ds, wx, 6, Color8(255, 242, 200))
-		icon("i_" + String(Wt.ic), wx + tw(ds) + 4, 7)
-		txt(wn, wx + tw(ds) + 13, 6, Color.html("#c8d8e8"), "s")
-		tips.append([Rect2(wx, 2, W - 78.0 - wx, 14), func(): return SimText.dateTip()])
-	else:
-		txt(ds, wx, 6, Color8(255, 242, 200))
+		var mud := JS.t(Sim.G.get("mudOn"))
+		ic = "i_" + String(Wt.ic)
+		wn = String(Wt.n) + (" · распутица" if mud else "")
+		tot = tw(ds) + 14.0 + tw(wn, "s")
+		if x + 6.0 + tot > end_x:
+			wn = "распутица" if mud else ""
+			tot = tw(ds) + 14.0 + tw(wn, "s")
+			if x + 6.0 + tot > end_x:
+				wn = ""
+				tot = tw(ds) + 12.0
+	var dx0 := maxf(x + 6.0, end_x - tot)
+	txt(ds, dx0, 6, Color8(255, 242, 200))
+	if ic != "":
+		icon(ic, dx0 + tw(ds) + 4, 7)
+		if wn != "":
+			txt(wn, dx0 + tw(ds) + 13, 6, Color.html("#c8d8e8"), "s")
+		tips.append([Rect2(dx0, 2, tot, 14), func(): return SimText.dateTip()])
 	var zs := "масштаб " + ("1/%d" % roundi(1.0 / mv.cam.z) if mv.cam.z < 1.0 else "×%d" % roundi(mv.cam.z))
-	txt(zs, wx - 12 - tw(zs, "s"), 7, Color8(200, 184, 152), "s")
+	var zx := dx0 - 12.0 - tw(zs, "s")
+	if zx > x + 6.0:
+		txt(zs, zx, 7, Color8(200, 184, 152), "s")
+
+## лента летописи (drawFeed): до пяти записей за последние 14 с, свежие внизу, над мини-картой; гаснут за 3 с
+func _feed() -> void:
+	if not sim_on():
+		return
+	var t := Time.get_ticks_msec() / 1000.0
+	var list: Array = []
+	for f: Dictionary in Sim.feed:
+		if t - float(f.at) < 14.0:
+			list.append(f)
+	list = list.slice(-5)
+	list.reverse()
+	var x := W - 236.0
+	var y := H - 96.0
+	for f: Dictionary in list:
+		var a := clampf(1.0 - (t - float(f.at) - 11.0) / 3.0, 0.0, 1.0)
+		var ls := wrap_text(String(f.t), 226)
+		var h := ls.size() * 9.0 + 3.0
+		y -= h + 1.0
+		box(x, y, 234, h, Color(0.086, 0.059, 0.047, a * 0.85))
+		var c: Color = Art.pal("y") if f.c == "title" else Color.html(FEED_C.get(String(f.c), "#e8dcc0"))
+		c.a = a
+		for i in ls.size():
+			txt(ls[i], x + 4, y + 2 + i * 9, c)
 
 func _mini() -> void:
 	var G: MapGPU = mv.G
