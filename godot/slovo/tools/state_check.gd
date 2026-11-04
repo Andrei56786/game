@@ -56,8 +56,12 @@ func _initialize() -> void:
 	# -- --pauses: шаги и дни кусками по кадрам (бюджет 3 мс), как в игре, — итог должен быть тот же
 	var pz := 3000 if "--pauses" in OS.get_cmdline_user_args() else 0
 	var fr0 := Engine.get_process_frames()
+	var acts: Array = meta.get("acts", [])
 	for d in range(1, days + 1):
-		# шаги движения дня (pageStep в HTML: походы войск и встречи), затем сам день
+		# дела короля этого дня (pageAct в HTML: поручения совету), затем шаги движения (pageStep: походы войск и встречи), затем сам день
+		for a in acts:
+			if int(a[0]) == d:
+				act(a)
 		t0 = Time.get_ticks_usec()
 		for k in steps:
 			SimDay.budget_us = pz
@@ -102,6 +106,14 @@ func _initialize() -> void:
 	var ok := n1 + n2 + n3 == 0
 	print("STATE CHECK ", "OK" if ok else "FAIL (newGame %d, newGame3 %d, дни %d%s)" % [n1, n2, n3, ", первый день расхождения %d" % bad_day if bad_day > 0 else ""])
 	quit(0 if ok else 1)
+
+
+func act(a: Array) -> void:
+	match a[1]:
+		"order":
+			SimCourt.giveOrder(a[2], a[3], a[4], a[5])
+		"away":
+			Sim.G.atCourt = 0.0 if JS.t(a[2]) else 1.0
 
 
 func check(name: String, ref: Dictionary) -> int:

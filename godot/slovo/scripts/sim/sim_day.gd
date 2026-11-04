@@ -135,7 +135,9 @@ static func dailyTick(budget := 0) -> void:
 				declineCall(m)
 	G.msgs = G.msgs.filter(func(m): return not JS.t(m.get("done")) or G.day - m.day < 2)
 	G.armies = G.armies.filter(func(a): return JS.t(a.alive))
+	# день двора (events.js: councilDaily, dynastyDaily, researchDaily, courtExileCheck, затем DAILY_EXT) — то, что уже перенесено
 	if G.has("court"):
+		SimCourt.councilDaily()
 		mudDaily()
 	checkRealms()
 	checkVictory()

@@ -109,7 +109,7 @@ static func regentName() -> String:
 
 static func houseLoy(H0: Variant, v: float) -> void:
 	if H0 is Dictionary:
-		H0.loy = clampf(JS.n(H0.get("loy", 50)) + v, 0, 100)
+		H0.loy = clampf(float(JS.o(H0.get("loy"), 50.0)) + v, 0, 100)
 
 
 static func addU(u: Dictionary, add: Dictionary) -> void:

@@ -155,11 +155,18 @@ static func sort(a: Array, cmp: Callable) -> Array:
 	return a
 
 
-## Number → String (как String(n) в JS) для целых и простых дробей: 3 → "3", 2.5 → "2.5"
+## Number → String (как String(n) в JS): 3 → "3", 2.5 → "2.5", дроби — кратчайшей записью без потерь (0.1 + 0.2 → "0.30000000000000004")
 static func s(x: float) -> String:
 	if x == floorf(x) and absf(x) < 1e15:
 		return str(int(x))
-	return str(x)
+	if x != x:
+		return "NaN"
+	return var_to_str(x)
+
+
+## Number.prototype.toFixed(d)
+static func fixed(v: float, d: int) -> String:
+	return ("%." + str(d) + "f") % v
 
 
 ## Ключ-индекс массива по правилам JS ("0", "17"; без ведущих нулей, меньше 2³²−1)

@@ -241,5 +241,7 @@ static func projDone(k: String) -> bool:
 	var PK: Dictionary = Sim.T.get("PROJK", {})
 	return e.king == G.player.char if PK.has(k) and JS.t(PK[k].get("per")) else true
 
+## techIncK с надбавкой reign.js (цехи и векселя)
 static func techIncK() -> float:
-	return 1.0 + (0.05 if projDone("mint") else 0.0) + (0.08 if hasTech("rotation") else 0.0) + (0.04 if hasTech("ledgers") else 0.0) + (0.06 if hasTech("mills") else 0.0) + (0.06 if hasTech("townhalls") else 0.0)
+	return 1.0 + (0.05 if projDone("mint") else 0.0) + (0.08 if hasTech("rotation") else 0.0) + (0.04 if hasTech("ledgers") else 0.0) + (0.06 if hasTech("mills") else 0.0) + (0.06 if hasTech("townhalls") else 0.0) \
+		+ (0.06 if hasTech("guilds") else 0.0) + (0.08 if hasTech("banks") else 0.0)

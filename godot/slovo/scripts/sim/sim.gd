@@ -676,6 +676,19 @@ static func revealWater() -> void:
 		fog_dirty = 1
 
 # ---------- летопись ----------
+## звук игры (Snd.sfx): очередь для звукового движка экрана (без экрана — просто копится и обрезается)
+static var sfxq: Array = []
+static func sfx(k: String) -> void:
+	sfxq.append(k)
+	if sfxq.size() > 16:
+		sfxq.pop_front()
+
+
+static func zol(n: float) -> String:
+	n = JS.rnd(n)
+	return JS.s(n) + " " + plural(n, "золотой", "золотых", "золотых")
+
+
 static func glog(t: String, c: String = "info") -> void:
 	G.log.append({"d": G.day, "t": t, "c": c if c != "" else "info"})
 	if G.log.size() > 200:

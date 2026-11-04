@@ -30,7 +30,11 @@ await page.evaluate(src => { window.__gdv = new Function(src + '\nreturn encodeV
 function pageTables() {
   const T = { UT, UNIT, UNIT_TIP, RANGED, MOUNTED, FOOT, CUL_UNIT, SEASONS, DAYS_SEASON, DAYS_YEAR, DAYS_WEEK, SPD, BASE_SPEED, WAGON_CAP, MAN_CAP, TRAITS, NAMES, RULERS,
     WEEKDAYS, WDAY_S, COUNCIL_WD, WEATHER, WTAB, REALM_DEF, HOUSES, SEATS, GOODS, GD, RAW_G, RAW, SEASON_F, NEED, FAVG, RECIPE, BIGK, RESERVE, ECONK, GA, ST_KEYS, POOL_K,
-    TINFO, TR, SEAT_K, MW, MH, TS, NT, SIGN_INFO, SPYT, MODE_INFO, PROJK, FEMRX: FEMRX.source, KM_PER_TILE: typeof KM_PER_TILE !== 'undefined' ? KM_PER_TILE : 0 };
+    TINFO, TR, SEAT_K, MW, MH, TS, NT, SIGN_INFO, SPYT, MODE_INFO, PROJK, FEMRX: FEMRX.source, KM_PER_TILE: typeof KM_PER_TILE !== 'undefined' ? KM_PER_TILE : 0,
+    // двор (срез 0.8): поручения совета (без кода: go/day — есть ли), прошения, знания, эпохи
+    ORD: Object.fromEntries(Object.entries(ORD).map(([s, L]) => [s, L.map(o => ({ k: o.k, n: o.n, d: o.d, cost: o.cost, dur: o.dur, tgt: o.tgt || null, go: !!o.go, day: !!o.day }))])),
+    SELF_K: Object.keys(SELF), PETS: PETS.map(p => ({ k: p.k, w: p.w, role: p.role, fem: p.fem || 0 })), PET_T, PET_ROLE_N, SKN, SKD,
+    TECH, BRANCHES, TECH_SD, INSP_MAX, LEAN, ERAS };
   const u8 = window.__gdv(T); let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s);
 }
 // шаг движения (worldAdvance из command.js без короля в поле: его войско, погоня, встречи с ним, гонцы и снабженец — когда он в походе)
@@ -58,11 +62,17 @@ function pageDay() {
   for (const m of G.msgs) if (!m.done && m.until < G.day) { m.done = 1; if (m.kind === 'call') declineCall(m); }
   G.msgs = G.msgs.filter(m => !m.done || G.day - m.day < 2);
   G.armies = G.armies.filter(a => a.alive);
-  if (G.court) { const mud = DAILY_EXT.find(f => String(f).includes('G.mudOn')); mud(); }
+  if (G.court) { councilDaily(); const mud = DAILY_EXT.find(f => String(f).includes('G.mudOn')); mud(); }
   checkRealms(); checkVictory();
   computeVision(); updateSigns();
 }
-function pageRef(seed, days, snaps, steps) {
+// поручения короля по дням (только для зерна 777: люди и цели — по номерам этого мира): [день, 'order', место, поручение, Приказ/Замысел, цель]
+function pageAct(a) {
+  const [, kind, ...x] = a;
+  if (kind === 'order') giveOrder(x[0], x[1], x[2], x[3] === null ? undefined : x[3]);
+  else if (kind === 'away') G.atCourt = x[0] ? 0 : 1;
+}
+function pageRef(seed, days, snaps, steps, acts) {
   const opt = { diff: 1, tut: false, mapOpen: false };
   const snap = () => ({ G, R: R.get() >>> 0, ECON: { inc: ECON.inc, incDay: ECON.incDay, incoming: ECON.incoming || null }, SIGNS: SIGNS.map(s => Object.assign({}, s)) });
   const b64 = a => { let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
@@ -71,6 +81,7 @@ function pageRef(seed, days, snaps, steps) {
   // дни: сводка каждого дня (генератор, казна держав, войска, летопись, погода, распутица) и полные снимки в days
   const dig = [], shot = [], t0 = performance.now();
   for (let d = 1; d <= days; d++) {
+    for (const a of acts) if (a[0] === d) pageAct(a);
     for (let k = 0; k < steps; k++) pageStep(1 / steps);
     const pos = G.armies.reduce((s, a) => s + a.x * 7 + a.y * 13, 0);
     pageDay();
@@ -78,13 +89,29 @@ function pageRef(seed, days, snaps, steps) {
     if (snaps.includes(d)) { shot.push(d); parts.push(b64(window.__gdv(snap()))); }
   }
   const ms = performance.now() - t0;
-  parts.splice(2, 0, b64(window.__gdv({ seed, days, steps, snaps: shot, dig, ms })));
+  parts.splice(2, 0, b64(window.__gdv({ seed, days, steps, snaps: shot, dig, ms, acts })));
   return { parts, chars: G.chars.length, armies: G.armies.length, ms };
 }
 const t0 = Date.now();
 const tab = await page.evaluate(src => window.T.ev('(' + src + ')()'), pageTables.toString());
+// дела короля в эталоне: поручения всем местам совета (каждое — до итога или до следующего поручения тому же месту)
+const ACTS = SEED !== 777 || process.env.SIM_ACTS === '0' ? [] : [
+  [2, 'order', 'chancellor', 'goodwill', 'intent', null], [2, 'order', 'treasurer', 'tax_extra', 'order', null], [2, 'order', 'marshal', 'recruit', 'intent', null],
+  [2, 'order', 'eye', 'dossier', 'order', 129], [2, 'order', 'seneschal', 'feast', 'order', null], [2, 'order', 'magister', 'research', 'intent', 'rotation'],
+  [9, 'order', 'chancellor', 'embassy', 'order', 1], [9, 'order', 'treasurer', 'buy_grain', 'order', null], [9, 'order', 'marshal', 'supply', 'order', null],
+  [10, 'order', 'eye', 'network', 'intent', 3], [11, 'order', 'seneschal', 'tourney', 'intent', null],
+  [16, 'order', 'chancellor', 'calm_house', 'intent', 1], [16, 'order', 'treasurer', 'charters', 'order', null], [17, 'order', 'marshal', 'patrol', 'intent', null],
+  [17, 'order', 'eye', 'rumor', 'order', 1], [18, 'order', 'seneschal', 'alms', 'intent', null],
+  [27, 'order', 'chancellor', 'reconcile', 'intent', null], [27, 'order', 'treasurer', 'sell_grain', 'intent', null], [28, 'order', 'marshal', 'fortify', 'order', 76],
+  [28, 'order', 'eye', 'sabotage', 'intent', 1], [29, 'order', 'seneschal', 'guard', 'order', null], [29, 'order', 'magister', 'heal', 'intent', null],
+  [36, 'order', 'treasurer', 'lower_tax', 'intent', null], [36, 'order', 'marshal', 'muster', 'order', null], [37, 'order', 'eye', 'incite', 'intent', 2], [37, 'order', 'magister', 'herbs', 'order', null],
+  [46, 'order', 'eye', 'forge', 'intent', 1], [46, 'order', 'magister', 'teach', 'intent', 120], [47, 'order', 'marshal', 'train', 'order', null], [47, 'order', 'treasurer', 'census', 'order', null],
+  [56, 'order', 'eye', 'rum_str', 'intent', 2], [56, 'order', 'magister', 'school', 'intent', null], [57, 'order', 'chancellor', 'improve_rel', 'order', 2],
+  [64, 'order', 'eye', 'icp', 'intent', 1], [64, 'order', 'magister', 'chronicle', 'order', null],
+  [72, 'order', 'eye', 'rum_weak', 'order', 3], [72, 'order', 'magister', 'research', 'order', 'drill'], [73, 'order', 'treasurer', 'tax_extra', 'intent', null],
+];
 const DAYS = +(process.env.SIM_DAYS || 84), STEPS = +(process.env.SIM_STEPS || 24), SNAPS = process.env.SIM_SNAPS === 'all' ? [...Array(DAYS)].map((_, i) => i + 1) : [1, 2, 7, 21, 28, 84].filter(d => d <= DAYS);
-const ref = await page.evaluate(([src, lib, seed, days, snaps, steps]) => window.T.ev(lib + '\n;(' + src + ')(' + seed + ',' + days + ',' + JSON.stringify(snaps) + ',' + steps + ')'), [pageRef.toString(), [pageStep, pageDay].map(f => f.toString()).join('\n'), SEED, DAYS, SNAPS, STEPS]);
+const ref = await page.evaluate(([src, lib, seed, days, snaps, steps, acts]) => window.T.ev(lib + '\n;(' + src + ')(' + seed + ',' + days + ',' + JSON.stringify(snaps) + ',' + steps + ',' + JSON.stringify(acts) + ')'), [pageRef.toString(), [pageStep, pageDay, pageAct].map(f => f.toString()).join('\n'), SEED, DAYS, SNAPS, STEPS, ACTS]);
 await browser.close();
 if (errs.length) { console.error('ошибки страницы:\n' + errs.join('\n')); process.exit(1); }
 fs.mkdirSync(out, { recursive: true });
