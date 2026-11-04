@@ -271,12 +271,15 @@ func _council_only() -> void:
 	print("COUNCIL OK" if ok else "COUNCIL FAIL")
 	get_tree().quit(0 if ok else 1)
 
-## совет при дворе на данных королевства (court.council_test)
+## совет при дворе на данных королевства (court.council_test), люди двора из королевства и приём прошений (court.people_test)
 func _council_selftest() -> bool:
 	var c: Node = Court.new()
 	add_child(c)
 	await get_tree().process_frame
 	var ok: bool = c.council_test()
+	var pok: bool = c.people_test()
+	print("selftest: двор из королевства и прошения — ", "OK" if pok else "FAIL")
+	ok = ok and pok
 	remove_child(c)
 	c.queue_free()
 	return ok

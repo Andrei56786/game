@@ -80,6 +80,14 @@ function pageExport() {
   });
   const P = COURT.p, kc = P.c;
   res.king = { name: (kc.title ? kc.title + ' ' : '') + kc.name, short: kc.name, sheet: sheet(kc), port: port(kc), loc: COURT.loc, x: P.x, y: P.y, dir: P.dir };
+  // 0.8: двор из G — расписания (SCHED), лист 4×4, лицо и возраст облика каждого живого по id; запас листов и лиц по полу и возрасту (для
+  // родившихся позже) и по роли просителя (pseudoChar, как в spawnPetitioners): [[лист, лицо] × 4]
+  res.sched = SCHED;
+  const ageK = a => a < 14 ? 'c' : a < 52 ? 'a' : a < 64 ? 'o' : 'v'; // как lookKey: облик меняется с возрастом
+  res.cspr = {}; for (const c of G.chars) if (c.alive) res.cspr[c.id] = [sheet(c), port(c), ageK(c.age)];
+  const stock = (i0, role, fem, age) => [0, 1, 2, 3].map(v => { const c = pseudoChar(i0 + v, role, fem, age(v), ''); return [sheet(c), port(c)]; });
+  res.cstock = {}; [['c', 'child', 7], ['a', 'courtier', 30], ['o', 'courtier', 57], ['v', 'courtier', 70]].forEach(([k, role, age], j) => [0, 1].forEach(fem => { res.cstock[k + fem] = stock(100 + j * 8 + fem * 4, role, fem, () => age); }));
+  res.pstock = {}; Object.keys(PET_ROLE_N).forEach((role, j) => [0, 1].forEach(fem => { res.pstock[role + fem] = stock(140 + j * 8 + fem * 4, role, fem, v => 24 + v * 9); }));
   // животные двора
   const AK = { horse: 1, dog: 1, cat: 1, hen: 1, pigeon: 1 };
   res.animals = COURT.ani.filter(a => AK[a.kind]).map(a => ({ kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), f: [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))] }));
@@ -205,5 +213,5 @@ for (const [fk, F] of Object.entries(res.fonts)) {
 fs.writeFileSync(path.join(out, 'court.json'), JSON.stringify(res));
 fs.writeFileSync(path.join(out, 'world.json'), JSON.stringify(world));
 const nl = Object.keys(res.locs).length, np = res.people.length;
-console.log(`EXPORT OK: мест ${nl}, людей ${np}, животных ${res.animals.length}, мир ${world.seed}: провинций ${world.provs.length}, поселений ${world.setts.length}, спрайтов ${res.spr.length} на ${res.pages} стр., файлов ${Object.keys(files).length + 3}, ${(bytes / 1048576).toFixed(1)} МБ, ${((Date.now() - t0) / 1000).toFixed(1)} с`);
+console.log(`EXPORT OK: мест ${nl}, людей ${np} (листов по id ${Object.keys(res.cspr).length}), животных ${res.animals.length}, мир ${world.seed}: провинций ${world.provs.length}, поселений ${world.setts.length}, спрайтов ${res.spr.length} на ${res.pages} стр., файлов ${Object.keys(files).length + 3}, ${(bytes / 1048576).toFixed(1)} МБ, ${((Date.now() - t0) / 1000).toFixed(1)} с`);
 process.exit(0);

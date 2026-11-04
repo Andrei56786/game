@@ -8,6 +8,13 @@ const CSPD_TIP := ["Пауза (Пробел)", "Скорость 1", "Скор�
 ## кнопки верхней строки (B в drawCourtUI): значок, подсказка, окно ("" — карта королевства)
 const TB := [["i_seal", "Малый совет (K)", "council"], ["i_raven", "Письма (L)", "letters"], ["i_map", "Карта королевства (Tab)", ""]]
 
+## новый советник (appointSeat при дворе): сразу заселить — и он благодарит короля
+func appointed(k: String) -> void:
+	court.people.pop_check()
+	var n: Dictionary = court.npc_by("seat_" + k)
+	if not n.is_empty():
+		court.people.say(n, "Благодарю, государь! Служу короне.", 4.0)
+
 func _held() -> bool:
 	return Game.speed > 0 and is_open()
 

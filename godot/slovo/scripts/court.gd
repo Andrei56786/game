@@ -12,6 +12,8 @@ const ANISP := {"horse": 12.0, "dog": 44.0, "cat": 20.0, "hen": 11.0, "pigeon": 
 const Hud = preload("res://scripts/court_ui.gd")
 const People = preload("res://scripts/people.gd")
 const Council = preload("res://scripts/court_council.gd")
+const Family = preload("res://scripts/court_family.gd")
+const Audience = preload("res://scripts/court_audience.gd")
 
 var D: Dictionary
 var Z := 2
@@ -42,6 +44,8 @@ var trees: Array = []
 var forge := Vector2.ZERO
 var people: RefCounted
 var meet: RefCounted          # Малый совет: заседания, сбор, разговор с советником (court_council.gd)
+var fam: RefCounted           # семья короля и воспитанники: разговоры с выбором (court_family.gd)
+var aud: RefCounted           # приём прошений у трона (court_audience.gd)
 var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
 
 var layer: Node2D
@@ -83,6 +87,8 @@ func _ready() -> void:
 		grids[id] = _grid(Ld)
 	people = People.new(self)
 	meet = Council.new(self)
+	fam = Family.new(self)
+	aud = Audience.new(self)
 	var K: Dictionary = D["king"]
 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
 	var sp0: Dictionary = spots["throne_front"]
@@ -126,6 +132,7 @@ func _ready() -> void:
 	ui2.add_child(hud)
 	if Game.frac == 0.0:
 		Game.set_hour(7.5)
+	people.pop_check()        # королевство уже есть — семья, совет и узники из него (courtPopulate)
 	people.snap(true)
 	last_ha = Game.day * 24.0 + Game.hour_abs()
 	go_loc(king["loc"])
@@ -450,6 +457,7 @@ func _process(d: float) -> void:
 
 func _tick(dt: float) -> void:
 	t += dt
+	people.pop_check()
 	hud.tick()
 	var run: bool = not hud.is_open() and fade == 0.0
 	if run:
@@ -464,6 +472,7 @@ func _tick(dt: float) -> void:
 	var hh := floori(Game.hour_abs() * 2.0)
 	if hh != last_hh:
 		last_hh = hh
+		aud.half_hour(hh / 2.0)
 		meet.half_hour(hh / 2.0)
 	if run:
 		var k: float = NPC_SPDK[Game.speed]
@@ -477,6 +486,8 @@ func _tick(dt: float) -> void:
 		king["moving"] = false
 	if fade == 0.0:
 		meet.update()
+		aud.auto()
+	aud.tick()
 	_cam_update(dt)
 	if fade > 0.0:
 		var ph := (t - fade_t) / 0.22
@@ -939,16 +950,27 @@ func interact(tg: Dictionary) -> void:
 	elif tg.has("a"):
 		do_act(tg["a"])
 
+## разговор (talkTo): проситель — приём у трона, советник — его доклад и поручения, семья и воспитанники — свои
+## разговоры с выбором, остальные — своими словами
 func talk_to(n: Dictionary) -> void:
-	if king["sit"] != null and n.get("seat", "") == "":
+	if king["sit"] != null and n.get("seat", "") == "" and not n.has("petition"):
 		stand_up()
 	if n.get("sit") == null and n.get("path") == null:
 		var v := Vector2(float(king["x"]) - n["x"], float(king["y"]) - n["y"])
 		n["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
+	if n.has("petition"):
+		aud.talk(n)
+		print("TALK ", n["name"])
+		return
 	if String(n.get("seat", "")) != "" and SimPlayer.ensure_sim() and SimDyn.seatChar(n["seat"]) != null:
 		meet.talk_seat(n)
 		print("TALK ", n["name"])
 		return
+	if (n.has("fam") or String(n["key"]).begins_with("ward")) and SimPlayer.ensure_sim():
+		people.pop_check()    # из выгрузки — в людей королевства (та же запись по ключу)
+		if fam.talk(n):
+			print("TALK ", n["name"])
+			return
 	var ls: Array = n["lines"]
 	var line: String = ls[randi() % ls.size()]
 	if n.has("staff"):
@@ -962,6 +984,9 @@ func do_act(a: Dictionary) -> void:
 	match a["id"]:
 		"throne":
 			sit_at(spots["throne"])
+			if SimPlayer.ensure_sim():
+				people.pop_check()
+				aud.start()
 		"council":
 			sit_at(spots["seat_king"])
 			if SimPlayer.ensure_sim():
@@ -1231,6 +1256,10 @@ func cmd(p: PackedStringArray) -> void:
 				hud.win.sc = 0
 		"key":
 			key(OS.find_keycode_from_string(p[1]))
+		"throne":
+			# сесть на трон — приём прошений
+			cmd(PackedStringArray(["spot", "throne_front"]))
+			do_act({"id": "throne", "label": ""})
 		"council":
 			# созвать совет (как кнопка в окне) или сесть во главе стола
 			if p.size() > 1 and p[1] == "sit":
@@ -1256,8 +1285,20 @@ func state() -> Dictionary:
 			here += 1
 		if n["away"] or n.get("lie", false):
 			away += 1
+	var cnt := {"fam": 0, "seats": 0, "pris": 0, "pets": 0}
+	for n in npcs:
+		if n.has("fam"):
+			cnt.fam += 1
+		if String(n.get("seat", "")) != "":
+			cnt.seats += 1
+		if n.has("pris"):
+			cnt.pris += 1
+		if n.get("petition") is Dictionary:
+			cnt.pets += 1
+	var verd: Array = Sim.G.court.get("verdicts", []) if aud.ok() else []
 	return {"day": Game.day, "hour": snappedf(Game.hour(), 0.01), "loc": loc_id, "room": room, "king": [int(king["x"]), int(king["y"])], "dir": king["dir"], "sit": king["sit"] != null, "talk": hud.dlg_open(), "choosing": hud.dlg_choosing(), "here": here, "asleep": away, "npcs": npcs.size(), "walked": int(walked), "dark": snappedf(hud.dark, 0.01), "zoom": Z, "fade": fade > 0.0, "sea": sea_key,
-		"win": String(hud.win.k) if hud.win != null else "", "modals": hud.modals.size(), "meet": meet.meeting_open()}
+		"win": String(hud.win.k) if hud.win != null else "", "modals": hud.modals.size(), "meet": meet.meeting_open(),
+		"fam": cnt.fam, "seats": cnt.seats, "pris": cnt.pris, "pets": cnt.pets, "verd": verd.size(), "by": String(verd[0].by) if not verd.is_empty() else ""}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается
 func selftest() -> bool:
@@ -1384,3 +1425,133 @@ func council_test() -> bool:
 	print("selftest: совет — докладов ", reps, ", сидят до короля ", held, ", встали после ", rose)
 	Game.speed = 1
 	return called and asked and ran and reps >= 1 and held and rose and float(C.get("meetDone", -1.0)) == float(Game.day)
+
+## двор из королевства (без экрана): кто живёт при дворе (семья, воспитанники, совет, слуги, стража, узники), облик
+## и постели; новый советник — сразу при дворе; приём прошений: в 8:30 просители у ворот, король на троне — подходят
+## по одному, решение короля и судьи — в книге суда, решённые уходят за ворота; оставшихся после полудня рассматривает судья
+func people_test() -> bool:
+	if not aud.ok():
+		print("selftest: двор — нет королевства")
+		return false
+	var G := Sim.G
+	people.pop_check()
+	var cnt := {"fam": 0, "seat": 0, "srv": 0, "bed": 0, "look": 0, "g": 0}
+	for n in npcs:
+		var k := String(n["key"])
+		if n.has("fam"):
+			cnt.fam += 1
+		if String(n.get("seat", "")) != "":
+			cnt.seat += 1
+		if k.begins_with("srv_") or k.begins_with("grd_"):
+			cnt.srv += 1
+		if n.has("bed") and not spots.get(n["bed"], {}).is_empty():
+			cnt.bed += 1
+		if n.has("cid"):
+			cnt.g += 1
+			if int(n["port"]) >= 0 and n["sheet"] is Array and (n["sheet"] as Array).size() == 4:
+				cnt.look += 1
+	var nseat := 0
+	for s: Dictionary in Sim.SEATS:
+		var ch: Variant = SimDyn.seatChar(s.k)
+		if ch != null and not JS.t(ch.get("away")):
+			nseat += 1
+	var q := npc_by("spouse")
+	print("selftest: двор из королевства — людей ", npcs.size(), ", семья ", cnt.fam, ", совет ", cnt.seat, " из ", nseat, ", слуги и стража ", cnt.srv,
+		", с постелью ", cnt.bed, ", облик из королевства ", cnt.look, " из ", cnt.g, "; ", q.get("name", "—"), " — ", q.get("sub", ""))
+	var ok: bool = cnt.fam >= 1 and cnt.seat == nseat and cnt.srv >= 20 and cnt.bed >= cnt.seat + 1 and cnt.look == cnt.g and npcs.size() >= 30
+	# новый советник (пустое место) — при дворе сразу, с благодарностью
+	var vac := ""
+	for s: Dictionary in Sim.SEATS:
+		if SimDyn.seatChar(s.k) == null and not SimCourt.candidatesFor(s.k).is_empty():
+			vac = String(s.k)
+			break
+	if vac != "":
+		var cand: Dictionary = SimCourt.candidatesFor(vac)[0]
+		SimCourt.appointSeat(vac, cand.id)
+		hud.appointed(vac)
+		var sn := npc_by("seat_" + vac)
+		print("selftest: назначен ", sn.get("name", "—"), " (", sn.get("sub", ""), "): «", sn.get("bub", ""), "», постель ", sn.get("bed", "—"))
+		ok = ok and not sn.is_empty() and String(sn.get("bub", "")).begins_with("Благодарю") and sn.get("bed", "") == "bed_" + vac
+	# приём прошений
+	Game.speed = 1
+	Game.set_hour(8.4)
+	last_hh = floori(Game.hour_abs() * 2.0)
+	people.snap(false)
+	last_ha = Game.day * 24.0 + Game.hour_abs()
+	var v0: int = (G.court.get("verdicts", []) as Array).size()
+	var fr := 0
+	while fr < 400 and not aud.pending():
+		_tick(0.05)
+		fr += 1
+	var npet: int = npcs.filter(func(n): return n.get("petition") is Dictionary).size()
+	print("selftest: прошения — ", Game.clock_text(), ", просителей у ворот ", npet)
+	cmd(PackedStringArray(["throne"]))
+	var wait_s: String = String(hud.dlg["pages"][0][0]) if hud.dlg_open() else ""
+	hud.close_dlg()
+	var r1 := _hear(false)
+	# ещё просители, пока король на троне (снова утро): первого — верховному судье
+	Game.set_hour(9.0)
+	last_hh = floori(Game.hour_abs() * 2.0)
+	last_ha = Game.day * 24.0 + Game.hour_abs()
+	var n1: int = aud.spawn()
+	var r2 := _hear(true)
+	var heard: int = r1[0] + r2[0]
+	var by_judge: int = r1[1] + r2[1]
+	var V: Array = G.court.get("verdicts", [])
+	var nk := 0
+	for i in V.size() - v0:
+		if V[i].by == "king":
+			nk += 1
+	var fr2 := 0
+	while fr2 < 3000 and npcs.any(func(n): return String(n["key"]).begins_with("pet")):
+		_tick(0.05)
+		fr2 += 1
+	var left: int = npcs.filter(func(n): return String(n["key"]).begins_with("pet")).size()
+	print("selftest: прошения — «", wait_s, "»; выслушано ", heard, " из ", npet + n1, " (судье ", by_judge, "), в книге суда +", V.size() - v0, " (король ", nk, "), ",
+		Game.clock_text(), ", кадров ", r1[2], " и ", r2[2], ", ушли за ворота за ", fr2, " кадров (осталось ", left, ")")
+	ok = ok and npet >= 1 and n1 >= 1 and heard == npet + n1 and V.size() - v0 == heard and nk == heard - by_judge and left == 0 \
+		and (by_judge == 1 or SimDyn.seatChar("justice") == null)
+	# без короля на троне: после полудня оставшихся рассматривает судья
+	stand_up()
+	var n2: int = aud.spawn()
+	Game.set_hour(12.4)
+	last_hh = floori(Game.hour_abs() * 2.0)
+	last_ha = Game.day * 24.0 + Game.hour_abs()
+	var v1: int = (G.court.verdicts as Array).size()
+	fr = 0
+	while fr < 400 and aud.pending():
+		_tick(0.05)
+		fr += 1
+	var dj: int = (G.court.verdicts as Array).size() - v1
+	print("selftest: прошения после полудня — пришло ", n2, ", решено без короля ", dj, " (", (G.court.verdicts[0].by if dj > 0 else "—"), "), ", Game.clock_text())
+	ok = ok and n2 >= 1 and dj >= 1 and not aud.pending()
+	hud.close_dlg()
+	return ok
+
+## приём у трона, пока все прошения не решены: каждого выслушать — решает король (первое решение) или, если judge,
+## первого — верховному судье; [выслушано, судье, кадров]
+func _hear(judge: bool) -> Array:
+	var heard := 0
+	var by_judge := 0
+	var fr := 0
+	while fr < 6000 and (aud.pending() or hud.dlg_open()):
+		_tick(0.05)
+		fr += 1
+		if not hud.dlg_open():
+			continue
+		for i in 10:
+			if hud.dlg_choosing():
+				break
+			hud.advance()
+		if not hud.dlg_choosing():
+			hud.close_dlg()
+			continue
+		var chs: Array = hud.dlg["choices"]
+		var pick := chs.size() - 1 if judge and heard == 0 and String(chs[-1].t) == "Передать верховному судье" else 0
+		if pick > 0:
+			by_judge += 1
+		heard += 1
+		hud.choose(pick)
+		if hud.dlg_open() and not hud.dlg_choosing():
+			hud.close_dlg()
+	return [heard, by_judge, fr]

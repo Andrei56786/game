@@ -429,10 +429,15 @@ func _candidates(w: Dictionary, x0: float, y: float, wR: float, s: Dictionary) -
 		btn("c_ap" + JS.s(c.id), x0 + wR - 40, yy + 7, 38, 13, {"label": "Да", "tip": ["Назначить " + String(c.name) + " на место «" + String(s.n) + "»", {"t": "Его дом будет польщён.", "c": DIM}], "on": func(_c): _appoint(w, s, c)})
 		hit(x0, yy, wR - 42, 28, {"id": "row_cand" + JS.s(c.id), "tip": trait_tip(c)})
 
+## назначить из кандидатов (birds.js: запись в летопись — в appointSeat)
 func _appoint(w: Dictionary, s: Dictionary, c: Dictionary) -> void:
 	SimCourt.appointSeat(s.k, c.id)
 	w.app = 0
-	Sim.glog(String(c.name) + " назначен" + ("а" if JS.t(c.get("fem")) else "") + ": " + String(s.n) + ".", "good")
+	appointed(String(s.k))
+
+## новый советник назначен: при дворе — заселить и поблагодарить (court_ui.gd), на карте — ничего
+func appointed(_k: String) -> void:
+	pass
 
 ## доклады советников (новые сверху)
 func _reports(w: Dictionary, X: float, Y: float, WW: float, HH: float) -> void:
@@ -661,6 +666,7 @@ func _cand_details(w: Dictionary, c: Dictionary, e: Variant, X: float, Y: float,
 func _cd_appoint(w: Dictionary, k: String, c: Dictionary) -> void:
 	SimCourt.appointSeat(k, c.id)
 	w.as = 0
+	appointed(k)
 
 func _grab_spy(w: Dictionary, c: Dictionary, sp: Dictionary) -> void:
 	var G := Sim.G
