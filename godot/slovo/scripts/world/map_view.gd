@@ -556,7 +556,11 @@ func _time_state() -> Dictionary:
 		"step_ms": snappedf(Game.step_ms, 0.1), "dt": snappedf(Game.dt_avg * 1000.0, 1.0), "b": snappedf(Game.b_ms, 1.0), "work": snappedf(Game.work_ms, 1.0),
 		"modal": SimPlayer.modal}
 	if not Sim.G.is_empty():
-		o.merge({"sim": int(Sim.G.day), "busy": SimDay.busy, "ms": snappedf(SimDay.ms_day, 0.1), "frames": SimDay.frames, "n": SimDay.n_days,
+		var spring := -1                # последний день «весны» в летописи (за 3 последние записи она уходит, когда вестей много)
+		for e in Sim.G.log:
+			if "весна" in String(e.t):
+				spring = int(e.d)
+		o.merge({"sim": int(Sim.G.day), "spring": spring, "busy": SimDay.busy, "ms": snappedf(SimDay.ms_day, 0.1), "frames": SimDay.frames, "n": SimDay.n_days,
 			"avg": snappedf(SimDay.sum_ms / maxf(1.0, SimDay.n_days), 0.1), "max": snappedf(SimDay.max_ms, 0.1), "log": Sim.G.log.size(),
 			"feed": Sim.feed.size(), "mud": snappedf(JS.n(Sim.G.get("mud")), 0.01), "mudOn": JS.t(Sim.G.get("mudOn")),
 			"last": (Sim.G.log as Array).slice(-3).map(func(e): return "%d: %s" % [int(e.d), String(e.t).left(48)])})

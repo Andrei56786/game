@@ -125,7 +125,7 @@ try {
       await shot('map_time');
       const T1 = m && m.time;
       check(T1 && T1.sim >= 85 && lag <= 1 && m.realm.gold !== g0, 'скорость 3: дни идут (день ' + (T1 && T1.day) + ', ' + (T1 && T1.clock) + '), королевство отстаёт не больше чем на день (' + lag + '), казна ' + g0 + ' → ' + (m && m.realm.gold) + ', погода ' + (m && m.realm.weather) + (T1 && T1.mudOn ? ', распутица' : ''));
-      check(T1 && T1.feed >= 1 && T1.last.some(x => /весна/.test(x)), 'летопись: ' + (T1 && T1.last.join(' | ')));
+      check(T1 && T1.feed >= 1 && (T1.spring >= 84 || T1.last.some(x => /весна/.test(x))), 'летопись: весна — день ' + (T1 && T1.spring) + '; ' + (T1 && T1.last.join(' | ')));
       // 0.6: шаги движения по часам (24 на сутки), походы ИИ — войска сдвинулись, пути проложены
       const R1 = m && m.realm;
       check(T1 && T1.steps >= 24 * 85 && R1 && R1.march >= 3 && R1.paths >= 50 && R1.pos !== P0,
