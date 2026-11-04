@@ -88,14 +88,27 @@ function pageExport() {
   res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9));
   // значки верхней строки
   const WIC = ['i_star', 'i_sun', 'i_moon', 'i_cloud', 'i_fog', 'i_rain', 'i_snow', 'i_storm', 'i_wind'];
-  res.icons = {}; for (const k of ['shield0', 'i_gold', 'i_men', 'i_food', ...WIC, 'i_seal', 'i_scroll', 'i_book', 'i_pause', 'i_play1', 'i_play2', 'i_play3', 'i_crown', 'i_eye']) if (SPR[k]) res.icons[k] = [add(SPR[k]), typeof hiIc === 'function' && hiIc(k) ? 1 : 0];
+  res.icons = {}; for (const k of ['shield0', 'i_gold', 'i_men', 'i_food', ...WIC, 'i_seal', 'i_scroll', 'i_book', 'i_pause', 'i_play1', 'i_play2', 'i_play3', 'i_crown', 'i_eye', ...Object.keys(ICONS).map(k => 'i_' + k)]) if (SPR[k]) res.icons[k] = [add(SPR[k]), typeof hiIc === 'function' && hiIc(k) ? 1 : 0];
+  // поле боя (bfig.js): фигурки воинов по родам войск в цветах держав — кадры [спрайт, ноги (fy), середина (cx)]
+  res.figs = REALM_DEF.map(d => { const o = {}; for (const t of UT) { const F = figFrames(t, d.col, d.dark), q = {}; for (const fr in F) q[fr] = [add(F[fr]), F[fr].fy, F[fr].cx]; o[t] = q; } return o; });
+  // лица воевод на карточках полков (drawPortrait(captChar(c), x, y, 1/3) — 16×16): по 8 на народ державы, и король
+  const small = p => { if (!p) return -1; const [c, g] = mkCanvas(16, 16); g.imageSmoothingEnabled = false; g.drawImage(p, 0, 0, 16, 16); return add(c); };
+  const CAGE = [24, 28, 33, 38, 43, 48, 30, 36];
+  res.capts = REALM_DEF.map((d, r) => CAGE.map((age, k) => { try { return small(portrait({ id: 'cpx' + r + '_' + k, name: '', role: 'general', cul: d.key, fem: 0, age, realm: 0, pseed: 1000 + r * 37 + k * 7919, traits: [], alive: 1, prison: -1, pseudo: 1 })); } catch (e) { return -1; } }));
+  try { res.kingS = small(portrait(kc)); } catch (e) { res.kingS = -1; }
+  // лица 48×48 тех же воевод (drawPortrait(g, x, y, 1) — карточки встречи, войска короля, окно «Войска короны»)
+  res.capts48 = REALM_DEF.map((d, r) => CAGE.map((age, k) => { try { const p = portrait({ id: 'cpx' + r + '_' + k, name: '', role: 'general', cul: d.key, fem: 0, age, realm: 0, pseed: 1000 + r * 37 + k * 7919, traits: [], alive: 1, prison: -1, pseudo: 1 }); return p ? add(p) : -1; } catch (e) { return -1; } }));
+  // и женские лица (атаманши, владетельницы): по 8 на культуру
+  res.capts48f = REALM_DEF.map((d, r) => CAGE.map((age, k) => { try { const p = portrait({ id: 'cpf' + r + '_' + k, name: '', role: 'general', cul: d.key, fem: 1, age, realm: 0, pseed: 2000 + r * 41 + k * 7907, traits: [], alive: 1, prison: -1, pseudo: 1 }); return p ? add(p) : -1; } catch (e) { return -1; } }));
   // карта королевства: войска (mkArmySprites), гербы держав для подсказок, глаз скрытого войска
   res.mapspr = {}; for (const k of ['a_knight', 'a_foot', 'a_bandit', 'a_wagon', 'a_ox', 'a_tent', 'a_camp', 'i_eye', ...REALM_DEF.map((d, i) => 'shield' + i)]) if (SPR[k]) res.mapspr[k] = add(SPR[k]);
   // чёткие значки книжного шрифта (icons2.js, hiCanvas): растр под масштаб окна V = 2, 3, 4 точки экрана на точку игры;
-  // bar — значок у чисел верхней строки (sprBar, ×1.4), btn — на кнопке скорости (btn с ic: до ×1.6), one — как есть (spr: корона столицы, глаз; значок до 7×7 — ×1.2 вокруг середины)
+  // bar — значок у чисел верхней строки (sprBar, ×1.4), btn — на кнопке скорости (btn с ic: до ×1.6), one — как есть (spr: корона столицы, глаз; значок до 7×7 — ×1.2 вокруг середины),
+  // x3 и x4 — корона и флаг итога боя (×3 на поле, ×4 в окне итога на карте)
   res.hi = {};
   if (typeof hiCanvas === 'function') for (const k in res.icons) { const base = k.slice(2), s = SPR[k]; if (k.slice(0, 2) !== 'i_' || !HI[base]) continue;
     const q = {}, uses = { bar: 1.4, btn: Math.min(1.6, Math.max(1, (14 - 5) / Math.max(s.width, s.height))), one: s.width <= 7 && s.height <= 7 ? 1.2 : 1 };
+    if (k === 'i_crown' || k === 'i_flag') { uses.x3 = 3; uses.x4 = 4; }
     for (const u in uses) { const sc = uses[u]; q[u] = { sc }; for (const V of [2, 3, 4]) { const e = hiCanvas(base, Math.round(V * sc * 100) / 100, ''); q[u][V] = [add(e.c), e.pad]; } }
     res.hi[k] = q; }
   try { res.weather = weatherOf(); } catch (e) { res.weather = { n: '', ic: 'sun' }; }

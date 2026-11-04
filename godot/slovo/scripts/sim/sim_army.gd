@@ -830,7 +830,10 @@ static func substep(dd: float) -> void:
 	for a in Sim.G.armies:
 		if a.path != null and JS.t(a.alive):      # без пути advanceArmy ничего не делает
 			await advanceArmy(a, dd)
+	SimPlayer.updateFollow()                     # войско короля: погоня и встречи (worldAdvance); без него — ничего
+	SimPlayer.checkEncounters()
 	await aiContacts()
+	SimPlayer.couriersAdvance(dd)                # гонцы с приказами короля
 	step_us = Time.get_ticks_usec() - t0
 
 
