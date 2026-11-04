@@ -416,7 +416,8 @@ func state() -> Dictionary:
 
 ## часы и дни королевства: день календаря и симуляции, скорость, сколько счёта уходит на день
 func _time_state() -> Dictionary:
-	var o := {"day": Game.day, "clock": Game.clock_text(), "speed": Game.speed, "lag_max": Game.lag_max, "fps": Engine.get_frames_per_second()}
+	var o := {"day": Game.day, "clock": Game.clock_text(), "speed": Game.speed, "lag_max": Game.lag_max, "fps": Engine.get_frames_per_second(), "steps": Game.steps_n,
+		"step_ms": snappedf(Game.step_ms, 0.1), "dt": snappedf(Game.dt_avg * 1000.0, 1.0), "b": snappedf(Game.b_ms, 1.0), "work": snappedf(Game.work_ms, 1.0)}
 	if not Sim.G.is_empty():
 		o.merge({"sim": int(Sim.G.day), "busy": SimDay.busy, "ms": snappedf(SimDay.ms_day, 0.1), "frames": SimDay.frames, "n": SimDay.n_days,
 			"avg": snappedf(SimDay.sum_ms / maxf(1.0, SimDay.n_days), 0.1), "max": snappedf(SimDay.max_ms, 0.1), "log": Sim.G.log.size(),
@@ -430,10 +431,24 @@ func _realm_state() -> Dictionary:
 	var bv := SimText.bar_vals()
 	var vis := 0
 	var kinds := {}
+	var march := 0
+	var sieges := 0
+	var pos := 0.0
 	for a: Dictionary in Sim.G.armies:
+		pos = pos + a.x * 7 + a.y * 13
+		if JS.t(a.alive) and a.path != null:
+			march += 1
+		if JS.t(a.alive) and a.siegeOf >= 0:
+			sieges += 1
 		if JS.t(a.alive) and SimIntel.armyVisible(a):
 			vis += 1
 			var k := String(a.kind) + ("" if String(a.kind) != "lord" or a.realm == 0.0 else "_ai")
 			kinds[k] = int(kinds.get(k, 0)) + 1
+	var wars := 0
+	for r in range(1, 5):
+		if JS.t(Sim.G.rel[0][r].war):
+			wars += 1
 	return {"gold": roundi(bv.gold), "net": snappedf(bv.net, 0.01), "chars": Sim.G.chars.size(), "armies": Sim.G.armies.size(), "seen": vis, "kinds": kinds, "drawn": objs.n_armies,
-		"explored": (Sim.G.explored as PackedByteArray).count(1), "fog": fogp.visible, "weather": String(Sim.G.weather.k)}
+		"explored": (Sim.G.explored as PackedByteArray).count(1), "fog": fogp.visible, "weather": String(Sim.G.weather.k), "march": march, "sieges": sieges,
+		"pos": snappedf(pos, 0.01), "ghosts": objs.n_ghosts, "know": (Sim.G.get("know", {}) as Dictionary).size(), "wars": wars, "paths": SimArmy.path_n,
+		"path_ms": snappedf(SimArmy.path_us / 1000.0 / maxf(1.0, SimArmy.path_n), 0.1)}
