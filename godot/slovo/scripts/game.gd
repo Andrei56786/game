@@ -7,7 +7,7 @@ extends Node
 # кроме догонялки после сна, команды day или долгой жизни при дворе до первого открытия карты: тогда шаги и дни
 # идут подряд, сколько влезет в долю кадра. Карта рисует войска плавно (view_pos): на час позже счёта, между
 # положениями до и после последнего шага.
-const VERSION := "0.6.0"
+const VERSION := "0.7.0"
 const DAY_SEC := [0.0, 360.0, 180.0, 60.0]   # секунд на игровые сутки при дворе (COURT_SPD в HTML)
 const MAP_SPD := [0.0, 1.6, 0.8, 0.3]        # секунд на сутки на карте (SPD в HTML)
 const DAYS_SEASON := 21
@@ -29,6 +29,7 @@ var frac := 0.0          # доля суток; 0 — 5:00 утра, как в H
 var speed := 1
 var last_speed := 1      # к ней возвращает Пробел после паузы (UI.lastSpeed)
 var sim_run := true      # дни королевства идут сами (самопроверка без экрана считает их сама)
+var hold := false        # идёт бой на экране: королевство ждёт (часы на карте тоже стоят)
 var map_frame := -10     # кадр, в котором карта последний раз двигала часы
 var lag_max := 0         # для проверок: наибольшее отставание королевства от часов, дней
 var dt_avg := 1.0 / 60.0 # средняя длина кадра по часам, с (delta в _process — не длиннее 8/60 с: max_physics_steps_per_frame)
@@ -82,7 +83,7 @@ func _process(dt: float) -> void:
 	var fr := dt if last_us == 0 else (now - last_us) / 1e6
 	last_us = now
 	dt_avg = lerpf(dt_avg, clampf(fr, 0.001, 2.0), 0.25)
-	if not sim_run or Sim.G.is_empty():
+	if not sim_run or hold or Sim.G.is_empty() or SimPlayer.modal:
 		return
 	var f := Engine.get_process_frames()
 	var lag := day - int(Sim.G.day)          # пока день считается, Sim.G.day — уже он
@@ -107,7 +108,7 @@ func _process(dt: float) -> void:
 		var want := STEPS if lag > 0 else mini(STEPS - 1, int(frac * STEPS))
 		while steps < want and Time.get_ticks_usec() - t0 < b:
 			step()
-			if stepping:
+			if stepping or SimPlayer.modal:
 				return
 		var left := b - (Time.get_ticks_usec() - t0)
 		work_ms = (b - left) / 1000.0
@@ -131,6 +132,7 @@ func step() -> void:
 		if JS.t(a.alive):
 			pos0[a.id] = Vector2(a.x, a.y)
 	var f0 := Engine.get_process_frames()
+	Sim.G.frac = float(steps) / STEPS        # доля суток королевства (G.frac): встречи, гонцы, письма
 	await SimArmy.substep(1.0 / STEPS)
 	stepping = false
 	if Engine.get_process_frames() != f0:

@@ -4,6 +4,7 @@ extends Node2D
 # Люди живут по расписанию во всех местах сразу и ходят через двери; король — 16×32, вид 320×180 точек (×4).
 signal leave
 signal to_map
+signal ride_out(a)        # король выезжает из замка: a — войско у столицы (во главе) или null — со свитой
 const CT := 16
 const DIRS := ["down", "left", "right", "up"]
 const NPC_SPDK := [1.0, 1.0, 1.4, 2.2]
@@ -970,8 +971,33 @@ func do_act(a: Dictionary) -> void:
 				king["dir"] = "up"
 				parts.append({"k": "puff", "x": float(a["x"]), "y": float(a["y"]) - 10.0, "vx": 0.0, "vy": -6.0, "t": 0.0, "life": 0.6})
 				hud.toast("Упражнение с мечом. Солдаты одобрительно гудят.")
+		"gate":
+			gate_act()
+		"stable":
+			gate_act("Конюх выводит осёдланного гнедого. «Куда поедем, государь?» В стойлах фыркают кони свиты.")
 		_:
 			hud.toast(String(a["label"]) + " — пока только в полной игре (HTML).")
+
+## ворота замка (gateAct): выехать со свитой, во главе войска у столицы — или остаться. Королевство (Sim.G), если карту
+## ещё не открывали, начинается здесь.
+func gate_act(intro := "") -> void:
+	if not SimPlayer.ensure_sim():
+		hud.toast("Королевство не готово: нет данных мира.")
+		return
+	var C: Dictionary = Sim.G.court
+	if JS.n(C.get("regent", -1)) >= 0:
+		hud.say(null, "Стража скрещивает копья: «Регент " + SimPlayer.regentName() + " не велел выпускать юного государя за ворота. Подождите совершеннолетия, ваше величество».")
+		return
+	var ca: Variant = SimPlayer.capitalArmy()
+	var kn: Variant = Sim.charOf(ca.gen) if ca != null else null
+	var ret: Variant = C.get("retinue")
+	var ch: Array = [{"t": "Выехать со свитой (" + JS.s(Sim.armyMen(ret) if ret is Dictionary else 22.0) + " чел.)", "tip": "Король сам поедет по королевству. Двор будет жить без него.", "fx": func(): ride_out.emit(null)}]
+	if ca != null:
+		ch.append({"t": "Возглавить войско у столицы (" + JS.s(Sim.armyMen(ca)) + (", " + Sim.charName(kn) if kn != null else "") + ")", "tip": "Король ведёт войско сам: битвы — под вашей рукой.", "fx": func(): ride_out.emit(ca)})
+	ch.append({"t": "Остаться в замке", "fx": func(): pass})
+	hud.say(null, intro if intro != "" else "Ворота замка. За ними — дороги, деревни, граница и война. Кто правит из седла, видит всё своими глазами — но и двор живёт без него.",
+		{"name": "Выезд из замка", "choices": ch, "esc": ch.size() - 1})
+	print("GATE ", ch.size())
 
 func sleep_until(ha: float) -> void:
 	fade_to(func() -> void:
@@ -1022,7 +1048,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			if si >= 0:
 				Game.set_speed(si)
 			elif hud.dlg_open():
-				hud.advance()
+				hud.dlg_click(mp)
 			else:
 				click(mp)
 		elif e.button_index == MOUSE_BUTTON_RIGHT:
@@ -1036,10 +1062,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		return
 	var k: int = e.physical_keycode
 	if hud.dlg_open():
-		if k == KEY_E or k == KEY_ENTER or k == KEY_SPACE or k == KEY_KP_ENTER:
-			hud.advance()
-		elif k == KEY_ESCAPE:
-			hud.close_dlg()
+		hud.dlg_key(k)
 		return
 	match k:
 		KEY_E, KEY_ENTER, KEY_KP_ENTER:
@@ -1115,6 +1138,10 @@ func cmd(p: PackedStringArray) -> void:
 				interact(tg)
 		"next":
 			hud.advance()
+		"choose":
+			hud.choose(int(p[1]) - 1)
+		"gate":
+			gate_act()
 		"close":
 			hud.close_dlg()
 		"walk":
