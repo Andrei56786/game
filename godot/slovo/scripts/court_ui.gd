@@ -6,7 +6,8 @@ extends "res://scripts/world/court_wins.gd"
 
 const CSPD_TIP := ["Пауза (Пробел)", "Скорость 1", "Скорость 2", "Скорость 3"]
 ## кнопки верхней строки (B в drawCourtUI): значок, подсказка, окно ("" — карта королевства)
-const TB := [["i_seal", "Малый совет (K)", "council"], ["i_raven", "Письма (L)", "letters"], ["i_map", "Карта королевства (Tab)", ""]]
+const TB := [["i_seal", "Малый совет (K)", "council"], ["i_raven", "Письма (L)", "letters"], ["i_map", "Карта королевства (Tab)", ""],
+	["i_snd", "Звук (M — без звука)", "sound"], ["i_scroll", "Меню (Esc)", "menu"]]
 
 ## новый советник (appointSeat при дворе): сразу заселить — и он благодарит короля
 func appointed(k: String) -> void:
@@ -69,7 +70,8 @@ func _top_hits() -> void:
 		var tip: String = e[1]
 		if k == "letters" and un > 0:
 			tip += " — непрочитанных: " + str(un)
-		btn("ctb" + str(i), bx + i * 16, 2, 15, 14, {"ic": e[0], "style": "dark", "tip": tip, "active": k != "" and win != null and String(win.k) == k, "on": func(_c): _tb(k)})
+		var ik: String = "i_mute" if k == "sound" and Snd.muted() else e[0]
+		btn("ctb" + str(i), bx + i * 16, 2, 15, 14, {"ic": ik, "style": "dark", "tip": tip, "active": k != "" and win != null and String(win.k) == k, "on": func(_c): _tb(k)})
 		if k == "letters" and un > 0:
 			rect(bx + i * 16 + 10, 1, 6, 6, PO)
 			rect(bx + i * 16 + 11, 2, 4, 4, "#e04030")

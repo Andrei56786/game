@@ -3,7 +3,9 @@
 // на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи;
 // 0.7: король выезжает в поле, встреча с врагом, автобой и итог, бой на поле (расстановка, бой, итог) и снова карта.
 // 0.8: двор на данных королевства — окна совета (K) и писем (L), срочный сбор: советники сходятся, король во главе стола, доклады;
-// люди двора из королевства, приём прошений у трона.
+// люди двора из королевства, приём прошений у трона. 0.9: меню (Esc) и окно «Звук»; сохранение из меню и по команде, страница
+// заново — «Продолжить правление»: то же королевство до знака (отпечаток), тот же день и казна; выход в главное меню; новая игра
+// (тяжёлая, без тумана войны) — двор у трона; автосохранение на седьмой день.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -199,6 +201,56 @@ try {
       const v0 = s && s.verd; n1 = logs.length;
       await cmd('choose 1'); const vd = await after(n1, /^VERDICT king/, 5000); await wait(400); s = await state();
       check(!!vd && s && s.verd === v0 + 1 && s.by === 'king', 'решение короля — в книге суда: ' + vd + ' (решений ' + v0 + ' → ' + (s && s.verd) + ')');
+      // 0.9: часовня — молитва у алтаря (выборы, искры), воскресная обедня (люди на скамьях), темница (тюремщик и узник)
+      await cmd('speed 0', 'close', 'close'); await wait(300);
+      await cmd('time 14', 'spot altar_front'); await wait(800); s = await state(); const al = s && s.label;
+      n1 = logs.length; await cmd('act'); const alt = await after(n1, /^ALTAR \d/, 5000); await wait(300); s = await state();
+      for (let i = 0; i < 10 && s && s.talk && !s.choosing; i++) { await cmd('next'); await wait(100); s = await state(); }
+      const wi = s && s.ch ? s.ch.findIndex(t => t.startsWith('О мудрости')) : -1;
+      n1 = logs.length; await cmd('choose ' + (wi + 1)); const pr = await after(n1, /^PRAYED/, 5000); await wait(600); s = await state(); await shot('chapel_pray');
+      check(!!alt && wi >= 0 && !!pr && s && s.loc === 'chapel' && s.dlg === 'Молитва' && s.motes > 0, 'молитва у алтаря: «' + al + '», ' + alt + ', выборы ' + (wi >= 0) + ', ' + pr + ', искр ' + (s && s.motes));
+      await cmd('close', 'close'); await wait(200); s = await state();
+      const sun = s.day + (6 - s.day % 7 + 7) % 7 + (s.day % 7 === 6 && s.hour >= 8.5 ? 7 : 0);
+      n1 = logs.length; await cmd('day ' + sun, 'time 8.6'); await wait(2500); await cmd('spot pew_k', 'act', 'speed 1');
+      const mb = await after(n1, /^MASS BEGIN \d/, 60000); const ma = await after(n1, /^MASS ATTENDED/, 90000); await wait(800); s = await state(); await shot('chapel_mass');
+      check(!!mb && !!ma && s && s.mass && s.loc === 'chapel' && s.pews >= 4, 'воскресная обедня (день ' + sun + '): ' + mb + ' → ' + ma + ', на скамьях ' + (s && s.pews) + ', «' + (s && s.label) + '»');
+      await cmd('speed 0', 'close'); await wait(300); const pn = s ? s.pris : 0;
+      n1 = logs.length; await cmd('time 14', 'goto srv_jailer'); await wait(1200); await cmd('talk'); await wait(600); s = await state();
+      const jl = logs.slice(n1).find(x => x.startsWith('JAILER ')); await shot('dungeon_jailer');
+      if (pn > 0) {
+        await cmd('choose 1'); const pz = await after(n1, /^PRISONER /, 5000); await wait(600); await shot('dungeon_prisoner');
+        check(!!jl && !!pz, 'темница: тюремщик — ' + jl + ', узник — ' + pz);
+      } else check(s && s.loc === 'dungeon' && s.talk && !jl, 'темница: тюремщик, камеры пусты (' + (s && s.dlg) + ')');
+      await cmd('close', 'close'); await wait(200);
+      // 0.9: меню и звук; сохранение — страница заново — «Продолжить правление»
+      const ks = async () => { const n = logs.length; await cmd('kstate'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('KSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
+      await cmd('speed 0', 'close'); await wait(400); await cmd('menu'); await wait(700); s = await state(); await shot('court_menu');
+      check(s && s.win === 'menu', 'меню (Esc): ' + (s && s.win));
+      await cmd('win sound'); await wait(700); s = await state(); await shot('court_sound');
+      check(s && s.win === 'sound', 'окно «Звук»: ' + (s && s.win));
+      await cmd('win sound'); await wait(300);
+      n1 = logs.length; await cmd('menu save'); const sv = await after(n1, /^SAVED /, 30000);
+      n1 = logs.length; await cmd('save'); const sdig = await after(n1, /^SAVE DIG [0-9a-f]{16} /, 30000);
+      const k0 = await ks();
+      check(!!sv && !!sdig && k0 && k0.save && k0.save.day === k0.day, 'сохранено: ' + sv + ' · ' + sdig + ' · ' + JSON.stringify(k0 && k0.save));
+      await wait(2500);   // IndexedDB
+      n1 = logs.length; await page.reload(); const rd = await after(n1, /^READY /, 90000); await wait(2000); await shot('title_continue');
+      let ts = await state();
+      check(!!rd && ts && ts.screen === 'title' && ts.has_save && ts.save_ok && ts.keys[0] === 't_cont', 'страница заново — «Продолжить правление»: ' + JSON.stringify(ts && { has: ts.has_save, ok: ts.save_ok, keys: ts.keys, save: ts.save }));
+      n1 = logs.length; await cmd('continue'); const ld = await after(n1, /^LOADED /, 90000);
+      const ldig = logs.slice(n1).find(x => x.startsWith('LOAD DIG ')); await wait(2000); const k1 = await ks(); await shot('court_loaded');
+      const dg = l => l ? l.split(' ')[2] : '?';
+      check(!!ld && dg(ldig) === dg(sdig) && k1 && k1.day === k0.day && k1.gold === k0.gold && k1.screen === 'court', 'загрузка — то же королевство: ' + ld + ', отпечаток ' + dg(ldig) + ' / ' + dg(sdig) + ', день ' + (k1 && k1.day) + ' / ' + k0.day + ', казна ' + (k1 && k1.gold) + ' / ' + k0.gold);
+      n1 = logs.length; await cmd('menu exit'); const te = await after(n1, /^TITLE/, 30000); await wait(800);
+      await cmd('newgame'); await wait(700); await shot('title_newgame');
+      ts = await state();
+      check(!!te && ts && ts.scr === 'newgame', 'выход в главное меню, новая игра — выбор: ' + (ts && ts.scr));
+      n1 = logs.length; await cmd('newgame go 2 open'); const ng = await after(n1, /^NEW GAME 2 true/, 90000); await wait(2000);
+      const k2 = await ks(); await shot('court_newgame');
+      check(!!ng && k2 && k2.day === 0 && k2.diff === 2 && k2.mapOpen && k2.screen === 'court', 'новая игра (тяжёлая, без тумана): ' + JSON.stringify(k2 && { day: k2.day, diff: k2.diff, open: k2.mapOpen, screen: k2.screen }));
+      n1 = logs.length; await cmd('speed 1', 'days 7'); const as = await after(n1, /^SAVED 7 /, 180000); await wait(500);
+      const k3 = await ks();
+      check(!!as && k3 && k3.save && k3.save.day === 7 && k3.save_kb < 400, 'автосохранение на седьмой день: ' + as + ' · ' + JSON.stringify(k3 && k3.save));
     }
     await cmd('title'); await wait(800);
   }

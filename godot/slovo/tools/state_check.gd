@@ -4,6 +4,8 @@ extends SceneTree
 ## затем дни королевства: шаги движения (pageStep в HTML, SimArmy.substep здесь) и сам день (pageDay в HTML, SimDay.dailyTick
 ## здесь) — сводка каждого дня (с суммой координат войск) и полные снимки на нескольких днях.
 ## Сравнивается всё: ключи и их порядок, типы (в G только float, как числа JS), числа — точно, генератор R, доход, знаки.
+## Сохранение: в конце дня 28 — SimSave.save_data (как saveGame), после 84 дней — загрузка (SimSave.load_data: как loadGame,
+## обзор и знаки в новой странице HTML) и ещё 7 дней: снимок сразу после загрузки, сводка дней и снимок последнего.
 
 const MAXP := 40
 var nd := 0
@@ -58,34 +60,20 @@ func _initialize() -> void:
 	var fr0 := Engine.get_process_frames()
 	var acts: Array = meta.get("acts", [])
 	Sim.echo = "--log" in OS.get_cmdline_user_args()
+	# загрузка (куски после снимков дней): сводка, снимок после загрузки, снимок последнего дня
+	var li := 3 + snaps.size()
+	var lmeta: Dictionary = bytes_to_var(parts[li]) if np > li + 2 else {}
+	var save_d := int(lmeta.get("d0", 0))
+	var save_b := PackedByteArray()
 	for d in range(1, days + 1):
-		# дела короля этого дня (pageAct в HTML: поручения совету), затем шаги движения (pageStep: походы войск и встречи), затем сам день
-		for a in acts:
-			if int(a[0]) == d:
-				act(a)
-		t0 = Time.get_ticks_usec()
-		for k in steps:
-			SimDay.budget_us = pz
-			SimDay.slice_t = Time.get_ticks_usec()
-			await SimArmy.substep(1.0 / steps)
-		ms_steps += (Time.get_ticks_usec() - t0) / 1000.0
-		var pos := 0.0
-		for a in Sim.G.armies:
-			pos = pos + a.x * 7 + a.y * 13
-		t0 = Time.get_ticks_usec()
-		await SimDay.dailyTick(pz)
-		var ms := (Time.get_ticks_usec() - t0) / 1000.0
-		ms_days += ms
-		ms_max = maxf(ms_max, ms)
-		var G := Sim.G
-		var golds := []
-		for r in G.realms:
-			golds.append(r.gold)
-		var me := {"day": G.day, "R": float(Sim.R.st), "gold": golds, "armies": float(G.armies.size()), "log": float(G.log.size()), "w": G.weather.k, "mud": JS.n(G.get("mud")), "chars": float(G.chars.size()), "pos": pos}
+		var r := await run_day(d, steps, acts, pz)
+		ms_steps += r.ms_steps
+		ms_days += r.ms
+		ms_max = maxf(ms_max, r.ms)
 		nd = 0
 		var rd: Dictionary = dig[d - 1]
 		for k in rd:
-			cmp(me[k], rd[k], "день %d: %s" % [d, k])
+			cmp(r.me[k], rd[k], "день %d: %s" % [d, k])
 		var nds := nd
 		n3 += nds
 		if nds > 0 and bad_day < 0:
@@ -95,6 +83,8 @@ func _initialize() -> void:
 			n3 += check("день %d" % d, bytes_to_var(parts[3 + si]))
 			if bad_day > 0:
 				break
+		if d == save_d:
+			save_b = var_to_bytes(SimSave.save_data())     # сразу в байты: дальше G меняется
 	if days > 0:
 		print("дней %d по %d шагов: день %.1f мс в среднем, самый долгий %.1f мс, шаги %.1f мс на день (в HTML всё вместе %.1f мс на день)" % [days, steps, ms_days / maxf(1, days), ms_max, ms_steps / maxf(1, days), float(meta.get("ms", 0.0)) / maxf(1, days)])
 	if days > 0:
@@ -104,9 +94,61 @@ func _initialize() -> void:
 		print("части дня, мс на день: ", ", ".join(pr), "; путей %d (%.1f мс на день, %d узлов на путь, самый долгий %.1f мс)" % [SimArmy.path_n, SimArmy.path_us / 1000.0 / days, SimArmy.path_nodes / maxi(1, SimArmy.path_n), SimArmy.path_max_us / 1000.0])
 	if pz > 0:
 		print("кусками по %d мкс: кадров %d" % [pz, Engine.get_process_frames() - fr0])
-	var ok := n1 + n2 + n3 == 0
-	print("STATE CHECK ", "OK" if ok else "FAIL (newGame %d, newGame3 %d, дни %d%s)" % [n1, n2, n3, ", первый день расхождения %d" % bad_day if bad_day > 0 else ""])
+	# сохранение дня save_d — загрузка — ещё n дней (как в HTML: новая страница, loadGame, обзор и знаки)
+	var n4 := 0
+	if save_d > 0 and bad_day < 0:
+		var o: Dictionary = bytes_to_var(save_b)
+		t0 = Time.get_ticks_usec()
+		var why := SimSave.load_data(o)
+		var msl := (Time.get_ticks_usec() - t0) / 1000.0
+		if why != "":
+			print("загрузка: ", why)
+			n4 += 1
+		else:
+			n4 += check("загрузка дня %d (%.0f мс, сохранение %.1f МБ)" % [save_d, msl, save_b.size() / 1048576.0], bytes_to_var(parts[li + 1]))
+			var ldig: Array = lmeta.dig
+			for i in int(lmeta.n):
+				var d := save_d + 1 + i
+				var r := await run_day(d, steps, acts, pz)
+				nd = 0
+				for k in ldig[i]:
+					cmp(r.me[k], ldig[i][k], "после загрузки, день %d: %s" % [d, k])
+				n4 += nd
+				if nd > 0:
+					print("после загрузки, день %d: расхождений %d" % [d, nd])
+					break
+			if n4 == 0:
+				n4 += check("день %d после загрузки" % (save_d + int(lmeta.n)), bytes_to_var(parts[li + 2]))
+	elif save_d == 0:
+		print("загрузка: в эталоне нет (SIM_LOAD=0 или другое зерно)")
+	var ok := n1 + n2 + n3 + n4 == 0
+	print("STATE CHECK ", "OK" if ok else "FAIL (newGame %d, newGame3 %d, дни %d, загрузка %d%s)" % [n1, n2, n3, n4, ", первый день расхождения %d" % bad_day if bad_day > 0 else ""])
 	quit(0 if ok else 1)
+
+
+## день как в эталоне (refDay): дела короля этого дня (pageAct: поручения совету), шаги движения (pageStep: походы войск
+## и встречи), сам день (pageDay); сводка — как dig в HTML
+func run_day(d: int, steps: int, acts: Array, pz: int) -> Dictionary:
+	for a in acts:
+		if int(a[0]) == d:
+			act(a)
+	var t0 := Time.get_ticks_usec()
+	for k in steps:
+		SimDay.budget_us = pz
+		SimDay.slice_t = Time.get_ticks_usec()
+		await SimArmy.substep(1.0 / steps)
+	var ms_steps := (Time.get_ticks_usec() - t0) / 1000.0
+	var pos := 0.0
+	for a in Sim.G.armies:
+		pos = pos + a.x * 7 + a.y * 13
+	t0 = Time.get_ticks_usec()
+	await SimDay.dailyTick(pz)
+	var ms := (Time.get_ticks_usec() - t0) / 1000.0
+	var G := Sim.G
+	var golds := []
+	for r in G.realms:
+		golds.append(r.gold)
+	return {"ms": ms, "ms_steps": ms_steps, "me": {"day": G.day, "R": float(Sim.R.st), "gold": golds, "armies": float(G.armies.size()), "log": float(G.log.size()), "w": G.weather.k, "mud": JS.n(G.get("mud")), "chars": float(G.chars.size()), "pos": pos}}
 
 
 func act(a: Array) -> void:

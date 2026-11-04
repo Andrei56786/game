@@ -5,6 +5,7 @@ extends "res://scripts/ui_kit.gd"
 signal battle(A, Bs, tile, o)
 signal to_court(spot)
 signal mode_changed
+signal menu_act(k)          # меню: "load" — загрузить сохранение, "exit" — в главное меню (main)
 
 const People = preload("res://scripts/people.gd")
 const UICON := {"levy": "i_men", "spear": "i_shield", "sword": "i_sword", "archer": "i_bow", "xbow": "i_xbow", "horse": "i_horse", "harch": "i_harch", "knight": "i_knight"}

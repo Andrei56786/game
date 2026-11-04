@@ -14,6 +14,7 @@ const People = preload("res://scripts/people.gd")
 const Council = preload("res://scripts/court_council.gd")
 const Family = preload("res://scripts/court_family.gd")
 const Audience = preload("res://scripts/court_audience.gd")
+const Chapel = preload("res://scripts/court_chapel.gd")
 
 var D: Dictionary
 var Z := 2
@@ -46,6 +47,7 @@ var people: RefCounted
 var meet: RefCounted          # Малый совет: заседания, сбор, разговор с советником (court_council.gd)
 var fam: RefCounted           # семья короля и воспитанники: разговоры с выбором (court_family.gd)
 var aud: RefCounted           # приём прошений у трона (court_audience.gd)
+var chp: RefCounted           # часовня, книги и темница: молитва, обедня, чтение, узники (court_chapel.gd)
 var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
 
 var layer: Node2D
@@ -89,6 +91,7 @@ func _ready() -> void:
 	meet = Council.new(self)
 	fam = Family.new(self)
 	aud = Audience.new(self)
+	chp = Chapel.new(self)
 	var K: Dictionary = D["king"]
 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
 	var sp0: Dictionary = spots["throne_front"]
@@ -481,6 +484,7 @@ func _tick(dt: float) -> void:
 			people.update(n, dt * k)
 		_ani_update(dt)
 		_parts_update(dt)
+		chp.update(dt)
 		_player_update(dt)
 	else:
 		king["moving"] = false
@@ -921,6 +925,8 @@ func _draw_parts(layer_i: int) -> void:
 				n.draw_rect(Rect2(x, y, 1, 1), Color(0.94, 1.0, 0.63, b))
 			elif k == "mote":
 				n.draw_rect(Rect2(x, y, 1, 1), Color(1.0, 0.96, 0.82, 0.5 * minf(1.0, minf(p["t"], a * 2.0))))
+	if layer_i == 1:
+		chp.draw(n)
 
 # ---------- кто рядом: люди и действия (nearestTarget в HTML) ----------
 func nearest_target() -> Dictionary:
@@ -933,7 +939,7 @@ func nearest_target() -> Dictionary:
 		if n["loc"] != loc_id or n["away"] or (n["lines"] as Array).is_empty():
 			continue
 		var d := Vector2(float(n["x"]) - fx, float(n["y"]) - 6.0 - fy).length()
-		if d < 24.0 and d < bd:
+		if d < float(n.get("talkR", 24.0)) and d < bd:
 			bd = d
 			best = {"n": n}
 	for a in L["acts"]:
@@ -959,6 +965,22 @@ func talk_to(n: Dictionary) -> void:
 	if n.get("sit") == null and n.get("path") == null:
 		var v := Vector2(float(king["x"]) - n["x"], float(king["y"]) - n["y"])
 		n["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
+	# свои разговоры (n.talk в HTML): выпущенный узник, узник в камере, тюремщик, капеллан
+	if n.has("talk_line"):
+		hud.say(n, String(n.talk_line))
+		print("TALK ", n["name"])
+		return
+	if (n.has("pris") or n.key == "srv_jailer" or n.key == "srv_chaplain") and SimPlayer.ensure_sim():
+		if n.has("pris"):
+			var ch: Variant = Sim.charOf(n.cid)
+			if ch != null:
+				chp.prisoner_talk(n, ch)
+		elif n.key == "srv_jailer":
+			chp.jailer_talk(n)
+		else:
+			chp.chaplain_talk(n)
+		print("TALK ", n["name"])
+		return
 	if n.has("petition"):
 		aud.talk(n)
 		print("TALK ", n["name"])
@@ -1003,6 +1025,12 @@ func do_act(a: Dictionary) -> void:
 		"treasury":
 			if SimPlayer.ensure_sim():
 				meet.treasury()
+		"pray":
+			chp.pray()
+		"kpew":
+			chp.kpew()
+		"read":
+			chp.read()
 		"barracks":
 			if SimPlayer.ensure_sim():
 				meet.barracks()
@@ -1084,7 +1112,7 @@ func click(sp: Vector2) -> void:
 		if n["loc"] != loc_id or n["away"] or (n["lines"] as Array).is_empty():
 			continue
 		if w.x > float(n["x"]) - 8.0 and w.x < float(n["x"]) + 8.0 and w.y > float(n["y"]) - 30.0 and w.y < float(n["y"]) + 2.0:
-			_walk_to(Vector2(n["x"], n["y"]), func() -> void: talk_to(n), 26.0)
+			_walk_to(Vector2(n["x"], n["y"]), func() -> void: talk_to(n), float(n.get("talkR", 24.0)) + 2.0)
 			return
 	for a in L["acts"]:
 		if not a["auto"] and Vector2(float(a["x"]) - w.x, float(a["y"]) - w.y).length() < maxf(14.0, float(a["r"]) * 0.7):
@@ -1148,7 +1176,7 @@ func key(k: int) -> void:
 		if hud.win != null:
 			hud.win = null
 		elif hud.modals.is_empty():
-			leave.emit()
+			hud.open_menu()
 		return
 	if not hud.modals.is_empty():
 		return
@@ -1299,7 +1327,10 @@ func state() -> Dictionary:
 	var verd: Array = Sim.G.court.get("verdicts", []) if aud.ok() else []
 	return {"day": Game.day, "hour": snappedf(Game.hour(), 0.01), "loc": loc_id, "room": room, "king": [int(king["x"]), int(king["y"])], "dir": king["dir"], "sit": king["sit"] != null, "talk": hud.dlg_open(), "choosing": hud.dlg_choosing(), "here": here, "asleep": away, "npcs": npcs.size(), "walked": int(walked), "dark": snappedf(hud.dark, 0.01), "zoom": Z, "fade": fade > 0.0, "sea": sea_key,
 		"win": String(hud.win.k) if hud.win != null else "", "modals": hud.modals.size(), "meet": meet.meeting_open(),
-		"fam": cnt.fam, "seats": cnt.seats, "pris": cnt.pris, "pets": cnt.pets, "verd": verd.size(), "by": String(verd[0].by) if not verd.is_empty() else "", "snd": Snd.state()}
+		"fam": cnt.fam, "seats": cnt.seats, "pris": cnt.pris, "pets": cnt.pets, "verd": verd.size(), "by": String(verd[0].by) if not verd.is_empty() else "",
+		"mass": chp.on, "pews": npcs.filter(func(n): return n["loc"] == "chapel" and n["sit"] != null and n.get("override") is Dictionary).size(), "motes": chp.motes.size(),
+		"label": Chapel.label(nearest_target().a) if nearest_target().has("a") else "", "snd": Snd.state(),
+		"dlg": String(hud.dlg.name) if hud.dlg != null else "", "ch": (hud.dlg.choices as Array).map(func(x): return String(x.get("t", ""))) if hud.dlg != null else []}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается
 func selftest() -> bool:

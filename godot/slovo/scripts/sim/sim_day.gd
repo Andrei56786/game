@@ -35,6 +35,7 @@ static var alerts: Array = []        # для экрана: события, ко
 static var near_ok := -1             # в каждой клетке не больше одного поселения (тогда settNear ищет по соседним клеткам)
 static var gar_base := {}            # baseGarrison по типу поселения (только для чтения)
 static var peace_of := PackedByteArray()   # dailySett: у державы нет войн (dailyTick считает перед поселениями)
+static var on_day := Callable()      # конец дня (в HTML в конце dailyTick — saveGame раз в 7 дней): часы игры сохраняют
 
 
 # ---------- кадры ----------
@@ -170,6 +171,8 @@ static func dailyTick(budget := 0) -> void:
 	done_frame = Engine.get_process_frames()
 	budget_us = 0
 	busy = false
+	if on_day.is_valid():
+		on_day.call()
 
 
 static func onSeason() -> void:

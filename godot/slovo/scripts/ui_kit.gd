@@ -327,3 +327,59 @@ func hover_tip() -> void:
 		t = (t as Callable).call()
 	if t != null:
 		tip_box(t, mouse())
+
+# ---------- окно «Звук» (WIN_EXT.sound в sndui.js): общее для заставки, двора и карты ----------
+const SND_ROWS := [["gv", "i_snd", "Общая", "Громкость всего"], ["mv", "i_note", "Музыка", "Пьесы меняются по месту, часу и событию"],
+	["sv", "i_bell", "Звуки", "Двери, кнопки, оружие, рог"], ["av", "i_bird", "Окружение", "Птицы, звери, ветер, вода, люди вокруг"], ["fv", "i_foot", "Шаги", "Шаги короля и прохожих"]]
+
+## громкость k (SNDU.get): музыка и звуки, выключенные совсем, — ноль
+func snd_get(k: String) -> float:
+	var P: Dictionary = Snd.P
+	if (k == "mv" and not P.get("mus", 1)) or (k == "sv" and not P.get("sfx", 1)):
+		return 0.0
+	return float(P.get(k, Snd.PV0.get(k, 1.0)))
+
+## движок громкости (sndSlider): щелчок или протяжка с нажатой кнопкой — по 5%
+func snd_slider(id: String, x: float, y: float, w: float, k: String) -> void:
+	var v := snd_get(k)
+	var m := mouse()
+	var held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and m.x >= x - 3 and m.x <= x + w + 3 and m.y >= y - 4 and m.y <= y + 9
+	if held:
+		var nv := roundf(clampf((m.x - x) / w, 0.0, 1.0) * 20.0) / 20.0
+		if nv != v:
+			Snd.set_vol(k, nv)
+			v = nv
+	rect(x, y + 2, w, 3, PO)
+	rect(x + 1, y + 3, w - 2, 1, "#3c2a20")
+	rect(x + 1, y + 3, roundf((w - 2) * v), 1, "#f7d35c")
+	var kx := x + roundf(w * v)
+	rect(kx - 2, y - 1, 5, 9, PO)
+	rect(kx - 1, y, 3, 7, "#fff2c8" if hov(id) or held else "#e0a630")
+	hit(x - 3, y - 4, w + 6, 13, {"id": id, "on": func(c): Snd.set_vol(k, roundf(clampf((float(c.ux) - x) / w, 0.0, 1.0) * 20.0) / 20.0)})
+
+## пять движков, «Без звука (M)», «Готово» (done — закрыть окно), что играет сейчас
+func snd_panel(done: Callable) -> void:
+	var WW := 232.0
+	var HH := 150.0
+	var X := float((W - int(WW)) >> 1)
+	var Y := 64.0
+	blocker()
+	dim(0.45)
+	panel_wood(X, Y, WW, HH)
+	txt("Звук", X + WW / 2.0, Y + 8, Art.pal("y"), "m", "c", PO)
+	btn("w_close", X + WW - 17, Y + 4, 13, 12, {"ic": "i_close", "style": "dark", "tip": "Закрыть (Esc)", "on": func(_c): done.call()})
+	var y := Y + 26.0
+	for r in SND_ROWS:
+		spr_k(r[1], X + 14, y)
+		txt(r[2], X + 24, y - 1, Art.pal("w"))
+		hit(X + 10, y - 3, 74, 11, {"id": "sn_l" + r[0], "tip": r[3]})
+		snd_slider("sn_" + r[0], X + 88, y - 1, 100, r[0])
+		txt(str(roundi(snd_get(r[0]) * 100)) + "%", X + WW - 14, y - 1, cc("#c8b898"), "s", "r")
+		y += 16.0
+	var mu := Snd.muted()
+	btn("sn_mute", X + 14, y + 2, 96, 14, {"label": "Включить (M)" if mu else "Без звука (M)", "ic": "i_snd" if mu else "i_mute", "active": mu, "on": func(_c): Snd.toggle()})
+	btn("sn_ok", X + WW - 70, y + 2, 56, 14, {"label": "Готово", "on": func(_c): done.call()})
+	var md := Snd.mood()
+	var nm: Dictionary = Snd.idx.get("names", {})
+	var s := "Звук выключен" if mu else ("Сейчас: «" + String(nm.get(md, md)) + "»" if md != "" and snd_get("mv") > 0 else "Музыка выключена")
+	txt(s, X + WW / 2.0, y + 22, cc("#c8b898"), "s", "c")

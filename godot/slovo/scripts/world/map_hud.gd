@@ -847,15 +847,15 @@ func _btn(label: String, x: float, y: float, w: float, h: float, act: Callable, 
 	btns.append([r, act])
 
 ## кнопка-значок 12×14 в верхней строке (btn style dark); dot — красная точка (непрочитанные письма)
-func _ibtn(ik: String, x: float, act: Callable, active: bool, tip: Callable, dot := false) -> void:
-	var r := Rect2(x, 2, 12, 14)
+func _ibtn(ik: String, x: float, act: Callable, active: bool, tip: Callable, dot := false, w := 12.0) -> void:
+	var r := Rect2(x, 2, w, 14)
 	var lit: bool = active or (r.has_point(mouse()) and not mv.ui.is_open())
-	box(x, 2, 12, 14, PO)
-	box(x + 1, 3, 10, 12, Color8(90, 64, 48) if lit else Color8(44, 32, 24))
+	box(x, 2, w, 14, PO)
+	box(x + 1, 3, w - 2, 12, Color8(90, 64, 48) if lit else Color8(44, 32, 24))
 	var ic: Array = Art.D["icons"].get(ik, [])
 	if not ic.is_empty():
 		var sz := Art.size(ic[0])
-		var X := roundf(x + 6 - sz.x / 2.0)
+		var X := roundf(x + floorf(w / 2.0) - sz.x / 2.0)
 		var Y := roundf(2 + (14 - sz.y) / 2.0)
 		if not _hi(ik, "one", X, Y):
 			spr(ic[0], X, Y)
@@ -946,9 +946,14 @@ func _top() -> void:
 		else:
 			x += 92.0
 	var pol: bool = mv.mode == "pol"
-	_btn("Державы" if pol else "Местность", W - 70, 2, 66, 14, func(): mv.set_mode("ter" if mv.mode == "pol" else "pol"), pol)
+	# режим карты, звук, меню (B в drawTopBar: значки 15×14 через 16)
+	var ui0 = mv.ui
+	var field: bool = sim_on() and Sim.playerArmy() != null
+	_ibtn("i_map", W - 70, func(): mv.set_mode("ter" if mv.mode == "pol" else "pol"), pol, func(): return [SimText.row("Режим карты: " + ("политическая" if mv.mode == "pol" else "местность") + (" (Tab)" if field else ""))], false, 15.0)
+	_ibtn("i_mute" if Snd.muted() else "i_snd", W - 54, func(): ui0.toggle_win("sound"), ui0.win != null and ui0.win.k == "sound", func(): return [SimText.row("Звук (M — без звука)")], false, 15.0)
+	_ibtn("i_scroll", W - 38, func(): ui0.toggle_win("menu"), ui0.win != null and ui0.win.k == "menu", func(): return [SimText.row("Меню (Esc)")], false, 15.0)
 	# скорость: пауза и 1–3 (speedBtns)
-	var bx := W - 133.0
+	var bx := W - 134.0
 	var held: bool = mv.ui.is_open() and Game.speed > 0
 	speed_btns(bx, mouse(), held)
 	for i in 4:

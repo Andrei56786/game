@@ -399,7 +399,7 @@ func populate() -> void:
 	var P: Array = G.chars.filter(func(x): return JS.t(x.alive) and float(x.get("prison", -1)) == 0.0 and x.id != G.player.char).slice(0, 12)
 	for i in P.size():
 		var sp := "cell" + str(i % 6) + ("b" if i >= 6 else "")
-		var n := mk(out, old, "pris" + JS.s(P[i].id), P[i], {"pris": 1, "post": sp, "sub0": "Узник короны"})
+		var n := mk(out, old, "pris" + JS.s(P[i].id), P[i], {"pris": 1, "post": sp, "sub0": "Узник короны", "talkR": 52.0})
 		n.lines = [prisoner_line(P[i])]
 	assign_beds(out)
 	# гости (просители) — как были; ушедших — с экрана

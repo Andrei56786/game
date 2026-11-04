@@ -17,6 +17,7 @@ const VPIX := "→←↑↓▶▸▼■✓✗✝✉♥"
 const CFG := "user://slovo.cfg"
 var book: Font
 var pixfont := false
+var autopause := true          # OPTS.autoPause: время само встаёт на паузу (дошли до цели, выехали из замка, после битвы)
 
 func _ready() -> void:
 	var p := "res://art/court.json"
@@ -34,6 +35,7 @@ func _ready() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(CFG) == OK:
 		pixfont = bool(cf.get_value("ui", "pixfont", false))
+		autopause = bool(cf.get_value("ui", "autopause", true))
 	var g := Gradient.new()
 	g.offsets = PackedFloat32Array([0.0, 0.3, 0.65, 1.0])
 	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.6), Color(1, 1, 1, 0.18), Color(1, 1, 1, 0)])
@@ -93,9 +95,16 @@ static func hexc(s: String, a: float = 1.0) -> Color:
 # ---------- текст ----------
 func set_pixfont(on: bool) -> void:
 	pixfont = on
+	_opt("pixfont", on)
+
+func set_autopause(on: bool) -> void:
+	autopause = on
+	_opt("autopause", on)
+
+func _opt(k: String, v: Variant) -> void:
 	var cf := ConfigFile.new()
 	cf.load(CFG)
-	cf.set_value("ui", "pixfont", on)
+	cf.set_value("ui", k, v)
 	cf.save(CFG)
 
 func pal(k: String) -> Color:

@@ -66,6 +66,8 @@ func _on_alert(e: Dictionary) -> void:
 
 ## пауза по событию (autoPause): часы стоят, строка «… · пауза»
 func auto_pause(reason: String) -> void:
+	if not Art.autopause or Sim.G.is_empty() or JS.t(Sim.G.get("over")):
+		return
 	if Game.speed > 0:
 		Game.last_speed = Game.speed
 	Game.set_speed(0)

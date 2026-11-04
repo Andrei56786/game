@@ -408,6 +408,52 @@ func _confront(t: Dictionary, H0: Variant, m: int) -> void:
 			Sim.glog("Казначей " + String(t.name) + " прощён и вернул " + JS.s(g) + " зол.", "info")
 	C.secrets = (C.secrets as Array).filter(func(s): return s.k != "theft")
 
+## тайна раскрыта (revealSecret, audience.js): казначей — уличить; заговор дома — пристыдить или задобрить; шпион —
+## схватить или кормить ложью; ночной сад — улыбнуться или благословить
+func reveal_secret(s: Dictionary, how: String) -> void:
+	var G := Sim.G
+	s.known = 1.0
+	s.how = how
+	Snd.sfx("chime")
+	var t := SimCourt.secretText(s)
+	var drop := func(): G.court.secrets = (G.court.secrets as Array).filter(func(x): return not is_same(x, s))
+	match String(s.k):
+		"theft":
+			c.hud.say(null, ["Вы узнали тайну: " + t, "Теперь у вас есть доказательство."], {"name": "Тайна раскрыта", "choices": confront_choices()})
+		"plot":
+			var H0: Dictionary = G.houses[int(s.house)]
+			c.hud.say(null, "Вы узнали тайну: " + t, {"name": "Тайна раскрыта", "choices": [
+				{"t": "Вызвать главу дома и пристыдить", "tip": "Дом напуган: заговор сорван, но верность падает.", "fx": func():
+					SimPlayer.houseLoy(H0, -4)
+					H0.defiant = 0.0
+					H0.amb = maxf(0, float(JS.o(H0.get("amb"), 50.0)) - 25)
+					drop.call()
+					Sim.glog("Заговор дома " + String(H0.name) + " сорван.", "good")},
+				{"t": "Задобрить дом: место при дворе, подарки (−40 зол.)", "tip": "Верность дома заметно вырастет.", "fx": func():
+					if SimCourt.spend(40):
+						SimPlayer.houseLoy(H0, 15)
+						H0.defiant = 0.0
+						drop.call()},
+				{"t": "Промолчать и следить"}]})
+		"spy":
+			c.hud.say(null, "Вы узнали тайну: " + t, {"name": "Тайна раскрыта", "choices": [
+				{"t": "Схватить шпиона", "fx": func():
+					s.done = 1.0
+					drop.call()
+					Sim.glog("Шпион державы " + Sim.realmName(s.realm) + " схвачен.", "good")
+					SimCourt.prestige(2)},
+				{"t": "Скармливать ему ложь (гл. 13: двойной агент)", "tip": "Враг будет считать нас сильнее, чем мы есть.", "fx": func():
+					s.done = 1.0
+					G.realms[int(s.realm)].misled = _day() + 60
+					drop.call()
+					Sim.glog("Шпиону державы " + Sim.realmName(s.realm) + " подсовывают ложные донесения.", "good")}]})
+		_:
+			c.hud.say(null, "Вы узнали тайну: " + t, {"name": "Ночной сад", "choices": [{"t": "Улыбнуться и уйти", "fx": func(): drop.call()},
+				{"t": "Благословить их союз", "fx": func():
+					SimCourt.prestige(1)
+					drop.call()}]})
+	print("SECRET ", s.k, " ", how)
+
 ## казармы (barracksAct): гарнизон столицы и стража
 func barracks() -> void:
 	var S: Dictionary = Sim.G.setts[int(Sim.G.realms[0].capital)]
