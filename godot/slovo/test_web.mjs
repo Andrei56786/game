@@ -1,6 +1,7 @@
 // Проверка веб-сборки Godot в Chromium без окна: заставка, тронный зал и двор днём, в сумерках и ночью, разговор, ходьба, масштаб;
 // карта королевства: вся, державы, куски у столицы, лето, осень и зима; время на карте: королевство догоняет календарь,
-// на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи.
+// на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи;
+// 0.7: король выезжает в поле, встреча с врагом, автобой и итог, бой на поле (расстановка, бой, итог) и снова карта.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -24,7 +25,8 @@ const logs = [], errs = [];
 page.on('console', m => { logs.push(m.text()); if (m.type() === 'error') errs.push(m.text()); });
 page.on('pageerror', e => errs.push(String(e)));
 const fails = [];
-const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (!ok) fails.push(what); };
+const lines = []; // строки проверок — и в build/shots/test_web.txt (вместе с консолью игры), чтобы провал в CI был виден в снимках
+const check = (ok, what) => { const l = (ok ? 'ok   ' : 'FAIL ') + what; console.log(l); lines.push(l); if (!ok) { fails.push(what); if (process.env.GITHUB_ACTIONS) console.log('::error::' + what.replace(/%/g, '%25').replace(/\r?\n/g, '%0A').slice(0, 2000)); } };
 const wait = ms => page.waitForTimeout(ms);
 const until = async (re, ms = 60000) => { const t = Date.now(); while (Date.now() - t < ms) { const l = logs.find(x => re.test(x)); if (l) return l; await wait(200); } return null; };
 const cmd = (...c) => page.evaluate(c => c.forEach(x => window.slovo(x)), c);
@@ -75,7 +77,10 @@ try {
     if (mr) {
       const mst = async () => { const n = logs.length; await cmd('state'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('MAPSTATE ')); return l ? JSON.parse(l.slice(9)) : null; };
       const lum = async () => { const n = logs.length; await cmd('lum'); await wait(400); const l = logs.slice(n).find(x => x.startsWith('MAPLUM ')); return l ? +l.slice(7) : NaN; };
-      const settle = async (ms = 60000) => { const t = Date.now(); let m = null; while (Date.now() - t < ms) { m = await mst(); if (m && m.vis.miss === 0 && m.vis.stale === 0) break; await wait(500); } await wait(300); return m; };
+      const ust = async () => { const n = logs.length; await cmd('ui state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('UISTATE ')); return l ? JSON.parse(l.slice(8)) : null; };
+      // ховер, видимые куски и нарисованные войска считаются в кадре: после команды ждём пару новых кадров (в CI кадр бывает и по 0,5 с)
+      const frames = async (k = 2, ms = 20000) => { const u0 = await ust(); const t = Date.now(); while (u0 && Date.now() - t < ms) { const u = await ust(); if (u && u.frame >= u0.frame + k) return; await wait(100); } };
+      const settle = async (ms = 60000) => { await frames(); const t = Date.now(); let m = null; while (Date.now() - t < ms) { m = await mst(); if (m && m.vis.miss === 0 && m.vis.stale === 0) break; await wait(500); } await wait(300); return m; };
       await cmd('cam 4320 2700 0.125'); await wait(1500); await shot('map_kingdom');
       let m = await mst();
       check(m && m.ok && m.cam[2] === 0.125, 'вся карта (' + (m && JSON.stringify(m.ms)) + ' мс)');
@@ -119,16 +124,46 @@ try {
         'походы: шагов ' + (T1 && T1.steps) + ' (последний ' + (T1 && T1.step_ms) + ' мс), в походе ' + (R1 && R1.march) + ', в осаде ' + (R1 && R1.sieges) + ', путей ' + (R1 && R1.paths) + ' (' + (R1 && R1.path_ms) + ' мс на путь), войн ' + (R1 && R1.wars) + ', вестей о чужих войсках ' + (R1 && R1.know));
       await cmd('speed 0'); await wait(1200); const T2 = (await mst()).time; await wait(2500); m = await mst(); await shot('map_pause');
       check(m && m.time.speed === 0 && m.time.day === T2.day && m.time.clock === T2.clock, 'пауза: часы стоят (' + (m && m.time.clock) + ')');
+      // начатый день королевство досчитывает и на паузе (бои без экрана идут кусками по кадрам), а в конце дня обзор (computeVision)
+      // снова закрывает карту туманом — поэтому «reveal» только когда королевство догнало календарь и ничего не считает
+      await tm(t => !t.busy && t.sim >= t.day, 60000);
       await cmd('reveal', 'army ai', 'zoom 1'); m = await settle(); await shot('map_ai_army');
       check(m && m.realm.drawn >= 1 && m.realm.kinds.lord_ai >= 1, 'чужое войско вблизи (вся карта открыта): ' + (m && JSON.stringify(m.realm.kinds)) + ', нарисовано ' + (m && m.realm.drawn));
-      await cmd('speed 1', 'court'); await wait(1500);
-      s = await state();
-      check(s && s.loc === 'yard', 'назад ко двору: ' + (s && s.loc));
+      // 0.7: король в поле — выезд со свитой; встреча с врагом — окно, автобой (бой без экрана) и итог; бой на поле — расстановка,
+      // бой, итог, снова карта на паузе
+      const uiw = async (pred, ms = 90000) => { const t = Date.now(); let q = null; while (Date.now() - t < ms) { q = await ust(); if (q && pred(q)) break; await wait(500); } return q; };
+      const bst = async () => { const n = logs.length; await cmd('state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('BSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
+      await cmd('rideout'); await wait(2500); let u = await ust(); await shot('map_rideout');
+      check(u && u.pa && !u.atCourt && u.speed === 0, 'король выехал в поле со свитой: ' + JSON.stringify(u && u.pa));
+      await cmd('ui enc'); await wait(1500); u = await ust(); await shot('map_enc');
+      check(u && u.modals[0] === 'enc', 'встреча с врагом — окно: ' + (u && u.modals.join()));
+      const men0 = u && u.pa && u.pa.men;
+      await cmd('click 430 210'); u = await uiw(q => q.busy === '' && q.modals[0] === 'bres'); await shot('map_bres');
+      check(u && u.modals[0] === 'bres', 'автобой — итог боя: ' + (u && u.modals.join()) + ', войско ' + men0 + ' → ' + (u && u.pa && u.pa.men));
+      await cmd('click 320 254'); await wait(800); u = await ust();
+      check(u && u.modals.length === 0, '«Далее» — окно итога закрыто');
+      await cmd('ui enc'); await wait(1500); await cmd('click 210 210');
+      const bt = await until(/^BATTLE \d/, 60000); await wait(2500); await shot('battle_setup');
+      let b = await bst();
+      check(!!bt && b && b.phase === 'deploy' && b.units > 2, 'бой на поле — расстановка: ' + (b && JSON.stringify({ phase: b.phase, units: b.units, men: b.men })));
+      await cmd('fight', 'speed 4'); await wait(8000); b = await bst(); await shot('battle_fight');
+      check(b && b.phase === 'fight' && b.t > 1, 'бой идёт: ' + (b && JSON.stringify({ phase: b.phase, t: b.t, men: b.men })));
+      await cmd('win'); await wait(3000); b = await bst(); await shot('battle_result');
+      check(b && b.res, 'итог боя: ' + (b && JSON.stringify(b.over)));
+      await cmd('end'); const bd = await until(/^BATTLE DONE/, 30000); await wait(1500); u = await ust(); await shot('map_after_battle');
+      check(!!bd && u && u.speed === 0 && u.pa, 'после боя — снова карта, пауза: ' + bd);
+      // у ворот столицы: «Въехать в замок — ко двору» — король снова при дворе, у ворот
+      await cmd('ui gate'); await wait(1200); u = await ust(); await shot('map_gate');
+      check(u && u.dlg && u.choices.length === 3, 'у ворот столицы — разговор: ' + (u && u.choices && u.choices.join(' | ')));
+      await cmd('choose 1'); const tc = await until(/^TO COURT /, 20000); await wait(1500);
+      await cmd('speed 1'); s = await state(); for (let i = 0; i < 20 && !(s && s.loc === 'yard'); i++) { await wait(500); s = await state(); } await shot('court_gate');
+      check(!!tc && s && s.loc === 'yard', 'въехал в замок — ко двору: ' + tc + ', ' + (s && s.loc));
     }
     await cmd('title'); await wait(800);
   }
 } catch (e) { check(false, 'исключение: ' + e); }
 check(errs.length === 0, 'ошибок в консоли нет' + (errs.length ? ': ' + errs.slice(0, 5).join(' | ') : ''));
+try { fs.writeFileSync(path.join(out, 'test_web.txt'), lines.join('\n') + '\n\n--- ошибки консоли ---\n' + errs.join('\n') + '\n\n--- консоль игры ---\n' + logs.map(x => x.length > 2000 ? x.slice(0, 2000) + '…' : x).join('\n') + '\n'); } catch (e) { console.log('не записан test_web.txt: ' + e); }
 await browser.close(); srv.close();
 console.log(fails.length ? `Godot-веб: ${fails.length} провал(ов)` : 'Godot-веб: всё в порядке');
 process.exit(fails.length ? 1 : 0);

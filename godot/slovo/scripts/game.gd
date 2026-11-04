@@ -7,7 +7,7 @@ extends Node
 # кроме догонялки после сна, команды day или долгой жизни при дворе до первого открытия карты: тогда шаги и дни
 # идут подряд, сколько влезет в долю кадра. Карта рисует войска плавно (view_pos): на час позже счёта, между
 # положениями до и после последнего шага.
-const VERSION := "0.6.0"
+const VERSION := "0.7.0"
 const DAY_SEC := [0.0, 360.0, 180.0, 60.0]   # секунд на игровые сутки при дворе (COURT_SPD в HTML)
 const MAP_SPD := [0.0, 1.6, 0.8, 0.3]        # секунд на сутки на карте (SPD в HTML)
 const DAYS_SEASON := 21
@@ -29,6 +29,7 @@ var frac := 0.0          # доля суток; 0 — 5:00 утра, как в H
 var speed := 1
 var last_speed := 1      # к ней возвращает Пробел после паузы (UI.lastSpeed)
 var sim_run := true      # дни королевства идут сами (самопроверка без экрана считает их сама)
+var hold := false        # идёт бой на экране: королевство ждёт (часы на карте тоже стоят)
 var map_frame := -10     # кадр, в котором карта последний раз двигала часы
 var lag_max := 0         # для проверок: наибольшее отставание королевства от часов, дней
 var dt_avg := 1.0 / 60.0 # средняя длина кадра по часам, с (delta в _process — не длиннее 8/60 с: max_physics_steps_per_frame)
@@ -37,6 +38,8 @@ const STEPS := 24        # шагов движения на сутки (pageStep
 var steps := 0           # шагов, сделанных за текущий день королевства (Sim.G.day)
 var step_at := 0.0       # к какому времени (день + доля) относится последний шаг
 var pos0 := {}           # войско (id) → Vector2: где оно было до последнего шага
+var stepping := false    # шаг движения ещё идёт: бой без экрана считается кусками по кадрам (SimDay.due/pause)
+var step_done := -1      # кадр, в котором такой шаг досчитан
 var steps_n := 0         # для проверок: шагов с начала игры и время последнего, мс
 var step_ms := 0.0
 var b_ms := 0.0          # для проверок: доля кадра на счёт королевства в последнем кадре и сколько ушло, мс
@@ -80,7 +83,7 @@ func _process(dt: float) -> void:
 	var fr := dt if last_us == 0 else (now - last_us) / 1e6
 	last_us = now
 	dt_avg = lerpf(dt_avg, clampf(fr, 0.001, 2.0), 0.25)
-	if not sim_run or Sim.G.is_empty():
+	if not sim_run or hold or Sim.G.is_empty() or SimPlayer.modal:
 		return
 	var f := Engine.get_process_frames()
 	var lag := day - int(Sim.G.day)          # пока день считается, Sim.G.day — уже он
@@ -93,16 +96,20 @@ func _process(dt: float) -> void:
 		sh = SHARE_MAP3
 	var b := int(clampf(sh * dt_avg * 1e6, 3000.0, cap))
 	b_ms = b / 1000.0
-	if SimDay.busy:
-		SimDay.budget_us = b                 # следующий кусок дня — в начале следующего кадра (process_frame)
+	if SimDay.busy or stepping:
+		SimDay.budget_us = b                 # следующий кусок дня или боя — в начале следующего кадра (process_frame)
 		return
-	# день мог досчитаться в этом кадре (последний кусок — до _process): его время — в счёт этого кадра
-	var t0 := SimDay.slice_t if SimDay.done_frame == f else Time.get_ticks_usec()
+	# день или шаг с боем мог досчитаться в этом кадре (последний кусок — до _process): его время — в счёт этого кадра
+	var t0 := SimDay.slice_t if SimDay.done_frame == f or step_done == f else Time.get_ticks_usec()
+	SimDay.slice_t = t0                      # бой в шаге движения (SimCapt.runHeadless) делится на куски по той же доле кадра
+	SimDay.budget_us = b
 	while true:
 		lag = day - int(Sim.G.day)
 		var want := STEPS if lag > 0 else mini(STEPS - 1, int(frac * STEPS))
 		while steps < want and Time.get_ticks_usec() - t0 < b:
 			step()
+			if stepping or SimPlayer.modal:
+				return
 		var left := b - (Time.get_ticks_usec() - t0)
 		work_ms = (b - left) / 1000.0
 		if steps < want or lag <= 0 or left <= 0:
@@ -119,11 +126,17 @@ func _process(dt: float) -> void:
 ## шаг движения: войска идут 1/24 суток, встречи врагов (aiContacts); положения до шага — для плавного рисования
 func step() -> void:
 	var t0 := Time.get_ticks_usec()
+	stepping = true
 	pos0.clear()
 	for a: Dictionary in Sim.G.armies:
 		if JS.t(a.alive):
 			pos0[a.id] = Vector2(a.x, a.y)
-	SimArmy.substep(1.0 / STEPS)
+	var f0 := Engine.get_process_frames()
+	Sim.G.frac = float(steps) / STEPS        # доля суток королевства (G.frac): встречи, гонцы, письма
+	await SimArmy.substep(1.0 / STEPS)
+	stepping = false
+	if Engine.get_process_frames() != f0:
+		step_done = Engine.get_process_frames()
 	steps += 1
 	steps_n += 1
 	step_at = Sim.G.day + float(steps) / STEPS

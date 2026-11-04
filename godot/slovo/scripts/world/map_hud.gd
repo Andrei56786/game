@@ -16,6 +16,8 @@ var hover_at := Vector2(-1, -1)   # для проверок: «мышь» в э�
 var sett_hits: Array = []   # [Rect2, номер поселения] — что нарисовано последним, то и сверху
 var army_hits: Array = []   # [Rect2, номер войска]
 var ghost_hits: Array = []  # [Rect2, номер войска] — призраки: где корона последний раз знала чужое войско (G.know)
+var cour_hits: Array = []   # [Rect2, номер гонца]
+var hov_cour := -1
 var btns: Array = []        # [Rect2, действие]
 var tips: Array = []        # [Rect2, Callable → строки] — подсказки верхней строки
 var hov_sett := -1
@@ -25,6 +27,11 @@ var hov_tile := -1
 var n_armies := 0           # войск нарисовано (для проверок)
 var n_ghosts := 0           # призраков нарисовано
 var t0 := Time.get_ticks_msec()
+var prev = null             # UI.prev: путь под мышью {path, days, km, t}
+var prev_goal := -1
+var prev_at := -10.0
+var prev_ms := 0.0
+var hover_t := -1           # UI.hoverTile: клетка под мышью (или поселения под ней)
 
 func _ready() -> void:
 	super()
@@ -35,9 +42,10 @@ func _process(_d: float) -> void:
 func now() -> float:
 	return (Time.get_ticks_msec() - t0) / 1000.0
 
+## всплывающая строка — окнам карты (map_ui.gd рисует её поверх окон)
 func toast(s: String) -> void:
-	toast_s = s
-	toast_t = now() + 2.6
+	if mv != null and mv.ui != null:
+		mv.ui.toast(s)
 
 func mouse() -> Vector2:
 	return hover_at if hover_at.x >= 0.0 else get_local_mouse_position()
@@ -61,18 +69,133 @@ func click(p: Vector2) -> void:
 		mv.cam.y = (p.y - MY) / k
 		mv.clamp_cam()
 		return
-	if hov_army >= 0:
-		var a: Variant = Sim.armyById(float(hov_army))
-		if a != null:
-			toast(_cap(SimText.armyLabel(a)) + ". Приказы войскам — в следующих версиях.")
+	_field(p, 0)
+
+## правая кнопка по карте: отмена цели приказа, «Стой!», окно поселения
+func rclick(p: Vector2) -> void:
+	if over_ui(p):
 		return
-	if hov_sett >= 0:
-		var s: Dictionary = mv.G.W.setts[hov_sett]
-		var t := String(s.name) + " — " + String(SETT_T[s.type]).to_lower()
-		if sim_on():
-			var S: Dictionary = Sim.G.setts[hov_sett]
-			t += ", " + SimText.realmName(S.ctrl) + ", жителей " + SimText.fmt(S.pop)
-		toast(t + ". Походы и рынки — в следующих версиях.")
+	_field(p, 2)
+
+## что под точкой экрана: войско, призрак, поселение (сверху — нарисованное последним) или клетка
+func hit_at(p: Vector2) -> Dictionary:
+	var ob = mv.objs
+	var r := {"army": -1, "ghost": -1, "sett": -1, "tile": -1}
+	for k in range(ob.army_hits.size() - 1, -1, -1):
+		if (ob.army_hits[k][0] as Rect2).has_point(p):
+			r.army = ob.army_hits[k][1]
+			return r
+	for k in range(ob.ghost_hits.size() - 1, -1, -1):
+		if (ob.ghost_hits[k][0] as Rect2).has_point(p):
+			r.ghost = ob.ghost_hits[k][1]
+			return r
+	for k in range(ob.sett_hits.size() - 1, -1, -1):
+		if (ob.sett_hits[k][0] as Rect2).has_point(p):
+			r.sett = ob.sett_hits[k][1]
+			return r
+	if p.x >= 0 and p.y >= 0 and p.x < W and p.y < H:
+		r.tile = mv.tile_at(p)
+	return r
+
+## щелчок по полю карты (clickArmy, clickSett, mapClick): b — 0 левая, 2 правая
+func _field(p: Vector2, b: int) -> void:
+	var h := hit_at(p)
+	if not sim_on():
+		if h.sett >= 0 and b == 0:
+			var s: Dictionary = mv.G.W.setts[h.sett]
+			toast(String(s.name) + " — " + String(SETT_T[s.type]).to_lower())
+		return
+	if h.army >= 0:
+		var a: Variant = Sim.armyById(float(h.army))
+		if a != null:
+			click_army(a, b)
+	elif h.sett >= 0:
+		click_sett(h.sett, b)
+	elif h.ghost < 0 and h.tile >= 0:
+		map_click(h.tile, b)
+
+func click_sett(sid: int, b: int) -> void:
+	var ui = mv.ui
+	var pa: Variant = Sim.playerArmy()
+	var ws: Dictionary = Sim.W.setts[sid]
+	if ui.target != null and ui.target.kind == "cmd":
+		if b == 2:
+			ui.target = null
+			toast("Отменено.")
+			return
+		ui.cmd_pick_sett(sid)
+		return
+	if pa == null:
+		ui.open_settinfo(sid)
+		return
+	if b == 2:
+		ui.open_sett(sid)
+		return
+	if SimPlayer.settHere(pa) == sid:
+		ui.arrive_sett(sid)
+		return
+	if SimPlayer.orderMove(int(ws.i), {"k": "sett", "s": float(sid)}):
+		if Sim.hostile(pa.realm, Sim.G.setts[sid].ctrl):
+			toast("Идём на " + String(ws.name) + ": по прибытии — осада или приступ.")
+		else:
+			toast("Идём в " + String(ws.name) + ": по прибытии войдём в " + String(ui.SETT_ACC[ws.type]) + ".")
+
+func click_army(a: Dictionary, b: int) -> void:
+	var ui = mv.ui
+	var pa: Variant = Sim.playerArmy()
+	if ui.target != null and ui.target.kind == "cmd":
+		if b == 2:
+			ui.target = null
+			toast("Отменено.")
+			return
+		ui.cmd_pick_army(a)
+		return
+	if pa == null:
+		if a.realm == 0.0 and a.kind == "lord":
+			ui.open_cmd(a.id)
+		else:
+			toast(SimText.armyLabel(a))
+		return
+	if a.id == pa.id:
+		var sh := SimPlayer.settHere(pa)
+		if sh >= 0 and b != 2 and pa.path == null:
+			ui.arrive_sett(sh)
+			return
+		ui.open_cmd(pa.id)
+		return
+	if Sim.G.has("court") and a.realm == 0.0 and a.kind == "lord" and b != 2:
+		ui.open_cmd(a.id)
+		return
+	if Sim.hostile(pa.realm, a.realm):
+		if SimPlayer.orderMove(Sim.armyTile(a), null, a.id):
+			toast("Преследуем: " + SimText.armyLabel(a))
+	else:
+		SimPlayer.orderMove(Sim.armyTile(a))
+
+func map_click(t: int, b: int) -> void:
+	var ui = mv.ui
+	if ui.target != null and ui.target.kind == "cmd":
+		if b == 2:
+			ui.target = null
+			toast("Отменено.")
+			return
+		var sid := SimDay.settNear(t % WorldData.MW + 0.5, floorf(float(t) / WorldData.MW) + 0.5, 1.6)
+		if sid >= 0 and ui.target.o != "join":
+			ui.cmd_pick_sett(sid)
+			return
+		toast("Щёлкните по войску короны." if ui.target.o == "join" else "Щёлкните по крепости или деревне.")
+		return
+	var pa: Variant = Sim.playerArmy()
+	if b == 2:
+		if pa != null and pa.path != null:
+			pa.path = null
+			pa.onArrive = null
+			Sim.G.player.follow = -1.0
+			toast("Стой!")
+		return
+	if pa == null:
+		return
+	SimPlayer.orderMove(t)
 
 func _cap(s: String) -> String:
 	return s.substr(0, 1).to_upper() + s.substr(1) if s != "" else s
@@ -112,14 +235,19 @@ func _draw() -> void:
 		sett_hits = []
 		army_hits = []
 		ghost_hits = []
+		cour_hits = []
 		n_armies = 0
 		n_ghosts = 0
 		if mv.on:
 			_labels()
+			var pa: Variant = Sim.playerArmy() if sim_on() else null
+			if pa != null and pa.path != null:
+				draw_path(pa, pa.path, int(JS.n(pa.get("pi"))), Color.html("#fff2c8"), true)
 			_setts()
 			if sim_on():
 				_ghosts()
 				_armies()
+				_couriers()
 		return
 	if not mv.on:
 		_loading()
@@ -133,31 +261,43 @@ func _draw() -> void:
 	hov_army = -1
 	hov_ghost = -1
 	hov_tile = -1
+	hov_cour = -1
 	var ob = mv.objs
-	if not mv.dragging and not over_ui(m):
+	var ui = mv.ui
+	var held: bool = ui.is_open()
+	if not mv.dragging and not over_ui(m) and not ui.capture(m):
 		for k in range(ob.army_hits.size() - 1, -1, -1):
 			if (ob.army_hits[k][0] as Rect2).has_point(m):
 				hov_army = ob.army_hits[k][1]
 				break
-		if hov_army < 0:
+		for k in range(ob.cour_hits.size() - 1, -1, -1):
+			if (ob.cour_hits[k][0] as Rect2).has_point(m):
+				hov_cour = ob.cour_hits[k][1]
+				break
+		if hov_army < 0 and hov_cour < 0:
 			for k in range(ob.ghost_hits.size() - 1, -1, -1):
 				if (ob.ghost_hits[k][0] as Rect2).has_point(m):
 					hov_ghost = ob.ghost_hits[k][1]
 					break
-		if hov_army < 0 and hov_ghost < 0:
+		if hov_army < 0 and hov_ghost < 0 and hov_cour < 0:
 			for k in range(ob.sett_hits.size() - 1, -1, -1):
 				if (ob.sett_hits[k][0] as Rect2).has_point(m):
 					hov_sett = ob.sett_hits[k][1]
 					break
-		if hov_army < 0 and hov_ghost < 0 and hov_sett < 0 and m.x >= 0 and m.y >= 0 and m.x < W and m.y < H:
+		if hov_army < 0 and hov_ghost < 0 and hov_cour < 0 and hov_sett < 0 and m.x >= 0 and m.y >= 0 and m.x < W and m.y < H:
 			hov_tile = mv.tile_at(m)
+	_hover_preview(m)
 	_top()
 	_mini()
 	_feed()
 	_status()
-	if Game.speed == 0:
+	if Game.speed == 0 and not held:
 		pause_mark(now())
-	if hov_army >= 0:
+	if held:
+		pass
+	elif hov_cour >= 0:
+		_tip(_rows(cour_tip(hov_cour)), m)
+	elif hov_army >= 0:
 		var a: Variant = Sim.armyById(float(hov_army))
 		if a != null:
 			_tip(_rows(SimText.armyTip(a)), m)
@@ -172,20 +312,6 @@ func _draw() -> void:
 			if (tp[0] as Rect2).has_point(m):
 				_tip(_rows((tp[1] as Callable).call()), m)
 				break
-	if toast_t > now():
-		var a := clampf((toast_t - now()) * 3.0, 0.0, 1.0)
-		var ls := wrap_text(toast_s, 380)
-		var w := 0.0
-		for l in ls:
-			w = maxf(w, tw(l))
-		w += 16.0
-		var h := ls.size() * 10.0 + 5.0
-		var y := 40.0
-		box(W / 2.0 - w / 2.0 - 1, y - 1, w + 2, h + 2, Color(PO, a))
-		box(W / 2.0 - w / 2.0, y, w, h, Color(0.125, 0.086, 0.063, 0.96 * a))
-		stroke(W / 2.0 - w / 2.0, y, w, h, Color(0.79, 0.63, 0.38, a))
-		for i in ls.size():
-			txt(ls[i], W / 2.0, y + 3 + i * 10, Color(0.97, 0.83, 0.36, a), "m", "c")
 	if G.stage != "":
 		txt(G.stage, 6, H - 22, Color8(200, 216, 232), "s")
 
@@ -309,6 +435,160 @@ func _siege_fx(sx: float, sy: float, sc: int, t: float) -> void:
 		box(sx + 1, sy - 4, 1, 1, Color.html("#ffe07a"))
 	sp("a_tent", sx - 16 * sc, sy + 2, sc)
 	sp("a_tent", sx + 8 * sc, sy + 4, sc)
+
+func _ring(cx: float, cy: float, r: int, c: Color) -> void:
+	var x := r
+	var y := 0
+	var e := 0
+	cx = floorf(cx)
+	cy = floorf(cy)
+	while x >= y:
+		for q in [[x, y], [y, x], [-y, x], [-x, y], [-x, -y], [-y, -x], [y, -x], [x, -y]]:
+			draw_rect(Rect2(cx + q[0], cy + q[1], 1, 1), c)
+		y += 1
+		e += 1 + 2 * y
+		if 2 * (e - x) + 1 > 0:
+			x -= 1
+			e += 1 - 2 * x
+
+## путь войска (drawPath): пунктир с тенью от войска по клеткам пути; у своего — кружок на конце каждого дня пути
+## (с 1:1 — номер дня), в конце — кольцо
+func draw_path(a: Dictionary, path: Array, from: int, col: Color, own: bool) -> void:
+	if path.size() < 2:
+		return
+	var G: MapGPU = mv.G
+	var MW := WorldData.MW
+	var vp := Game.view_pos(a)
+	var p0: Vector2 = mv.w2s(G.warp_pt(vp.x * WorldData.TS, vp.y * WorldData.TS))
+	SimArmy.prep()
+	var men := Sim.armyMen(a)
+	var mounted := Sim.mountedN(a.u)
+	var sea2 := Sim.seasonOf(Sim.G.day) * 2
+	var mud := JS.n(Sim.G.get("mud"))
+	var spd := SimArmy.armySpeed(a)
+	var cost := 0.0
+	var day := 1
+	var dash := 0
+	var sh := Color(20 / 255.0, 12 / 255.0, 10 / 255.0, 0.7)
+	for k in range(from + 1, path.size()):
+		var t := int(path[k])
+		var q: Vector2 = mv.w2s(G.tile_center(t))
+		var f := int(path[k - 1])
+		var diag := f % MW != t % MW and f / MW != t / MW
+		cost += SimArmy._stepCost(a, t, men, mounted, sea2, mud) * (1.414 if diag else 1.0)
+		var n := maxi(1, int(p0.distance_to(q) / 2.0))
+		if not (maxf(p0.x, q.x) < -4 or minf(p0.x, q.x) > W + 4 or maxf(p0.y, q.y) < -4 or minf(p0.y, q.y) > H + 4):
+			for i in n:
+				dash += 1
+				if (dash >> 1) & 1:
+					continue
+				var x := floorf(p0.x + (q.x - p0.x) * i / n)
+				var y := floorf(p0.y + (q.y - p0.y) * i / n)
+				box(x, y + 1, 2, 1, sh)
+				box(x, y, 2, 1, col)
+		else:
+			dash += n
+		if own and cost / spd >= day:
+			disc(q.x, q.y, 3, PO)
+			disc(q.x, q.y, 2, Color.html("#f7d35c") if day <= 9 else Color.html("#e0a630"))
+			if mv.cam.z >= 1.0:
+				txt(str(day), q.x + 4, q.y - 3, Color.html("#fff2c8"), "s", "l", PO)
+			day += 1
+		p0 = q
+	var e: Vector2 = mv.w2s(G.tile_center(int(path[path.size() - 1])))
+	_ring(e.x, e.y, 3, col)
+	_ring(e.x, e.y, 4, PO)
+
+## путь под мышью (updateHoverPreview, drawHoverPreview): куда пойдёт войско короля, сколько вёрст и дней, хватит ли
+## провианта; долгий поиск пути — реже
+func _hover_preview(m: Vector2) -> void:
+	hover_t = -1
+	if mv.ui.is_open() or not sim_on():
+		return
+	var t: int = int(Sim.W.setts[hov_sett].i) if hov_sett >= 0 else hov_tile
+	hover_t = t
+	var pa: Variant = Sim.playerArmy()
+	if pa == null or t < 0:
+		prev = null
+		return
+	var nw := now()
+	if t != prev_goal and nw - prev_at > maxf(0.1, prev_ms * 0.005):
+		prev_goal = t
+		prev_at = nw
+		if not SimDay.passable(Sim.W.ter[t]):
+			prev = null
+			return
+		var t0 := Time.get_ticks_usec()
+		var p: Variant = SimArmy.planPath(pa, t)
+		prev_ms = (Time.get_ticks_usec() - t0) / 1000.0
+		prev = {"path": p, "days": SimArmy.pathDays(pa, p), "km": SimArmy.pathKm(p), "t": t} if p != null and (p as Array).size() > 1 else null
+	if prev == null or hover_t != int(prev.t):
+		return
+	draw_path(pa, prev.path, 0, Color(1.0, 0.949, 0.784, 0.75), false)
+	var d: float = prev.days
+	var eat: float = Sim.armyMen(pa) + JS.n(pa.get("wounded")) + JS.n(pa.get("sick"))
+	var food_d: float = JS.n(pa.get("food")) / maxf(1.0, eat)
+	var lab := SimPlayer.kmTxt(prev.km) + " · ~" + (("%.1f" % d).replace(".", ",") if d < 10 else JS.s(JS.rnd(d))) + " " + Sim.plural(ceilf(d), "день", "дня", "дней")
+	var warn := " · провианта на " + JS.s(floorf(food_d)) + " дн.!" if food_d < d else ""
+	var s := lab + warn
+	var w := tw(s) + 8.0
+	var x := m.x + 12.0
+	var y := m.y - 16.0
+	if x + w > W:
+		x = m.x - w - 6.0
+	box(floorf(x), floorf(y), w, 11, Color(20 / 255.0, 14 / 255.0, 12 / 255.0, 0.85))
+	txt(s, floorf(x) + 4, floorf(y) + 2, Color.html("#f7d35c") if warn != "" else Color.html("#fff2c8"))
+
+## гонцы с приказами (drawCouriers): всадник с письмом и вымпелом; к войску — точки пути
+func _couriers() -> void:
+	var L: Variant = Sim.G.get("couriers")
+	if not (L is Array) or (L as Array).is_empty():
+		return
+	var G: MapGPU = mv.G
+	var s := 2 if mv.cam.z >= 1.6 else 1
+	var t := now()
+	var dot := Color(Color.html("#f7d35c"), 0.6)
+	for cr: Dictionary in L:
+		var c: Vector2 = mv.w2s(G.warp_pt(cr.x * WorldData.TS, cr.y * WorldData.TS))
+		var a: Variant = Sim.armyById(cr.to)
+		if a != null:
+			var vp := Game.view_pos(a)
+			var ap: Vector2 = mv.w2s(G.warp_pt(vp.x * WorldData.TS, vp.y * WorldData.TS))
+			var d := c.distance_to(ap)
+			if d > 8:
+				var n := int(d / 4.0)
+				for i in range(1, n):
+					if i % 2 == 0:
+						var k := float(i) / n
+						box(roundf(c.x + (ap.x - c.x) * k), roundf(c.y - 3 + (ap.y - c.y) * k), s, s, dot)
+		if c.x < -12 * s or c.y < -12 * s or c.x > W + 12 * s or c.y > H + 12 * s:
+			continue
+		var b := roundf(absf(sin(t * 10 + cr.id))) * s
+		var fl := -1 if a != null and a.x < cr.x else 1
+		var R2 := func(x: float, y: float, w: float, h: float, col: String) -> void:
+			box(c.x + (x if fl > 0 else -x - w + 1) * s, c.y + y * s - b, w * s, h * s, Color.html(col))
+		box(c.x - 4 * s, c.y + s, 9 * s, 2 * s, Color(Color.html("#0c0a10"), 0.35))
+		R2.call(-3, -4, 6, 3, "#6a4428")
+		R2.call(3, -6, 2, 3, "#6a4428")
+		R2.call(4, -6, 1, 1, "#3a2614")
+		R2.call(-4, -4, 1, 2, "#3a2614")
+		R2.call(-3, -1, 1, 2, "#3a2614")
+		R2.call(2, -1, 1, 2, "#3a2614")
+		R2.call(-1, -8, 2, 4, "#22408a")
+		R2.call(-1, -10, 2, 2, "#f0c8a0")
+		R2.call(1, -7, 1, 2, "#f7d35c")
+		R2.call(-2, -13, 1, 6, "#3a2614")
+		R2.call(-1, -13, 2, 2, "#c03028")
+		cour_hits.append([Rect2(c.x - 6 * s, c.y - 14 * s, 13 * s, 16 * s), int(cr.id)])
+
+## подсказка гонца: к кому, что везёт, сколько ещё ехать
+func cour_tip(id: int) -> Array:
+	for cr: Dictionary in Sim.G.get("couriers", []):
+		if int(cr.id) == id:
+			var a: Variant = Sim.armyById(cr.to)
+			return [SimText.row("Гонец с приказом"), SimText.row("К: " + SimText.armyLabel(a) if a != null else ""), SimText.row("«" + SimCmd.ordLabel(cr.ord) + "»"),
+				SimText.row("Ещё ≈" + (("%.1f" % (JSM.hypot(a.x - cr.x, a.y - cr.y) / SimDyn.courierSpeed())) if a != null else "?") + " дн. пути", SimText.UIC.dim)]
+	return []
 
 ## войска на карте (drawArmies): чужие — только в поле обзора; вдали — квадратик цвета державы, ближе — всадник,
 ## пехота (больше 150 и 400 воинов), шайка, караван с волом, лагерь с шатром и костром, флаг, число воинов (с 1:1)
@@ -532,26 +812,87 @@ func _tip(rows0: Array, m: Vector2) -> void:
 
 func _status() -> void:
 	var s := ""
-	if hov_tile >= 0:
+	var tg = mv.ui.target
+	if tg != null:
+		var t := hover_t if hover_t >= 0 else hov_tile
+		s = "Приказ «" + String(SimCmd.CMD.get(tg.o, {}).get("n", "")) + "»: укажите " + ("войско" if tg.o == "join" else "крепость") + " на карте · ПКМ — отмена"
+		if t >= 0 and Sim.W.prov[t] >= 0:
+			s += " · " + String(Sim.W.provs[Sim.W.prov[t]].name)
+	elif hov_tile >= 0:
 		s = tile_tip(hov_tile)
 	elif help:
-		s = "Мышь или WASD — двигать · колесо, Q и E — масштаб · Пробел — пауза · 1–3 — скорость · Tab — ко двору · H"
+		if sim_on() and Sim.playerArmy() != null:
+			s = "ЛКМ — идти, по врагу — погоня · ПКМ — стой · C — к войску · F — фураж · V — войска · H"
+		else:
+			s = "Мышь или WASD — двигать · колесо, Q и E — масштаб · Пробел — пауза · 1–3 — скорость · V — войска · Tab — ко двору · H"
 	if s == "":
 		return
 	var w := tw(s, "s") + 10.0
-	var x := floorf(clampf(W / 2.0 - w / 2.0 - 20.0, 242.0, W - 140.0 - w)) if hov_tile >= 0 else 8.0
+	var x := floorf(clampf(W / 2.0 - w / 2.0 - 20.0, 242.0, W - 140.0 - w)) if hov_tile >= 0 or tg != null or (sim_on() and Sim.playerArmy() != null) else 8.0
 	box(x, H - 12, w, 11, Color(20 / 255.0, 14 / 255.0, 12 / 255.0, 0.8))
 	txt(s, x + 5, H - 9, Color.html("#e8dcc0"), "s")
 
 # ---------- верхняя строка и мини-карта ----------
-func _btn(label: String, x: float, y: float, w: float, h: float, act: Callable, active := false) -> void:
+func _btn(label: String, x: float, y: float, w: float, h: float, act: Callable, active := false, ic := "") -> void:
 	var r := Rect2(x, y, w, h)
-	var hv := r.has_point(mouse())
+	var hv: bool = r.has_point(mouse()) and not mv.ui.is_open()
 	box(x, y, w, h, PO)
 	box(x + 1, y + 1, w - 2, h - 2, Color8(90, 64, 48) if (active or hv) else Color8(44, 32, 24))
 	box(x + 1, y + 1, w - 2, 1, Color8(120, 88, 60) if (active or hv) else Color8(64, 46, 34))
-	txt(label, x + w / 2.0, y + 4, Color8(255, 242, 200) if (active or hv) else Color8(232, 220, 192), "m", "c")
+	var lx := x + w / 2.0
+	if ic != "":
+		var iw := icon(ic, x + 4, y + 4)
+		lx += (iw + 2) / 2.0
+	txt(label, lx, y + 4, Color8(255, 242, 200) if (active or hv) else Color8(232, 220, 192), "m", "c")
 	btns.append([r, act])
+
+func _bar(x: float, y: float, w: float, h: float, v: float, c: String) -> void:
+	box(x, y, w, h, PO)
+	box(x + 1, y + 1, w - 2, h - 2, Color.html("#2a1d16"))
+	box(x + 1, y + 1, roundf((w - 2) * clampf(v, 0.0, 1.0)), h - 2, Color.html(c))
+
+## припасы войска короля в верхней строке (drawTopBar): люди, провиант, вода, дух, усталость
+func _army_stats(pa: Dictionary, x: float) -> float:
+	var U: Dictionary = SimText.UIC
+	var men := Sim.armyMen(pa)
+	var eat: float = men + JS.n(pa.get("wounded")) + JS.n(pa.get("sick"))
+	var fd: float = JS.n(pa.get("food")) / maxf(1.0, eat)
+	icon("i_men", x, 7)
+	txt(SimText.fmt(men), x + 8, 6, Art.pal("w"))
+	tips.append([Rect2(x, 2, 36, 14), func(): return [SimText.row("Войско короля: " + SimArmy.voin(men)), SimText.row("Раненых " + JS.s(JS.rnd(JS.n(pa.get("wounded")))) + ", больных " + JS.s(JS.rnd(JS.n(pa.get("sick"))))), SimText.row("V — окно войска", U.dim)]])
+	x += 40.0
+	icon("i_food", x, 7)
+	txt(JS.s(floorf(fd)) + " дн.", x + 8, 6, Color.html(U.bad) if fd < 3 else (Color.html(U.warn) if fd < 7 else Art.pal("w")))
+	tips.append([Rect2(x, 2, 44, 14), func(): return [SimText.row("Провиант: " + JS.s(JS.rnd(JS.n(pa.get("food")))) + " (на " + ("%.1f" % fd) + " дн.)"), SimText.row("Каждый воин съедает 1 в день. Каждый несёт 3, повозка — 400."),
+		SimText.row("В своих городах войско стоит на постое: город кормит его за золото казны."), SimText.row("O — снабжение: снабженец сам докупает в своих и нейтральных городах.", U.good),
+		SimText.row("«Войско без обоза погибает; без провианта — погибает» (гл. 7).", "#e8d8b0")]])
+	x += 48.0
+	var wa: float = JS.n(pa.get("water"))
+	icon("i_water", x, 7)
+	txt(JS.s(JS.rnd(wa)), x + 8, 6, Color.html(U.bad) if JS.t(pa.get("thirst")) else (Color.html(U.warn) if wa < 1.5 else Art.pal("w")))
+	tips.append([Rect2(x, 2, 22, 14), func(): return _water_tip(pa)])
+	x += 24.0
+	var mo: float = JS.n(pa.get("morale"))
+	icon("i_morale", x, 7)
+	_bar(x + 8, 7, 34, 6, mo / 100.0, "#c0353f" if mo < 35 else ("#e0a630" if mo < 55 else "#7fb04c"))
+	tips.append([Rect2(x, 2, 44, 14), func(): return SimText.moraleTip(pa)])
+	x += 48.0
+	var ft: float = JS.n(pa.get("fat"))
+	icon("i_fat", x, 7)
+	_bar(x + 8, 7, 24, 6, ft / 100.0, "#c0353f" if ft > 70 else "#c9a060")
+	tips.append([Rect2(x, 2, 34, 14), func(): return [SimText.row("Усталость: " + JS.s(JS.rnd(ft)) + "%"), SimText.row("Растёт на марше (форсированный ×3), спадает на отдыхе. Усталые медленнее и слабее в бою.")]])
+	return x + 36.0
+
+func _water_tip(pa: Dictionary) -> Array:
+	var wd := SimDay.waterDay(pa)
+	var wa: float = JS.n(pa.get("water"))
+	var full := JS.t(wd.get("full"))
+	var d: float = JS.n(wd.get("d"))
+	var left := "" if full or d >= 0 else " · хватит на ≈" + JS.s(maxf(0.0, floorf(wa / -d))) + " дн."
+	return [SimText.row("Вода: " + JS.s(JS.rnd(wa)) + " дн. нормы" + left),
+		SimText.row("Сегодня: " + ("бочки полны" if full else ("не убывает" if d >= 0 else "−" + ("%.1f" % -d) + " в день")) + " — " + String(wd.s) + "."),
+		SimText.row("Полно воды у рек, озёр и поселений (не у моря); в лесу, на болоте и в холмах выручают ручьи и родники; в степи и в жару — только бочки."),
+		SimText.row("Полный запас: " + JS.s(Sim.waterCap(pa)) + " дн. (4 + повозки) · O — снабжение", SimText.UIC.dim)]
 
 func _top() -> void:
 	box(0, 0, W, 19, PO)
@@ -571,17 +912,36 @@ func _top() -> void:
 	if sim_on():
 		tips.append([Rect2(x, 2, x2 + 26 - x, 14), func(): return SimText.goldTip()])
 	x = x2 + 30.0
-	_btn("« Ко двору (Tab)", x, 2, 92, 14, func(): mv.leave.emit())
-	x += 92.0
+	var pa: Variant = Sim.playerArmy() if sim_on() else null
+	if pa != null:
+		x = _army_stats(pa, x)
+	else:
+		# со стола карт (mapCourtBar): ко двору и войска короны
+		_btn("« Ко двору (Tab)", x, 2, 92, 14, func(): mv.leave.emit())
+		tips.append([Rect2(x, 2, 92, 14), func(): return [SimText.row("Вернуться в замок"), SimText.row("Вы смотрите на карту королевства со стола в зале совета. Всё, что вы видите, — со слов гонцов и разведчиков.", SimText.UIC.dim)]])
+		if sim_on():
+			var ui = mv.ui
+			_btn("Войска", x + 96, 2, 60, 14, func(): ui.open_cmd(), ui.win != null and ui.win.k == "cmd", "i_sword")
+			tips.append([Rect2(x + 96, 2, 60, 14), func(): return [SimText.row("Войска короны и приказы (V)")]])
+			x += 160.0
+		else:
+			x += 92.0
 	var pol: bool = mv.mode == "pol"
 	_btn("Державы" if pol else "Местность", W - 70, 2, 66, 14, func(): mv.set_mode("ter" if mv.mode == "pol" else "pol"), pol)
 	# скорость: пауза и 1–3 (speedBtns)
 	var bx := W - 133.0
-	speed_btns(bx, mouse())
+	var held: bool = mv.ui.is_open() and Game.speed > 0
+	speed_btns(bx, mouse(), held)
 	for i in 4:
 		var r := Rect2(bx + i * 15, 2, 14, 14)
 		btns.append([r, func(): Game.set_speed(i)])
-		tips.append([r, func(): return [SimText.row(SPD_TIP[i])]])
+		if i == 0 and held:
+			tips.append([r, func(): return [SimText.row("Время стоит"), SimText.row("Пока открыто окно, письмо или идёт разговор, время не идёт. Закройте окно — и оно пойдёт со скоростью " + str(Game.speed) + ".", "#e8dcc0")]])
+		else:
+			tips.append([r, func(): return [SimText.row(SPD_TIP[i])]])
+	if held:
+		var a := 0.55 + sin(now() * 3.0) * 0.3
+		box(bx + Game.speed * 15 + 3, 13, 8, 1, Color(Art.pal("y"), a))
 	# дата и погода королевства (weatherOf), с распутицей; не влезает — сначала короче, потом без названия погоды
 	var end_x := bx - 6.0
 	var ds := Game.date_text()

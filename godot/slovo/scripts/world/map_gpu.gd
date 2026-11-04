@@ -81,7 +81,8 @@ func prepare(dir := "res://art") -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var t0 := Time.get_ticks_msec()
-	var w := WorldData.load_export(dir)
+	# королевство могло начаться раньше (у ворот замка) — тогда мир уже загружен
+	var w: WorldData = Sim.W if not Sim.G.is_empty() and Sim.W != null else WorldData.load_export(dir)
 	if w == null:
 		stage = "нет данных мира (res://art/world.json)"
 		push_error("MAP: " + stage)
