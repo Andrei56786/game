@@ -58,7 +58,7 @@ func _top_hits() -> void:
 		var tp: Variant = CSPD_TIP[i]
 		if i == 0 and held:
 			tp = ["Время стоит", {"t": "Пока открыто окно, письмо или идёт разговор, время не идёт. Закройте окно — и оно пойдёт со скоростью " + str(Game.speed) + ".", "c": Art.pal("w")}]
-		hit(SPD_X + i * 15, 2, 14, 14, {"id": "spd" + str(i), "tip": tp, "on": func(_c): Game.set_speed(si)})
+		hit(SPD_X + i * 15, 2, 14, 14, {"id": "spd" + str(i), "tip": tp, "on": func(_c): Game.ui_speed(si)})
 	if held:
 		box(SPD_X + Game.speed * 15 + 3, 13, 8, 1, Color(Art.pal("y"), 0.55 + sin(now() * 3.0) * 0.3))
 	var bx := SPD_X + 62.0

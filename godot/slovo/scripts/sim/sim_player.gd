@@ -171,6 +171,7 @@ static func leaveCourt(a: Variant) -> Dictionary:
 	C.view = 0.0
 	king.atCourt = 0.0
 	G.player.follow = -1.0
+	Sim.sfx("horn")
 	Sim.glog("Король выехал из замка" + (" во главе войска (" + SimArmy.voin(Sim.armyMen(pa)) + ")." if a is Dictionary else " со свитой."), "info")
 	return pa
 
@@ -292,6 +293,7 @@ static func orderMove(t: int, onArrive: Variant = null, follow: float = -1.0) ->
 	var g := game()
 	if g != null and int(g.speed) == 0:
 		g.set_speed(g.last_speed)
+	Sim.sfx("march")
 	return true
 
 
@@ -317,6 +319,7 @@ static func checkEncounters() -> void:
 		pa.path = null
 		b.path = null
 		SimDay.alerts.append({"k": "enc", "b": b.id})
+		Sim.sfx("horn")
 		modal = true                     # окно встречи: шаги стоят, пока игрок не решит (UI.modalOpen)
 		return
 
@@ -495,6 +498,7 @@ static func setMode(m: String) -> void:
 		pa.hidden = 0.0
 		pa.mode = "camp"
 		toast("Спрятаться можно лишь в лесу, холмах, горах или болоте.")
+	Sim.sfx("click")
 
 
 ## грабёж взятого поселения (lootSett): золото и провиант сейчас, процветание и мнение соседей — вниз

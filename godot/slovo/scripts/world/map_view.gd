@@ -358,9 +358,9 @@ func key(k: int) -> void:
 		KEY_SPACE:
 			Game.toggle_pause()
 		KEY_0, KEY_1, KEY_2, KEY_3:
-			Game.set_speed(k - KEY_0)
+			Game.ui_speed(k - KEY_0)
 		KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3:
-			Game.set_speed(k - KEY_KP_0)
+			Game.ui_speed(k - KEY_KP_0)
 
 ## щелчок, как мышью (для проверок): окна, верхняя строка, поле карты
 func click_at(p: Vector2, b := 0) -> void:
@@ -548,7 +548,7 @@ func ui_state() -> Dictionary:
 func state() -> Dictionary:
 	return {"ok": G != null and G.ok, "stage": G.stage if G else "", "ms": G.ms if G else {}, "cam": [snappedf(cam.x, 0.1), snappedf(cam.y, 0.1), cam.z], "mode": mode,
 		"chunks": G.chunks.size() if G else 0, "built": G.nbuilt if G else 0, "cms": snappedf(G.cms, 0.01) if G else 0.0, "prof": G.prof if G else {}, "vis": vis,
-		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s(), "realm": _realm_state(), "time": _time_state()}
+		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s(), "realm": _realm_state(), "time": _time_state(), "snd": Snd.state()}
 
 ## часы и дни королевства: день календаря и симуляции, скорость, сколько счёта уходит на день
 func _time_state() -> Dictionary:

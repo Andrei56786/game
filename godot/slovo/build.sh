@@ -1,12 +1,13 @@
 #!/bin/sh
 # «Слово короля» на Godot: графика, данные двора и мир из HTML-версии (tools/export.mjs → art/), таблицы и эталон королевства
-# (tools/sim_export.mjs), шрифт из src/fontdata.js → импорт → проверки без экрана (двор и королевство, генератор мира, состояние
+# (tools/sim_export.mjs), звук — записи синтеза HTML-версии (tools/snd_export.mjs → snd/: пьесы, звуки, голоса мест, шумы и шаги;
+# пропускается, пока звук HTML не менялся), шрифт из src/fontdata.js → импорт → проверки без экрана (двор и королевство, генератор мира, состояние
 # новой игры) → сборки в веб и Windows (build/web, build/win). Нужны python3, node и playwright (Chromium).
 # GODOT — путь к Godot 4.7.2 (шаблоны экспорта — notes/plan-v4.md). Только проверка: sh build.sh test
 set -e
 cd "$(dirname "$0")"
 G=${GODOT:-/data/tools/godot/Godot_v4.7.2-stable_linux.x86_64}
-(cd ../.. && python3 tools/build.py >/dev/null && node godot/slovo/tools/export.mjs && node godot/slovo/tools/sim_export.mjs)
+(cd ../.. && python3 tools/build.py >/dev/null && node godot/slovo/tools/export.mjs && node godot/slovo/tools/sim_export.mjs && node godot/slovo/tools/snd_export.mjs)
 node -e "const f=require('fs'),s=f.readFileSync('../../src/fontdata.js','utf8');f.writeFileSync('slovo_serif.woff',Buffer.from(s.match(/VF_DATA = '([^']+)'/)[1],'base64'))"
 mkdir -p build/web build/win && touch build/.gdignore
 "$G" --headless --import --path . >/dev/null 2>&1 || true

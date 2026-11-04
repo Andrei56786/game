@@ -953,7 +953,7 @@ func _top() -> void:
 	speed_btns(bx, mouse(), held)
 	for i in 4:
 		var r := Rect2(bx + i * 15, 2, 14, 14)
-		btns.append([r, func(): Game.set_speed(i)])
+		btns.append([r, func(): Game.ui_speed(i)])
 		if i == 0 and held:
 			tips.append([r, func(): return [SimText.row("Время стоит"), SimText.row("Пока открыто окно, письмо или идёт разговор, время не идёт. Закройте окно — и оно пойдёт со скоростью " + str(Game.speed) + ".", "#e8dcc0")]])
 		else:

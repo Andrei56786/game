@@ -44,6 +44,9 @@ try {
     await cmd('court'); await wait(2500); await cmd('time 12', 'speed 1', 'spot throne_front'); await wait(1500); await shot('keep_day');
     let s = await state();
     check(s && s.loc === 'keep' && s.npcs >= 30 && s.here >= 4, 'тронный зал днём: ' + JSON.stringify(s));
+    // 0.8: звук — записи синтеза HTML (snd/), пьеса по месту и часу, звуки окон и шумы места
+    const sj = q => q && q.snd && JSON.stringify({ ok: q.snd.ok, enc: q.snd.enc, pieces: q.snd.pieces, fam: q.snd.fam, mood: q.snd.mood, started: q.snd.started, playing: q.snd.playing, sfx: q.snd.sfx, last: q.snd.last, beds: q.snd.beds });
+    check(s && s.snd && s.snd.ok && s.snd.pieces >= 40 && s.snd.fam !== '' && s.snd.mood !== '' && s.snd.started >= 1, 'звук при дворе: ' + sj(s));
     await cmd('spot plaza_n'); await wait(1500); await shot('yard_day');
     s = await state();
     check(s && s.loc === 'yard' && s.dark < 0.1 && s.here >= 8 && s.sea === 'th', 'двор днём: светло, люди на виду (' + (s && s.here) + '), оттепель 1-го дня, как в HTML (' + (s && s.sea) + ')');
@@ -58,6 +61,7 @@ try {
     await cmd('time 23.5'); await wait(1500); await shot('yard_night');
     s = await state();
     check(s && s.dark > 0.5 && s.asleep >= 12, 'ночь: темно, люди спят или у себя (' + (s && s.asleep) + ')');
+    check(s && s.snd && s.snd.fam === 'night' && s.snd.beds.wind > 0, 'ночью во дворе — ночная музыка и ветер: ' + sj(s));
     await cmd('spot throne_front'); await wait(1500); await shot('keep_night');
     await cmd('time 12', 'spot plaza_n'); await wait(1500);
     const n0 = logs.length;
@@ -86,6 +90,7 @@ try {
       await cmd('cam 4320 2700 0.125'); await wait(1500); await shot('map_kingdom');
       let m = await mst();
       check(m && m.ok && m.cam[2] === 0.125, 'вся карта (' + (m && JSON.stringify(m.ms)) + ' мс)');
+      check(m && m.snd && ['map', 'map_w', 'war', 'night', 'camp', 'campaign', 'travel'].includes(m.snd.fam) && m.snd.screen === 'map' && m.snd.sfx >= 1, 'звук на карте: ' + sj(m));
       // 0.4: королевство посчитано (newGame3 + первый день экономики), туман войны, видимые войска
       const R = m && m.realm;
       check(R && R.fog && R.explored > 100000 && R.chars >= 100 && R.armies >= 50 && R.seen >= 4 && R.gold > 0 && R.net > 0 && (R.kinds.lord || 0) >= 1,
@@ -138,17 +143,20 @@ try {
       const bst = async () => { const n = logs.length; await cmd('state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('BSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
       await cmd('rideout'); await wait(2500); let u = await ust(); await shot('map_rideout');
       check(u && u.pa && !u.atCourt && u.speed === 0, 'король выехал в поле со свитой: ' + JSON.stringify(u && u.pa));
-      // вести королевства (зимой — Совет короны, войны, события) ждут в очереди UI.modals раньше встречи — как в HTML (UI.alert — в конец);
-      // закрыть их, чтобы окно встречи было на экране первым
-      for (let i = 0; i < 10 && u && u.modals.length; i++) { await cmd('ui close'); await wait(300); u = await ust(); }
-      await cmd('ui enc'); await wait(1500); u = await ust(); await shot('map_enc');
-      check(u && u.modals[0] === 'enc', 'встреча с врагом — окно: ' + (u && u.modals.join()));
+      // вести королевства (зимой — Совет короны, войны, события) ждут в очереди UI.modals раньше встречи — как в HTML (UI.alert — в конец),
+      // разговоры королевства (рождение — «Как назовёте?», вести династии) забирают щелчок; закрыть их, чтобы окно встречи было первым;
+      // щёлкать — когда окно уже нарисовано (области щелчка — из прошлого кадра, а кадр в CI бывает и по секунде)
+      const uis = q => q && (q.modals.join() + (q.dlg ? ' [разговор: ' + q.dlg_name + ']' : '') + (q.busy ? ' [' + q.busy + ']' : ''));
+      const clear = async () => { let q = await ust(); for (let i = 0; i < 12 && q && (q.modals.length || q.dlg); i++) { await cmd(q.dlg && q.choices && q.choices.length ? 'choose 1' : 'ui close'); await wait(400); q = await ust(); } return q; };
+      const encOpen = async () => { await clear(); await cmd('ui enc'); await wait(1500); await frames(2); return ust(); };
+      u = await encOpen(); await shot('map_enc');
+      check(u && u.modals[0] === 'enc' && !u.dlg, 'встреча с врагом — окно: ' + uis(u));
       const men0 = u && u.pa && u.pa.men;
       await cmd('click 430 210'); u = await uiw(q => q.busy === '' && q.modals[0] === 'bres'); await shot('map_bres');
-      check(u && u.modals[0] === 'bres', 'автобой — итог боя: ' + (u && u.modals.join()) + ', войско ' + men0 + ' → ' + (u && u.pa && u.pa.men));
-      await cmd('click 320 254'); await wait(800); u = await ust();
-      check(u && u.modals.length === 0, '«Далее» — окно итога закрыто');
-      await cmd('ui enc'); await wait(1500); await cmd('click 210 210');
+      check(u && u.modals[0] === 'bres', 'автобой — итог боя: ' + uis(u) + ', войско ' + men0 + ' → ' + (u && u.pa && u.pa.men));
+      await frames(2); await cmd('click 320 254'); await wait(800); u = await ust();
+      check(u && u.modals.length === 0, '«Далее» — окно итога закрыто: ' + uis(u));
+      await encOpen(); await cmd('click 210 210');
       const bt = await until(/^BATTLE \d/, 60000); await wait(2500); await shot('battle_setup');
       let b = await bst();
       check(!!bt && b && b.phase === 'deploy' && b.units > 2, 'бой на поле — расстановка: ' + (b && JSON.stringify({ phase: b.phase, units: b.units, men: b.men })));
@@ -159,7 +167,7 @@ try {
       await cmd('end'); const bd = await until(/^BATTLE DONE/, 30000); await wait(1500); u = await ust(); await shot('map_after_battle');
       check(!!bd && u && u.speed === 0 && u.pa, 'после боя — снова карта, пауза: ' + bd);
       // у ворот столицы: «Въехать в замок — ко двору» — король снова при дворе, у ворот
-      await cmd('ui gate'); await wait(1200); u = await ust(); await shot('map_gate');
+      await clear(); await cmd('ui gate'); await wait(1200); u = await ust(); await shot('map_gate');
       check(u && u.dlg && u.choices.length === 3, 'у ворот столицы — разговор: ' + (u && u.choices && u.choices.join(' | ')));
       await cmd('choose 1'); const tc = await until(/^TO COURT /, 20000); await wait(1500);
       await cmd('speed 1'); s = await state(); for (let i = 0; i < 20 && !(s && s.loc === 'yard'); i++) { await wait(500); s = await state(); } await shot('court_gate');

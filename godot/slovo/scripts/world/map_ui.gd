@@ -17,13 +17,16 @@ func _clock() -> float:
 # ---------- окна ----------
 func open_cmd(sel: Variant = -1, preset: Variant = null) -> void:
 	win = {"k": "cmd", "sel": sel, "mode": "intent", "pick": "", "app": 0, "sc": 0, "preset": preset}
+	Snd.sfx("paper")
 
 ## сведения о поселении со стола карт (settinfo): король при дворе
 func open_settinfo(sid: int) -> void:
 	win = {"k": "settinfo", "id": sid}
+	Snd.sfx("paper")
 
 func open_sett(sid: int) -> void:
 	win = {"k": "sett", "id": sid, "tab": 0}
+	Snd.sfx("paper")
 
 ## каждый кадр карты: всплывающие строки и вести королевства (UI.alert) — в окна, пауза по прибытии
 func tick() -> void:

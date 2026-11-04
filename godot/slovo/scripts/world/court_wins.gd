@@ -20,12 +20,14 @@ func open_council(seat := "", pick := "") -> void:
 		toast("Королевство не готово: нет данных мира.")
 		return
 	win = {"k": "council", "tab": 0, "mode": "intent", "seat": seat if seat != "" else "chancellor", "pick": pick, "app": 0, "sc": 0}
+	Snd.sfx("paper")
 
 func open_letters() -> void:
 	if not SimPlayer.ensure_sim():
 		toast("Королевство не готово: нет данных мира.")
 		return
 	win = {"k": "letters", "sc": 0}
+	Snd.sfx("paper")
 
 ## клавиша окна (K, L): то же окно — закрыть
 func toggle_win(k: String) -> void:
@@ -811,6 +813,7 @@ func _crown(m: Dictionary) -> void:
 func close_modal() -> void:
 	if not modals.is_empty():
 		modals.pop_front()
+		Snd.sfx("click")
 
 func alert(k: String, d: Variant) -> void:
 	for m in modals:

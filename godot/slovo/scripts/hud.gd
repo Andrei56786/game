@@ -99,6 +99,7 @@ func say(who, text: String, o: Dictionary = {}) -> void:
 		return
 	dlg = d
 	dlg_rows = []
+	Snd.sfx("paper")
 
 ## разговоры подряд (DLG.seq): [{who, text, o}]
 func say_seq(L: Array) -> void:
@@ -140,11 +141,13 @@ func advance() -> void:
 		dlg["page"] += 1
 		dlg["shown"] = 0.0
 		dlg["full"] = false
+		Snd.sfx("click")
 		return
 	if not (dlg["choices"] as Array).is_empty():
 		choose(int(dlg["sel"]))
 		return
 	close_dlg()
+	Snd.sfx("click")
 
 func choose(i: int) -> void:
 	if dlg == null or i < 0 or i >= (dlg["choices"] as Array).size():
@@ -154,8 +157,10 @@ func choose(i: int) -> void:
 	var ok: Variant = ch.get("ok")
 	if ok is Callable and (ok as Callable).is_valid() and not bool((ok as Callable).call()):
 		toast(String(ch.get("why", "Недоступно.")))
+		Snd.sfx("click")
 		return
 	dlg = null
+	Snd.sfx("click")
 	var nx: Variant = dlg_q.pop_front() if not dlg_q.is_empty() else null
 	var fx: Variant = ch.get("fx")
 	if fx is Callable and (fx as Callable).is_valid():
@@ -177,9 +182,11 @@ func dlg_key(k: int) -> bool:
 	if dlg_choosing():
 		if k == KEY_UP or k == KEY_W:
 			dlg["sel"] = (int(dlg["sel"]) + n - 1) % n
+			Snd.sfx("click")
 			return true
 		if k == KEY_DOWN or k == KEY_S:
 			dlg["sel"] = (int(dlg["sel"]) + 1) % n
+			Snd.sfx("click")
 			return true
 		if k >= KEY_1 and k <= KEY_9:
 			if k - KEY_1 < n:

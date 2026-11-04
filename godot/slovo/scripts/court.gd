@@ -694,6 +694,7 @@ func go_through(d: Dictionary) -> void:
 		king["dir"] = d["dir"]
 		go_loc(d["to"])
 		snap_cam()
+		Sim.sfx("door")
 		print("LOC ", d["to"]))
 
 func fade_to(f: Callable) -> void:
@@ -1166,9 +1167,9 @@ func key(k: int) -> void:
 		KEY_SPACE:
 			Game.toggle_pause()
 		KEY_0, KEY_1, KEY_2, KEY_3:
-			Game.set_speed(k - KEY_0)
+			Game.ui_speed(k - KEY_0)
 		KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3:
-			Game.set_speed(k - KEY_KP_0)
+			Game.ui_speed(k - KEY_KP_0)
 		KEY_Z:
 			Z = 1 if Z == 2 else 2
 			snap_cam()
@@ -1298,7 +1299,7 @@ func state() -> Dictionary:
 	var verd: Array = Sim.G.court.get("verdicts", []) if aud.ok() else []
 	return {"day": Game.day, "hour": snappedf(Game.hour(), 0.01), "loc": loc_id, "room": room, "king": [int(king["x"]), int(king["y"])], "dir": king["dir"], "sit": king["sit"] != null, "talk": hud.dlg_open(), "choosing": hud.dlg_choosing(), "here": here, "asleep": away, "npcs": npcs.size(), "walked": int(walked), "dark": snappedf(hud.dark, 0.01), "zoom": Z, "fade": fade > 0.0, "sea": sea_key,
 		"win": String(hud.win.k) if hud.win != null else "", "modals": hud.modals.size(), "meet": meet.meeting_open(),
-		"fam": cnt.fam, "seats": cnt.seats, "pris": cnt.pris, "pets": cnt.pets, "verd": verd.size(), "by": String(verd[0].by) if not verd.is_empty() else ""}
+		"fam": cnt.fam, "seats": cnt.seats, "pris": cnt.pris, "pets": cnt.pets, "verd": verd.size(), "by": String(verd[0].by) if not verd.is_empty() else "", "snd": Snd.state()}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается
 func selftest() -> bool:
