@@ -77,7 +77,10 @@ try {
     if (mr) {
       const mst = async () => { const n = logs.length; await cmd('state'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('MAPSTATE ')); return l ? JSON.parse(l.slice(9)) : null; };
       const lum = async () => { const n = logs.length; await cmd('lum'); await wait(400); const l = logs.slice(n).find(x => x.startsWith('MAPLUM ')); return l ? +l.slice(7) : NaN; };
-      const settle = async (ms = 60000) => { const t = Date.now(); let m = null; while (Date.now() - t < ms) { m = await mst(); if (m && m.vis.miss === 0 && m.vis.stale === 0) break; await wait(500); } await wait(300); return m; };
+      const ust = async () => { const n = logs.length; await cmd('ui state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('UISTATE ')); return l ? JSON.parse(l.slice(8)) : null; };
+      // ховер, видимые куски и нарисованные войска считаются в кадре: после команды ждём пару новых кадров (в CI кадр бывает и по 0,5 с)
+      const frames = async (k = 2, ms = 20000) => { const u0 = await ust(); const t = Date.now(); while (u0 && Date.now() - t < ms) { const u = await ust(); if (u && u.frame >= u0.frame + k) return; await wait(100); } };
+      const settle = async (ms = 60000) => { await frames(); const t = Date.now(); let m = null; while (Date.now() - t < ms) { m = await mst(); if (m && m.vis.miss === 0 && m.vis.stale === 0) break; await wait(500); } await wait(300); return m; };
       await cmd('cam 4320 2700 0.125'); await wait(1500); await shot('map_kingdom');
       let m = await mst();
       check(m && m.ok && m.cam[2] === 0.125, 'вся карта (' + (m && JSON.stringify(m.ms)) + ' мс)');
@@ -128,7 +131,6 @@ try {
       check(m && m.realm.drawn >= 1 && m.realm.kinds.lord_ai >= 1, 'чужое войско вблизи (вся карта открыта): ' + (m && JSON.stringify(m.realm.kinds)) + ', нарисовано ' + (m && m.realm.drawn));
       // 0.7: король в поле — выезд со свитой; встреча с врагом — окно, автобой (бой без экрана) и итог; бой на поле — расстановка,
       // бой, итог, снова карта на паузе
-      const ust = async () => { const n = logs.length; await cmd('ui state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('UISTATE ')); return l ? JSON.parse(l.slice(8)) : null; };
       const uiw = async (pred, ms = 90000) => { const t = Date.now(); let q = null; while (Date.now() - t < ms) { q = await ust(); if (q && pred(q)) break; await wait(500); } return q; };
       const bst = async () => { const n = logs.length; await cmd('state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('BSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
       await cmd('rideout'); await wait(2500); let u = await ust(); await shot('map_rideout');
@@ -154,7 +156,7 @@ try {
       await cmd('ui gate'); await wait(1200); u = await ust(); await shot('map_gate');
       check(u && u.dlg && u.choices.length === 3, 'у ворот столицы — разговор: ' + (u && u.choices && u.choices.join(' | ')));
       await cmd('choose 1'); const tc = await until(/^TO COURT /, 20000); await wait(1500);
-      await cmd('speed 1'); s = await state(); await shot('court_gate');
+      await cmd('speed 1'); s = await state(); for (let i = 0; i < 20 && !(s && s.loc === 'yard'); i++) { await wait(500); s = await state(); } await shot('court_gate');
       check(!!tc && s && s.loc === 'yard', 'въехал в замок — ко двору: ' + tc + ', ' + (s && s.loc));
     }
     await cmd('title'); await wait(800);
