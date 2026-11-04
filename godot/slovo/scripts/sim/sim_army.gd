@@ -31,6 +31,13 @@ static var afrom := PackedInt32Array()
 static var ast := PackedInt32Array()
 static var acl := PackedInt32Array()
 static var agen := 0
+static var actab := PackedFloat64Array()  # цена класса клетки в текущем поиске
+static var aoff := PackedByteArray()      # класс — вне дороги (там обоз и проводники)
+static var ahk := PackedFloat64Array()    # куча поиска: ключи и клетки
+static var ahv := PackedInt32Array()
+static var ADX := PackedInt32Array([1, -1, 0, 0, 1, 1, -1, -1])   # соседи в порядке DX8/DY8 и их сдвиги в индексе клетки
+static var ADY := PackedInt32Array([0, 0, 1, -1, 1, -1, 1, -1])
+static var AOFS := PackedInt32Array([1, -1, MW, -MW, MW + 1, -MW + 1, MW - 1, -MW - 1])
 static var alast := 0
 static var path_n := 0                    # для замеров: сколько путей, мкс и узлов
 static var path_us := 0
@@ -48,6 +55,8 @@ static func prep() -> void:
 	cls = PackedInt32Array()
 	cls.resize(NT)
 	cls_key = []
+	actab = PackedFloat64Array()   # классы другие — их цены в astar заново
+	aoff = PackedByteArray()
 	var idx := {}
 	var ter := W.ter
 	var road := W.road
@@ -152,9 +161,13 @@ static func isCav(a: Dictionary) -> bool:
 
 
 static func armySpeed(a: Dictionary) -> float:
+	return _speed(a, Sim.armyMen(a), Sim.mountedN(a.u))
+
+
+## armySpeed при известных людях и коннице (в шаге движения они не меняются — считаются раз на войско)
+static func _speed(a: Dictionary, men: float, mounted: float) -> float:
 	var s := float(Sim.T.BASE_SPEED)
-	var men := Sim.armyMen(a)
-	if isCav(a):
+	if men > 0 and mounted >= men * 0.9 and a.wagons == 0.0:   # isCav
 		s *= 1.45
 	if men > 1200:
 		s *= 0.82
@@ -178,24 +191,29 @@ static func armySpeed(a: Dictionary) -> float:
 
 ## stepCost с обёрткой march.js (распутица)
 static func stepCost(a: Dictionary, j: int) -> float:
+	prep()
+	return _stepCost(a, j, Sim.armyMen(a), Sim.mountedN(a.u), Sim.seasonOf(Sim.G.day) * 2, JS.n(Sim.G.get("mud")))
+
+
+## stepCost при известных людях, коннице, сезоне (sea2 — сезон·2, ряд ctab64 пеших) и распутице m; prep() — уже
+static func _stepCost(a: Dictionary, j: int, men0: float, mounted: float, sea2: int, m: float) -> float:
 	var W := Sim.W
-	var G := Sim.G
-	var c := moveCost(j, Sim.seasonOf(G.day), Sim.mountedN(a.u) > Sim.armyMen(a) * 0.5)
+	var c: float = ctab64[sea2 + (1 if mounted > men0 * 0.5 else 0)][cls[j]]
 	if not (c < INF):
 		return c
-	if not W.road[j]:
-		var men := maxf(1.0, Sim.armyMen(a))
+	var road := W.road[j]
+	if not road:
+		var men := maxf(1.0, men0)
 		if JS.t(a.wagons):
 			c *= 1 + minf(0.35, a.wagons / (men / 100.0 + 1) * 0.06)
 		var p := W.prov[j]
-		if p >= 0 and JS.n(G.provs[p].guides) > G.day and a.realm == G.player.realm:
+		if p >= 0 and a.realm == Sim.G.player.realm and JS.n(Sim.G.provs[p].guides) > Sim.G.day:
 			c *= 0.8
-	var m := JS.n(G.get("mud"))
 	if m < 0.05:
 		return c
-	if W.road[j]:
+	if road:
 		return c * (1 + 0.12 * m)
-	var men2 := maxf(1.0, Sim.armyMen(a))
+	var men2 := maxf(1.0, men0)
 	var wf := minf(0.5, a.wagons / (men2 / 100.0 + 1) * 0.15) if JS.t(a.wagons) else 0.0
 	return c * (1 + (0.55 + wf) * m * float(MUDT.get(int(W.ter[j]), 1.0)))
 
@@ -226,13 +244,16 @@ static func planPath(a: Dictionary, goal: int) -> Variant:
 	return p
 
 
-## astar (worldgen.js) с ценой cf из planPath; клетки разных частей суши не связаны — сразу null, как после обхода в HTML
+## astar (worldgen.js) с ценой cf из planPath; клетки разных частей суши не связаны — сразу null, как после обхода в HTML.
+## Тот же обход, что в HTML (куча, порядок соседей и сравнения те же — пути совпадают до клетки), только быстрее: цена
+## класса клетки с обозом — заранее (ct), проходимость — по comp, куча — прямо в массивах ah/av, края карты — отдельно.
 static func astar(start: int, goal: int, tab: PackedFloat32Array, wf: float, guide: PackedByteArray, maxN: int) -> Variant:
 	if start == goal:
 		return [float(start)]
 	var W := Sim.W
 	alast = 0
-	if comp[goal] < 0 or (comp[start] >= 0 and comp[start] != comp[goal]):
+	var cp := comp
+	if cp[goal] < 0 or (cp[start] >= 0 and cp[start] != cp[goal]):
 		return null
 	if ag.size() != NT:
 		ag.resize(NT)
@@ -253,20 +274,62 @@ static func astar(start: int, goal: int, tab: PackedFloat32Array, wf: float, gui
 	var st := ast
 	var cl := acl
 	var cc := cls
-	var road := W.road
 	var riv := W.river
 	var prov := W.prov
 	var gd := guide.size() > 0
 	var gx := goal % MW
 	var gy := goal / MW
-	var hp := WorldGen.Heap.new()
+	# цена класса: по сезону и коннице (tab), вне дорог — с обозом (c·wf, как в HTML: сначала Float32 → double, потом ·wf)
+	var nc := cls_key.size()
+	var ct := actab
+	if ct.size() != nc:
+		ct.resize(nc)
+		aoff.resize(nc)
+		for k in nc:
+			aoff[k] = 0 if cls_key[k][1] else 1
+	var off := aoff
+	for k in nc:
+		ct[k] = tab[k] * wf if off[k] else float(tab[k])
+	# куча (WorldGen.Heap): ключи hk, клетки hv
+	var hk := ahk
+	var hv := ahv
+	var hcap := hk.size()
+	if hcap < 4096:
+		hcap = 4096
+		hk.resize(hcap)
+		hv.resize(hcap)
+	var hn := 1
+	hk[0] = 0.0
+	hv[0] = start
 	g[start] = 0.0
 	st[start] = gen
 	from[start] = -1
-	hp.push(0.0, start)
+	var dxs := ADX
+	var dys := ADY
+	var ofs := AOFS
 	var n := 0
-	while hp.size > 0:
-		var i := hp.pop()
+	while hn > 0:
+		# pop; за последним элементом — INF (тогда правый сосед за краем кучи не меньше левого — без проверки ch + 1 < hn)
+		var i := hv[0]
+		hn -= 1
+		if hn > 0:
+			var lk := hk[hn]
+			var lv := hv[hn]
+			hk[hn] = INF
+			var h := 0
+			while true:
+				var ch := 2 * h + 1
+				if ch >= hn:
+					break
+				if hk[ch + 1] < hk[ch]:
+					ch += 1
+				if hk[ch] >= lk:
+					break
+				hk[h] = hk[ch]
+				hv[h] = hv[ch]
+				h = ch
+			hk[h] = lk
+			hv[h] = lv
 		if cl[i] == gen:
 			continue
 		cl[i] = gen
@@ -278,28 +341,27 @@ static func astar(start: int, goal: int, tab: PackedFloat32Array, wf: float, gui
 			return null
 		var x := i % MW
 		var y := i / MW
+		var inner := x > 0 and y > 0 and x < MW - 1 and y < MH - 1
 		var gi := g[i]
 		for d in 8:
-			var nx := x + DX8[d]
-			var ny := y + DY8[d]
-			if nx < 0 or ny < 0 or nx >= MW or ny >= MH:
+			if not inner:
+				var bx := x + dxs[d]
+				var by := y + dys[d]
+				if bx < 0 or by < 0 or bx >= MW or by >= MH:
+					continue
+			var j := i + ofs[d]
+			if cl[j] == gen or cp[j] < 0:
 				continue
-			var j := ny * MW + nx
-			if cl[j] == gen:
-				continue
-			var c: float = tab[cc[j]]
-			if not (c < INF):
-				continue
-			if not road[j]:
-				c = c * wf
-				if gd:
-					var p := prov[j]
-					if p >= 0 and guide[p]:
-						c *= 0.8
+			var cj := cc[j]
+			var c := ct[cj]
+			if gd and off[cj]:
+				var p := prov[j]
+				if p >= 0 and guide[p]:
+					c *= 0.8
 			if d >= 4:
-				var ca := y * MW + nx
-				var cb := ny * MW + x
-				if not (tab[cc[ca]] < INF) or not (tab[cc[cb]] < INF):
+				var ca := i + dxs[d]
+				var cb := i + ofs[d] - dxs[d]
+				if cp[ca] < 0 or cp[cb] < 0:
 					continue
 				if (riv[ca] or riv[cb]) and not riv[j]:
 					continue
@@ -309,9 +371,25 @@ static func astar(start: int, goal: int, tab: PackedFloat32Array, wf: float, gui
 				g[j] = ng
 				st[j] = gen
 				from[j] = i
-				var ddx := nx - gx
-				var ddy := ny - gy
-				hp.push(ng + sqrt(float(ddx * ddx + ddy * ddy)), j)
+				var ddx := x + dxs[d] - gx
+				var ddy := y + dys[d] - gy
+				var key := ng + sqrt(float(ddx * ddx + ddy * ddy))
+				# push (место и для INF за краем)
+				if hn + 1 >= hcap:
+					hcap *= 2
+					hk.resize(hcap)
+					hv.resize(hcap)
+				var hi := hn
+				hn += 1
+				while hi > 0:
+					var hp := (hi - 1) >> 1
+					if hk[hp] <= key:
+						break
+					hk[hi] = hk[hp]
+					hv[hi] = hv[hp]
+					hi = hp
+				hk[hi] = key
+				hv[hi] = j
 	alast = n
 	if cl[goal] != gen:
 		return null
@@ -330,13 +408,18 @@ static func astar(start: int, goal: int, tab: PackedFloat32Array, wf: float, gui
 static func pathDays(a: Dictionary, path: Variant, from := 0) -> float:
 	if path == null:
 		return INF
+	prep()
+	var men := Sim.armyMen(a)
+	var mounted := Sim.mountedN(a.u)
+	var sea2 := Sim.seasonOf(Sim.G.day) * 2
+	var mud := JS.n(Sim.G.get("mud"))
 	var c := 0.0
 	for k in range(from, path.size() - 1):
 		var f := int(path[k])
 		var t := int(path[k + 1])
 		var diag := f % MW != t % MW and f / MW != t / MW
-		c += stepCost(a, t) * (1.414 if diag else 1.0)
-	return c / armySpeed(a)
+		c += _stepCost(a, t, men, mounted, sea2, mud) * (1.414 if diag else 1.0)
+	return c / _speed(a, men, mounted)
 
 
 static func pathKm(path: Variant, from := 0) -> float:
@@ -382,14 +465,18 @@ static func advanceArmy(a: Dictionary, dd: float) -> void:
 
 static func _advance(a: Dictionary, dd: float) -> void:
 	var path: Array = a.path
-	var budget := dd * armySpeed(a)
+	var men := Sim.armyMen(a)
+	var mounted := Sim.mountedN(a.u)
+	var sea2 := Sim.seasonOf(Sim.G.day) * 2
+	var mud := JS.n(Sim.G.get("mud"))
+	var budget := dd * _speed(a, men, mounted)
 	var moved := 0.0
 	var n := path.size()
 	while budget > 1e-6 and a.pi < n - 1:
 		var to := int(path[int(a.pi) + 1])
 		var tx := to % MW + 0.5
 		var ty := to / MW + 0.5
-		var c := stepCost(a, to)
+		var c := _stepCost(a, to, men, mounted, sea2, mud)
 		if not (c < INF):
 			a.path = null
 			if isKingArmy(a):
@@ -873,8 +960,9 @@ static func aiContacts() -> void:
 ## шаг движения: worldAdvance без короля в поле (его погоня, встречи, гонцы и снабженец — когда он сам поведёт войско)
 static func substep(dd: float) -> void:
 	var t0 := Time.get_ticks_usec()
+	prep()                                       # цены клеток для _advance
 	for a in Sim.G.armies:
-		if JS.t(a.alive):
+		if a.path != null and JS.t(a.alive):      # без пути advanceArmy ничего не делает
 			advanceArmy(a, dd)
 	aiContacts()
 	step_us = Time.get_ticks_usec() - t0
