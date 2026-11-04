@@ -1,6 +1,6 @@
 extends Node
-# Корень: заставка → двор ↔ карта королевства (Tab). Без экрана: -- --selftest (двор живёт сутки, королевство — восемь дней,
-# проверки, выход с кодом). В веб-сборке — window.slovo('команда') для скриншот-тестов: court, title, map, help, time 21,
+# Корень: заставка → двор ↔ карта королевства (Tab). Без экрана: -- --selftest (двор живёт сутки, королевство — восемь дней
+# с походами ИИ, проверки, выход с кодом). В веб-сборке — window.slovo('команда') для скриншот-тестов: court, title, map, help, time 21,
 # day 30 (вперёд; королевство догонит), days 3, speed 2, goto 0, talk, next, close, walk 1 0 0.5, state; на карте — cam x y z,
 # zoom 1, mode pol, sett Имя, army lord, hover x y, reveal, dump over, lum, state.
 const Title = preload("res://scripts/title.gd")
@@ -150,24 +150,50 @@ func _sim_selftest() -> bool:
 	ok = ok and absf(bv.gold - dg) < 1.0 and absf(bv.net - float(D.get("net", 0.0))) < 0.01
 	if not ok:
 		print("SIM: проверка королевства не прошла")
-	# время: неделя королевства сразу (как догонялка), восьмой день — по кадрам с малым бюджетом, как при игре
+	# время: неделя королевства сразу (как догонялка: 24 шага движения и день), восьмой день — как при игре: часы Game
+	# ушли в новые сутки, шаги и день — по кадрам с малым бюджетом
 	var g0: float = G.realms[0].gold
 	var log0: int = G.log.size()
+	var p0 := _pos_sum()
 	var wk := {}
 	var tu := Time.get_ticks_usec()
 	for i in 7:
+		for k in Game.STEPS:
+			SimArmy.substep(1.0 / Game.STEPS)
 		await SimDay.dailyTick(0)
 		wk[String(G.weather.k)] = true
 	var ms7 := (Time.get_ticks_usec() - tu) / 7000.0
-	SimDay.dailyTick(3000)
+	var st0 := Game.steps_n
+	Game.day = int(G.day) + 1
+	Game.frac = 0.0
+	Game.sim_run = true
 	var fr := 0
-	while SimDay.busy and fr < 1000:
+	while (G.day < Game.day or SimDay.busy) and fr < 3000:
 		await get_tree().process_frame
 		fr += 1
+	Game.sim_run = false
 	var g1: float = G.realms[0].gold
-	print("SIM: 8 дней — %.1f мс на день, восьмой день за %d кадров (%.1f мс счёта), казна %.1f → %.1f, погода %s, записей летописи +%d" % [ms7,
-		SimDay.frames, SimDay.ms_day, g0, g1, ",".join(wk.keys()), G.log.size() - log0])
-	var tok: bool = G.day == 8.0 and not SimDay.busy and SimDay.frames > 1 and absf(g1 - g0) > 0.01 and G.weather.has("k")
+	var march := 0
+	var sieges := 0
+	var kinds := {}
+	for a: Dictionary in G.armies:
+		if JS.t(a.alive) and a.path != null:
+			march += 1
+		if JS.t(a.alive) and a.siegeOf >= 0:
+			sieges += 1
+		kinds[String(a.kind)] = int(kinds.get(String(a.kind), 0)) + 1
+	var moved := absf(_pos_sum() - p0)
+	print("SIM: 8 дней — %.1f мс на день, восьмой день за %d кадров (шагов %d, день %d кадров, %.1f мс счёта), казна %.1f → %.1f, погода %s, записей летописи +%d" % [ms7,
+		fr, Game.steps_n - st0, SimDay.frames, SimDay.ms_day, g0, g1, ",".join(wk.keys()), G.log.size() - log0])
+	print("SIM: войска %s, в походе %d, в осаде %d, сдвиг Σ(7x+13y) %.0f, путей %d, призраков %d" % [str(kinds), march, sieges, moved, SimArmy.path_n, (G.get("know", {}) as Dictionary).size()])
+	var tok: bool = G.day == 8.0 and not SimDay.busy and SimDay.frames > 1 and absf(g1 - g0) > 0.01 and G.weather.has("k") and Game.steps_n - st0 == Game.STEPS
+	tok = tok and march > 3 and moved > 50 and SimArmy.path_n > 10 and kinds.get("caravan", 0) > 0
 	if not tok:
 		print("SIM: дни королевства не идут как надо")
 	return ok and tok
+
+func _pos_sum() -> float:
+	var s := 0.0
+	for a: Dictionary in Sim.G.armies:
+		s = s + a.x * 7 + a.y * 13
+	return s
