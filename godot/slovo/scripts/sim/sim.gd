@@ -187,6 +187,30 @@ static func rangedN(u: Dictionary) -> float:
 static func seasonOf(d: float) -> int:
 	return int(floorf(fmod(d, DAYS_YEAR) / DAYS_SEASON))
 
+static func dayOfYear(d: float) -> float:
+	return fmod(d, DAYS_YEAR)
+
+static func yearOf(d: float) -> float:
+	return floorf(d / DAYS_YEAR) + 1
+
+## h32 / hf (birds.js): хэш числа с 32-битной арифметикой JS; hf(a, b) — «случайное» 0…1, своё у каждого мира (G.seed) и пары чисел
+static func h32(n: int) -> int:
+	n &= 0xFFFFFFFF
+	n = (n ^ 61) ^ (n >> 16)
+	n = (n + ((n << 3) & 0xFFFFFFFF)) & 0xFFFFFFFF
+	n ^= n >> 4
+	n = (n * 0x27d4eb2d) & 0xFFFFFFFF
+	n ^= n >> 15
+	return n
+
+static func hf(a: float, b: float) -> float:
+	var sd := 0
+	if not G.is_empty() and G.get("seed") != null:
+		sd = int(G.seed) & 0xFFFFFFFF
+		if sd >= 0x80000000:
+			sd -= 0x100000000
+	return float(h32(int(a * 92821.0 + b * 689.0 + float(sd)))) / 4294967296.0
+
 # ---------- люди ----------
 static func charOf(id: Variant) -> Variant:
 	if id == null:
@@ -689,7 +713,12 @@ static func zol(n: float) -> String:
 	return JS.s(n) + " " + plural(n, "золотой", "золотых", "золотых")
 
 
+## проверки (state_check --log): каждая строка летописи — ещё и в вывод
+static var echo := false
+
 static func glog(t: String, c: String = "info") -> void:
+	if echo:
+		print("LOG ", G.day, " ", t)
 	G.log.append({"d": G.day, "t": t, "c": c if c != "" else "info"})
 	if G.log.size() > 200:
 		G.log.pop_front()

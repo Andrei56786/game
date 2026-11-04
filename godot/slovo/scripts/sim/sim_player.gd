@@ -559,3 +559,52 @@ static func fleeHome() -> void:
 	G.toCourt = 1.0
 	C.prestige = clampf(JS.n(C.get("prestige")) - 4, -100, 100)
 	Sim.glog("Войско короля разбито! Король с горсткой верных бежал в замок " + String(ws0.name) + ".", "bad")
+
+
+## столица пала, пока король сидел при дворе (command.js: courtExileCheck): король со свитой бежит в ближайшую свою крепость.
+## Экран двора видит exile_rev и уходит на карту.
+static var exile_rev := 0
+
+static func courtExileCheck() -> void:
+	var G := Sim.G
+	if not G.has("court") or not JS.t(G.get("atCourt")):
+		return
+	var cap := int(G.realms[0].capital)
+	if cap < 0 or G.setts[cap].ctrl == 0.0:
+		return
+	var king: Dictionary = kingC()
+	var cw: Dictionary = Sim.W.setts[cap]
+	var S: Variant = null
+	var bd := 1e9
+	for T in G.setts:
+		var tw: Dictionary = Sim.W.setts[int(T.id)]
+		if T.ctrl != 0.0 or tw.type == "village":
+			continue
+		var d := JS.hypot(tw.x - cw.x, tw.y - cw.y)
+		if d < bd:
+			bd = d
+			S = T
+	if S == null:
+		G.over = {"win": false, "why": "Держава пала: у короля не осталось ни одной крепости."}
+		return
+	var ws: Dictionary = Sim.W.setts[int(S.id)]
+	var C: Dictionary = G.court
+	var ret: Dictionary = C.retinue if C.get("retinue") is Dictionary else mkRetinue()
+	C.retinue = null
+	ret.x = ws.x + 0.5
+	ret.y = ws.y + 0.5
+	ret.alive = 1.0
+	ret.gen = king.id
+	ret.path = null
+	ret.onArrive = null
+	if not G.armies.any(func(a): return is_same(a, ret)):
+		G.armies.append(ret)
+	G.player.army = ret.id
+	G.atCourt = 0.0
+	C.view = 0.0
+	king.atCourt = 0.0
+	G.player.follow = -1.0
+	SimCourt.prestige(-8)
+	Sim.glog("Столица " + String(cw.name) + " пала! Король со свитой бежал в " + String(ws.name) + ". Двор рассеян — верните замок, чтобы вернуться к трону.", "bad")
+	toast("Столица пала! Король бежал в " + String(ws.name) + ".")
+	exile_rev += 1

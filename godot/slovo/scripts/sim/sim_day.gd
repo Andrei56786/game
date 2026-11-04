@@ -138,6 +138,9 @@ static func dailyTick(budget := 0) -> void:
 	# день двора (events.js: councilDaily, dynastyDaily, researchDaily, courtExileCheck, затем DAILY_EXT) — то, что уже перенесено
 	if G.has("court"):
 		SimCourt.councilDaily()
+		SimDyn.dynastyDaily()
+		SimTech.researchDaily()
+		SimPlayer.courtExileCheck()
 		mudDaily()
 	checkRealms()
 	checkVictory()

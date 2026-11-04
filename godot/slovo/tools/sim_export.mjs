@@ -62,7 +62,8 @@ function pageDay() {
   for (const m of G.msgs) if (!m.done && m.until < G.day) { m.done = 1; if (m.kind === 'call') declineCall(m); }
   G.msgs = G.msgs.filter(m => !m.done || G.day - m.day < 2);
   G.armies = G.armies.filter(a => a.alive);
-  if (G.court) { councilDaily(); const mud = DAILY_EXT.find(f => String(f).includes('G.mudOn')); mud(); }
+  if (G.court) { const mud = DAILY_EXT.find(f => String(f).includes('G.mudOn'));
+    for (const f of [councilDaily, dynastyDaily, researchDaily, courtExileCheck, mud]) { try { f(); } catch (e) { (window.__errs = window.__errs || []).push('день ' + G.day + ': ' + (e && e.stack || e)); } } }
   checkRealms(); checkVictory();
   computeVision(); updateSigns();
 }
@@ -90,7 +91,7 @@ function pageRef(seed, days, snaps, steps, acts) {
   }
   const ms = performance.now() - t0;
   parts.splice(2, 0, b64(window.__gdv({ seed, days, steps, snaps: shot, dig, ms, acts })));
-  return { parts, chars: G.chars.length, armies: G.armies.length, ms };
+  return { parts, chars: G.chars.length, armies: G.armies.length, ms, errs: window.__errs || [] };
 }
 const t0 = Date.now();
 const tab = await page.evaluate(src => window.T.ev('(' + src + ')()'), pageTables.toString());
@@ -113,7 +114,7 @@ const ACTS = SEED !== 777 || process.env.SIM_ACTS === '0' ? [] : [
 const DAYS = +(process.env.SIM_DAYS || 84), STEPS = +(process.env.SIM_STEPS || 24), SNAPS = process.env.SIM_SNAPS === 'all' ? [...Array(DAYS)].map((_, i) => i + 1) : [1, 2, 7, 21, 28, 84].filter(d => d <= DAYS);
 const ref = await page.evaluate(([src, lib, seed, days, snaps, steps, acts]) => window.T.ev(lib + '\n;(' + src + ')(' + seed + ',' + days + ',' + JSON.stringify(snaps) + ',' + steps + ',' + JSON.stringify(acts) + ')'), [pageRef.toString(), [pageStep, pageDay, pageAct].map(f => f.toString()).join('\n'), SEED, DAYS, SNAPS, STEPS, ACTS]);
 await browser.close();
-if (errs.length) { console.error('ошибки страницы:\n' + errs.join('\n')); process.exit(1); }
+if (errs.length || ref.errs.length) { console.error('ошибки страницы:\n' + errs.concat(ref.errs).join('\n')); process.exit(1); }
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'sim_tables.bin'), Buffer.from(tab, 'base64'));
 // эталон: зерно, число кусков, длины, затем куски — newGame, newGame3, сводка дней, снимки дней (каждый — отдельный Variant)

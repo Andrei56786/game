@@ -57,6 +57,7 @@ func _initialize() -> void:
 	var pz := 3000 if "--pauses" in OS.get_cmdline_user_args() else 0
 	var fr0 := Engine.get_process_frames()
 	var acts: Array = meta.get("acts", [])
+	Sim.echo = "--log" in OS.get_cmdline_user_args()
 	for d in range(1, days + 1):
 		# дела короля этого дня (pageAct в HTML: поручения совету), затем шаги движения (pageStep: походы войск и встречи), затем сам день
 		for a in acts:
