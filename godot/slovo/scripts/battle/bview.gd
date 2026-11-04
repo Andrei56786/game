@@ -1003,7 +1003,16 @@ func _process(dt: float) -> void:
 	B.arrows = B.arrows.filter(func(a): return B.t < a.t0 + a.d)
 	B.fx = B.fx.filter(func(f): return NOW - f.n0 < 1.6 if f.has("n0") else B.t - f.t0 < 2)
 	B.couriers = B.couriers.filter(func(c): return B.t < c.t1)
+	for k in B.snd:
+		Snd.sfx(String(k))
 	B.snd.clear()
+	if B.phase == "fight" and B.over == null:
+		var n := 0
+		for u in B.units:
+			if u.contact.size() and SimBattle.bAlive(u):
+				n += 1
+		if n:
+			Snd.battle_noise(n)
 	if bf != null:
 		bf.add_dead(B.dead, sdark)
 	queue_redraw()
@@ -1027,6 +1036,7 @@ func finish_battle() -> void:
 		parts.append(EG[ef])
 	res.genFate = " ".join(parts)
 	res.genBad = gf == "captured" or gf == "killed"
+	Snd.sfx("fanfare" if int(JS.n(res.get("win"))) == 0 else "defeat")
 	if ef == "captured":
 		var g: Variant = s1.get("gen")
 		if g is Dictionary and int(JS.n(g.get("realm"))) < 5 and g.get("realm") != null:

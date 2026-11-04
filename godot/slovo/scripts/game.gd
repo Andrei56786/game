@@ -7,7 +7,7 @@ extends Node
 # кроме догонялки после сна, команды day или долгой жизни при дворе до первого открытия карты: тогда шаги и дни
 # идут подряд, сколько влезет в долю кадра. Карта рисует войска плавно (view_pos): на час позже счёта, между
 # положениями до и после последнего шага.
-const VERSION := "0.7.0"
+const VERSION := "0.8.0"
 const DAY_SEC := [0.0, 360.0, 180.0, 60.0]   # секунд на игровые сутки при дворе (COURT_SPD в HTML)
 const MAP_SPD := [0.0, 1.6, 0.8, 0.3]        # секунд на сутки на карте (SPD в HTML)
 const DAYS_SEASON := 21
@@ -56,7 +56,12 @@ func set_speed(i: int) -> void:
 		last_speed = speed
 
 func toggle_pause() -> void:
-	set_speed(0 if speed > 0 else last_speed)
+	ui_speed(0 if speed > 0 else last_speed)
+
+## скорость с панели или клавишей (setSpeed в HTML): щелчок
+func ui_speed(i: int) -> void:
+	set_speed(i)
+	Sim.sfx("click")
 
 ## ход часов: при дворе — сутки за DAY_SEC[speed] секунд, на карте — за MAP_SPD[speed] (кадр не длиннее 0,1 с, как в HTML)
 func advance(dt: float, on_map := false) -> void:

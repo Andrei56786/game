@@ -358,9 +358,9 @@ func key(k: int) -> void:
 		KEY_SPACE:
 			Game.toggle_pause()
 		KEY_0, KEY_1, KEY_2, KEY_3:
-			Game.set_speed(k - KEY_0)
+			Game.ui_speed(k - KEY_0)
 		KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3:
-			Game.set_speed(k - KEY_KP_0)
+			Game.ui_speed(k - KEY_KP_0)
 
 ## щелчок, как мышью (для проверок): окна, верхняя строка, поле карты
 func click_at(p: Vector2, b := 0) -> void:
@@ -548,14 +548,19 @@ func ui_state() -> Dictionary:
 func state() -> Dictionary:
 	return {"ok": G != null and G.ok, "stage": G.stage if G else "", "ms": G.ms if G else {}, "cam": [snappedf(cam.x, 0.1), snappedf(cam.y, 0.1), cam.z], "mode": mode,
 		"chunks": G.chunks.size() if G else 0, "built": G.nbuilt if G else 0, "cms": snappedf(G.cms, 0.01) if G else 0.0, "prof": G.prof if G else {}, "vis": vis,
-		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s(), "realm": _realm_state(), "time": _time_state()}
+		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s(), "realm": _realm_state(), "time": _time_state(), "snd": Snd.state()}
 
 ## часы и дни королевства: день календаря и симуляции, скорость, сколько счёта уходит на день
 func _time_state() -> Dictionary:
 	var o := {"day": Game.day, "clock": Game.clock_text(), "speed": Game.speed, "lag_max": Game.lag_max, "fps": Engine.get_frames_per_second(), "steps": Game.steps_n,
-		"step_ms": snappedf(Game.step_ms, 0.1), "dt": snappedf(Game.dt_avg * 1000.0, 1.0), "b": snappedf(Game.b_ms, 1.0), "work": snappedf(Game.work_ms, 1.0)}
+		"step_ms": snappedf(Game.step_ms, 0.1), "dt": snappedf(Game.dt_avg * 1000.0, 1.0), "b": snappedf(Game.b_ms, 1.0), "work": snappedf(Game.work_ms, 1.0),
+		"modal": SimPlayer.modal}
 	if not Sim.G.is_empty():
-		o.merge({"sim": int(Sim.G.day), "busy": SimDay.busy, "ms": snappedf(SimDay.ms_day, 0.1), "frames": SimDay.frames, "n": SimDay.n_days,
+		var spring := -1                # последний день «весны» в летописи (за 3 последние записи она уходит, когда вестей много)
+		for e in Sim.G.log:
+			if "весна" in String(e.t):
+				spring = int(e.d)
+		o.merge({"sim": int(Sim.G.day), "spring": spring, "busy": SimDay.busy, "ms": snappedf(SimDay.ms_day, 0.1), "frames": SimDay.frames, "n": SimDay.n_days,
 			"avg": snappedf(SimDay.sum_ms / maxf(1.0, SimDay.n_days), 0.1), "max": snappedf(SimDay.max_ms, 0.1), "log": Sim.G.log.size(),
 			"feed": Sim.feed.size(), "mud": snappedf(JS.n(Sim.G.get("mud")), 0.01), "mudOn": JS.t(Sim.G.get("mudOn")),
 			"last": (Sim.G.log as Array).slice(-3).map(func(e): return "%d: %s" % [int(e.d), String(e.t).left(48)])})

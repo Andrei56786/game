@@ -20,11 +20,59 @@ func _ready() -> void:
 	if "--selftest" in OS.get_cmdline_user_args():
 		_selftest.call_deferred()
 		return
+	if "--council" in OS.get_cmdline_user_args():   # только совет (быстро): -- --council
+		_council_only.call_deferred()
+		return
+	if "--snd" in OS.get_cmdline_user_args():       # только звук (быстро): -- --snd
+		_snd_only.call_deferred()
+		return
+	_hooks()
 	show_title()
 	if OS.has_feature("web"):
 		js_cb = JavaScriptBridge.create_callback(_js_cmd)
 		JavaScriptBridge.get_interface("window").slovo = js_cb
 	print("READY ", Game.VERSION, " · ", Engine.get_version_info().string)
+
+## окна текущего экрана (двор или карта): разговоры королевства — туда
+func cur_ui() -> Variant:
+	if court != null and cur == court:
+		return court.hud
+	if mapv != null and cur == mapv:
+		return mapv.ui
+	return null
+
+## слова королевства на экране (DLG.say и say в HTML): ответ советника на поручение — над его головой (если он здесь;
+## иначе — строкой), весть о смерти короля — разговором, «Как назовёте?» при рождении — разговором с выбором имени
+func _hooks() -> void:
+	SimCourt.say_hook = func(k: String, line: String) -> bool:
+		if court == null or cur != court:
+			return false
+		var n: Dictionary = court.npc_by("seat_" + k)
+		if n.is_empty():
+			return false
+		if n["loc"] == court.loc_id and not n["away"]:
+			court.people.say(n, line, 4.0)
+		else:
+			court.hud.toast(SimDyn.seatName(k) + ": «" + line + "»")
+		return true
+	SimDyn.say_hook = func(k: Variant, text: String) -> void:
+		if k == null:
+			var u: Variant = cur_ui()
+			if u != null:
+				u.say(null, text)
+		elif court != null and cur == court:
+			var n: Dictionary = court.npc_by(String(k))
+			if not n.is_empty() and n["loc"] == court.loc_id and not n["away"]:
+				court.people.say(n, text, 4.0)
+	SimDyn.birth_hook = func(text: String, opts: Array, mk: Callable) -> void:
+		var u: Variant = cur_ui()
+		if u == null:
+			mk.call(String(opts[0]))
+			return
+		var ch: Array = []
+		for nm in opts:
+			ch.append({"t": String(nm), "fx": func(): mk.call(String(nm))})
+		u.say(null, text, {"name": "Рождение", "choices": ch, "esc": 0})
 
 func _set_cur(n: Node) -> void:
 	if cur == n:
@@ -36,6 +84,25 @@ func _set_cur(n: Node) -> void:
 			cur.queue_free()
 	cur = n
 	add_child(n)
+	_snd_screen(n)
+
+## звук по экрану (sndui): заставка — своя пьеса, двор и карта — по месту и часу (auto), бой — «Битва» или «Осада»
+func _snd_screen(n: Node) -> void:
+	var sc: Variant = n.get_script()
+	if sc == Title:
+		Snd.screen = "title"
+		Snd.court = null
+		Snd.music("title")
+	elif sc == Court:
+		Snd.screen = "court"
+		Snd.court = n
+		Snd.music("auto")
+	elif sc == MapView:
+		Snd.screen = "map"
+		Snd.music("auto")
+	elif sc == BView:
+		Snd.screen = "battle"
+		Snd.music("battle")
 
 func _drop_court() -> void:
 	if court:
@@ -73,6 +140,8 @@ func show_map() -> void:
 		# вести, пока король сидел при дворе, — не окна карты (при дворе — свои)
 		SimDay.alerts = []
 		SimPlayer.toasts.clear()
+		if court != null and cur == court:
+			Snd.sfx("paper")      # стол карт (openMapFromCourt)
 	if first:
 		mapv = MapView.new()
 		mapv.G = gpu
@@ -83,6 +152,7 @@ func show_map() -> void:
 		else:
 			mapv.center_capital()
 	_set_cur(mapv)
+	mapv.ui.court = court       # окна двора на карте (Малый совет, письма) знают о дворе
 	if first:
 		mapv.ui.battle.connect(show_battle)
 		mapv.ui.to_court.connect(_to_court)
@@ -114,6 +184,7 @@ func show_battle(A: Dictionary, Bs: Dictionary, tile: int, o: Dictionary = {}) -
 		await get_tree().process_frame
 	var v: Control = BView.new()
 	v.name = "Battle"
+	Snd.siege = JS.t(o.get("siege"))
 	_set_cur(v)
 	v.setup(A, Bs, tile, o)
 	v.finished.connect(_battle_done)
@@ -163,6 +234,8 @@ func back_to_court() -> void:
 	if court == null:
 		show_court()
 		return
+	if cur == mapv and mapv != null:
+		Snd.sfx("door")           # от стола карт ко двору (backToCourt)
 	_set_cur(court)
 	court.cam.make_current()
 	print("COURT")
@@ -206,14 +279,114 @@ func _selftest() -> void:
 	add_child(c)
 	await get_tree().process_frame
 	var ok: bool = c.selftest()
+	remove_child(c)           # дальше — королевство без двора (окна двора не берут вести карты)
+	c.queue_free()
 	var sok: bool = await _sim_selftest()
 	ok = sok and ok
 	var pok: bool = await _player_selftest()
 	ok = pok and ok
 	var bok: bool = await _battle_selftest()
 	ok = bok and ok
+	var cok: bool = await _council_selftest()
+	ok = cok and ok
+	var nok: bool = await _snd_selftest()
+	ok = nok and ok
 	print("SELFTEST OK" if ok else "SELFTEST FAIL")
 	get_tree().quit(0 if ok else 1)
+
+func _snd_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _snd_selftest()
+	print("SND OK" if ok else "SND FAIL")
+	get_tree().quit(0 if ok else 1)
+
+func _council_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _council_selftest()
+	print("COUNCIL OK" if ok else "COUNCIL FAIL")
+	get_tree().quit(0 if ok else 1)
+
+## совет при дворе на данных королевства (court.council_test), люди двора из королевства и приём прошений (court.people_test)
+func _council_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.council_test()
+	var pok: bool = c.people_test()
+	print("selftest: двор из королевства и прошения — ", "OK" if pok else "FAIL")
+	ok = ok and pok
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## звук без экрана (Snd): записи на месте (пьесы — OGG своей длины, звуки, шумы ровно по 2 с), музыка по месту, часу и экрану
+## (resolve), пьеса начинается, звуки из очереди симуляции, шумы места, земля под ногами (surfAt) и шаги
+func _snd_selftest() -> bool:
+	if not Snd.ok:
+		print("selftest: звук — нет записей (snd/index.json; tools/snd_export.mjs) — FAIL")
+		return false
+	var I: Dictionary = Snd.idx
+	var pe: Dictionary = I.music.get("peace", {})
+	var ps: AudioStream = Snd._st(String(pe.get("f", "")))
+	var cl: AudioStream = Snd._st("sfx/click.wav")
+	var bd: AudioStream = Snd._st("bed/wind.wav")
+	var ok: bool = I.music.size() >= 40 and I.sfx.size() >= 25 and I.amb.size() >= 30 and I.bed.size() >= 9 and I.step.size() >= 9
+	ok = ok and ps != null and absf(ps.get_length() - float(pe.get("len", 0))) < 1.0 and cl != null and cl.get_length() > 0.01 and bd != null and absf(bd.get_length() - 2.0) < 0.01
+	var h0 := Game.hour_abs()
+	var c: Node = Court.new()
+	_set_cur(c)
+	await get_tree().process_frame
+	var R := {}
+	for e in [["keep", 12.0], ["keep", 23.0], ["dungeon", 12.0], ["chapel", 12.0], ["hall", 12.0], ["yard", 12.0], ["forest", 7.0]]:
+		if c.loc_id != e[0]:
+			c.go_loc(e[0])
+		Game.set_hour(e[1])
+		R["%s@%d" % [e[0], int(e[1])]] = Snd.resolve()
+	var rok: bool = R["keep@23"] == "night" and R["dungeon@12"] == "dungeon" and R["chapel@12"] == "chapel" and (String(R["yard@12"]).begins_with("outdoor") or R["yard@12"] in ["garden", "war"])
+	rok = rok and R["keep@12"] in ["court", "war", "sick", "throne", "study", "council"] and Snd.FAM.has(R["keep@12"]) and Snd.FAM.has(R["forest@7"])
+	# пьеса двора начинается (через 0,05 с), голоса и шумы двора днём, звуки из очереди симуляции и окон
+	c.cmd(PackedStringArray(["spot", "throne_front"]))
+	Game.set_hour(12.0)
+	Snd.music("auto")
+	var n0 := Snd.n_pieces
+	var s0 := Snd.n_sfx
+	Sim.sfx("coin")
+	c.hud.say(null, "Проверка звука.")
+	await get_tree().create_timer(0.9).timeout
+	var st := Snd.state()
+	var mok: bool = Snd.n_pieces > n0 and Snd.fam_list(Snd.family()).has(Snd.mood()) and Snd.n_sfx >= s0 + 2 and "coin" in st.last and "paper" in st.last
+	var pl0 := "%s «%s»" % [Snd.family(), Snd.mood()]
+	c.hud.close_dlg()
+	c.go_loc("yard")
+	c.cmd(PackedStringArray(["spot", "well"]) if c.spots.has("well") else PackedStringArray(["goto", "0"]))
+	await get_tree().create_timer(1.2).timeout
+	var beds0: Dictionary = Snd.state().beds
+	var bok: bool = beds0.has("wind")
+	var sf := Snd.surf_at(float(c.king.x), float(c.king.y))
+	var k0 := Snd.n_steps
+	Snd.step(sf, 0.05)
+	var fok: bool = Snd.STEPV.has(sf) and Snd.n_steps == k0 + 1
+	# карта и бой: семьи пьес по экрану
+	Snd.screen = "map"
+	var rm := Snd.resolve()
+	Snd.screen = "battle"
+	Snd.want = "battle"
+	Snd.siege = true
+	var rs := Snd.resolve()
+	Snd.siege = false
+	var rb := Snd.resolve()
+	var sok: bool = Snd.FAM.has(rm) and rs == "siege" and rb == "battle"
+	Snd.stop_all()
+	remove_child(c)
+	c.queue_free()
+	cur = null
+	Game.set_hour(h0)
+	await get_tree().create_timer(0.3).timeout     # звук отпускает записи
+	var all := ok and rok and mok and bok and fok and sok
+	print("selftest: звук — пьес %d (%s), звуков %d, голосов %d, шумов %d; музыка: %s, карта %s, бой %s/%s; играет %s, звуки %s, шумы во дворе %s, земля «%s» — %s" % [I.music.size(),
+		String(I.enc), I.sfx.size(), I.amb.size(), I.bed.size(), str(R), rm, rb, rs, pl0, str(st.last), str(beds0), sf,
+		"OK" if all else "FAIL (%s)" % str([ok, rok, mok, bok, fok, sok])])
+	return all
 
 ## королевство без экрана: новая игра в мире из выгрузки, подсказки всех поселений и войск, обзор, казна
 func _sim_selftest() -> bool:

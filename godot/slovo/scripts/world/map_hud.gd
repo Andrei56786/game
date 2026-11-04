@@ -846,6 +846,25 @@ func _btn(label: String, x: float, y: float, w: float, h: float, act: Callable, 
 	txt(label, lx, y + 4, Color8(255, 242, 200) if (active or hv) else Color8(232, 220, 192), "m", "c")
 	btns.append([r, act])
 
+## кнопка-значок 12×14 в верхней строке (btn style dark); dot — красная точка (непрочитанные письма)
+func _ibtn(ik: String, x: float, act: Callable, active: bool, tip: Callable, dot := false) -> void:
+	var r := Rect2(x, 2, 12, 14)
+	var lit: bool = active or (r.has_point(mouse()) and not mv.ui.is_open())
+	box(x, 2, 12, 14, PO)
+	box(x + 1, 3, 10, 12, Color8(90, 64, 48) if lit else Color8(44, 32, 24))
+	var ic: Array = Art.D["icons"].get(ik, [])
+	if not ic.is_empty():
+		var sz := Art.size(ic[0])
+		var X := roundf(x + 6 - sz.x / 2.0)
+		var Y := roundf(2 + (14 - sz.y) / 2.0)
+		if not _hi(ik, "one", X, Y):
+			spr(ic[0], X, Y)
+	if dot:
+		box(x + 7, 1, 6, 6, PO)
+		box(x + 8, 2, 4, 4, Color.html("#e04030"))
+	btns.append([r, act])
+	tips.append([r, tip])
+
 func _bar(x: float, y: float, w: float, h: float, v: float, c: String) -> void:
 	box(x, y, w, h, PO)
 	box(x + 1, y + 1, w - 2, h - 2, Color.html("#2a1d16"))
@@ -934,7 +953,7 @@ func _top() -> void:
 	speed_btns(bx, mouse(), held)
 	for i in 4:
 		var r := Rect2(bx + i * 15, 2, 14, 14)
-		btns.append([r, func(): Game.set_speed(i)])
+		btns.append([r, func(): Game.ui_speed(i)])
 		if i == 0 and held:
 			tips.append([r, func(): return [SimText.row("Время стоит"), SimText.row("Пока открыто окно, письмо или идёт разговор, время не идёт. Закройте окно — и оно пойдёт со скоростью " + str(Game.speed) + ".", "#e8dcc0")]])
 		else:
@@ -942,6 +961,13 @@ func _top() -> void:
 	if held:
 		var a := 0.55 + sin(now() * 3.0) * 0.3
 		box(bx + Game.speed * 15 + 3, 13, 8, 1, Color(Art.pal("y"), a))
+	# окна двора (B3 в drawTopBar): Малый совет и письма — с красной точкой, пока есть непрочитанные
+	if sim_on() and Sim.G.has("court"):
+		bx -= 6.0 + 2 * 13.0
+		var ui = mv.ui
+		var un: int = ui.unread()
+		_ibtn("i_seal", bx, func(): ui.toggle_win("council"), ui.win != null and ui.win.k == "council", func(): return [SimText.row("Малый совет (K)")])
+		_ibtn("i_raven", bx + 13, func(): ui.toggle_win("letters"), ui.win != null and ui.win.k == "letters", func(): return [SimText.row("Письма (L)" + (" — непрочитанных: " + str(un) if un > 0 else ""))], un > 0)
 	# дата и погода королевства (weatherOf), с распутицей; не влезает — сначала короче, потом без названия погоды
 	var end_x := bx - 6.0
 	var ds := Game.date_text()

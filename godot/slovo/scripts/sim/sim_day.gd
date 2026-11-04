@@ -135,10 +135,27 @@ static func dailyTick(budget := 0) -> void:
 				declineCall(m)
 	G.msgs = G.msgs.filter(func(m): return not JS.t(m.get("done")) or G.day - m.day < 2)
 	G.armies = G.armies.filter(func(a): return JS.t(a.alive))
+	# день двора (events.js: councilDaily, dynastyDaily, researchDaily, courtExileCheck, затем DAILY_EXT)
 	if G.has("court"):
+		SimCourt.councilDaily()
+		SimDyn.dynastyDaily()
+		SimTech.researchDaily()
+		SimPlayer.courtExileCheck()
+		# DAILY_EXT — в порядке сборки: projects, feast, chapel, supply, march, reign, birds, sick
+		SimExt.projDaily()
+		SimExt.feastDaily()
+		SimExt.ransomDaily()
+		SimExt.supWarn()
 		mudDaily()
+		SimExt.reignDaily()
+		SimBirds.birdsDaily()
+		SimSick.sickDaily()
 	checkRealms()
 	checkVictory()
+	if Sim.dayOfYear(G.day) == Sim.DAYS_SEASON * 3 and G.day > 0:
+		SimExt.holdCouncil()
+	if G.day > 6 and Sim.R.f() < 0.055 and not JS.t(G.get("over")):
+		SimExt.randomEvent()
 	if due():
 		await pause()
 	pt = _prof("rest", pt)

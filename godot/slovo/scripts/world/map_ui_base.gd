@@ -6,6 +6,7 @@ signal battle(A, Bs, tile, o)
 signal to_court(spot)
 signal mode_changed
 
+const People = preload("res://scripts/people.gd")
 const UICON := {"levy": "i_men", "spear": "i_shield", "sword": "i_sword", "archer": "i_bow", "xbow": "i_xbow", "horse": "i_horse", "harch": "i_harch", "knight": "i_knight"}
 # девять местностей (Сунь-цзы, гл. 11; army.js: GROUNDS)
 const GROUNDS := {"dispersive": {"n": "Рассеивающая", "q": "На рассеивающей земле не сражайся.", "e": "Своя земля: воины думают о доме. Дезертирство ×2, боевой дух в бою −5."},
@@ -100,6 +101,10 @@ func port_i(c: Variant) -> int:
 		return -1
 	if not Sim.G.is_empty() and c.get("id") == Sim.G.player.char:
 		return int(Art.D.get("king", {}).get("port", -1))
+	# лицо из выгрузки по id (как portrait в HTML), пока облик не сменился с возрастом; иначе — по державе
+	var e: Variant = (Art.D.get("cspr", {}) as Dictionary).get(JS.s(c.get("id")))
+	if e is Array and int(e[1]) >= 0 and String(e[2]) == People.age_key(JS.n(c.get("age"))):
+		return int(e[1])
 	var cul := String(c.get("cul", ""))
 	var r := 6
 	for i in Sim.REALM_DEF.size():

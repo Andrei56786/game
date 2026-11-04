@@ -50,6 +50,10 @@ func sched_target(n: Dictionary) -> String:
 	for e in S:
 		if float(e[0]) <= h:
 			cur = e
+	# на время — другое место (совет, пир, месса): {spot, until, day}
+	var ov: Variant = n.get("override")
+	if ov is Dictionary and float(ov.until) > h and int(ov.day) == Game.day:
+		return String(ov.spot)
 	if cur[1] == "stairs" and n.has("bed") and not spot_of(n["bed"]).is_empty():
 		return n["bed"]
 	return cur[1]
@@ -72,8 +76,9 @@ func sched_tick(n: Dictionary) -> void:
 	if not sp.is_empty():
 		go_sp(n, sp, null)
 
-func go_sp(n: Dictionary, sp: Dictionary, wander) -> void:
-	n["goal"] = {"sp": sp, "wander": wander, "door": null}
+## идти к месту (npcGoToSp); then(n) — когда дошёл (проситель у трона, ушедший за ворота)
+func go_sp(n: Dictionary, sp: Dictionary, wander, then := Callable()) -> void:
+	n["goal"] = {"sp": sp, "wander": wander, "door": null, "then": then}
 	n["sit"] = null
 	n["lie"] = false
 	if n["away"]:
@@ -85,6 +90,17 @@ func go_sp(n: Dictionary, sp: Dictionary, wander) -> void:
 		place(n, from)
 		n["away"] = false
 	repath(n)
+
+## идти к месту по имени (npcGoTo)
+func go_to(n: Dictionary, nm: String, then := Callable()) -> void:
+	var sp := spot_of(nm)
+	if not sp.is_empty():
+		go_sp(n, sp, null, then)
+
+static func _then(g: Dictionary, n: Dictionary) -> void:
+	var th: Variant = g.get("then")
+	if th is Callable and (th as Callable).is_valid():
+		(th as Callable).call(n)
 
 func door_toward(from: String, to: String) -> Variant:
 	if from == to:
@@ -162,6 +178,7 @@ func arrive(n: Dictionary) -> void:
 	if g["wander"] != null:
 		n["wander"] = g["wander"]
 		n["idle"] = 0.3
+	_then(g, n)
 
 func update(n: Dictionary, dt: float) -> void:
 	if n["away"]:
@@ -216,6 +233,8 @@ func snap(only_fresh: bool) -> void:
 				place(n, ps)
 			n["away"] = false
 			continue
+		if n.get("visitor", false):    # гости (просители) идут своим путём
+			continue
 		n["cur"] = ""
 		sched_tick(n)
 		var g = n["goal"]
@@ -239,7 +258,196 @@ func snap(only_fresh: bool) -> void:
 			if g["wander"] != null:
 				n["wander"] = g["wander"]
 				n["idle"] = 0.3
+			_then(g, n)
 
 func say(n: Dictionary, s: String, dur: float) -> void:
 	n["bub"] = s
 	n["bub_t"] = c.t + dur
+
+# ---------- кто живёт при дворе (courtPopulate, src/court.js) ----------
+# Семья, воспитанники и Малый совет — из королевства (G), слуги и стража — из выгрузки, узники короны — в темнице.
+# Прежние записи людей сохраняются по ключу (где стоят, куда идут); заселение заново — когда сменились места совета
+# (SimCourt.seats_rev) или люди (SimDyn.pop_rev: рождения, смерти, годы, браки, воспитанники).
+var pop_g = null           # Sim.G при последнем заселении
+var revs := [-1, -1]
+
+## заселить заново, если королевство есть и места или люди сменились
+func pop_check() -> bool:
+	if Sim.G.is_empty() or not Sim.G.has("court"):
+		return false
+	if pop_g != null and is_same(pop_g, Sim.G) and revs[0] == SimCourt.seats_rev and revs[1] == SimDyn.pop_rev:
+		return false
+	populate()
+	return true
+
+## возраст облика (как lookKey в HTML): ребёнок, взрослый, пожилой, старик
+static func age_key(age: float) -> String:
+	return "c" if age < 14 else ("a" if age < 52 else ("o" if age < 64 else "v"))
+
+## облик (лист 4×4 и лицо) человека королевства: по id из выгрузки (res.cspr), а если облик с тех пор сменился
+## по возрасту или человек родился позже — из запаса по полу и возрасту (res.cstock); проситель (pseudoChar) — из запаса
+## по роли и полу (res.pstock)
+static func look(D: Dictionary, ch: Dictionary) -> Array:
+	var fk := "1" if JS.t(ch.get("fem")) else "0"
+	if JS.t(ch.get("pseudo")):
+		var P: Array = (D.get("pstock", {}) as Dictionary).get(String(ch.get("role", "")) + fk, [])
+		if not P.is_empty():
+			var s0: Array = P[posmod(int(JS.n(ch.get("id"))), P.size())]
+			return [s0[0], int(s0[1])]
+	var ak := age_key(JS.n(ch.get("age")))
+	var e: Variant = (D.get("cspr", {}) as Dictionary).get(JS.s(ch.get("id")))
+	if e is Array and String(e[2]) == ak:
+		return [e[0], int(e[1])]
+	var L: Array = (D.get("cstock", {}) as Dictionary).get(ak + fk, [])
+	if L.is_empty():
+		return [D.king.sheet, -1]
+	var s: Array = L[posmod(int(JS.n(ch.get("id"))), L.size())]
+	return [s[0], int(s[1])]
+
+## имя над головой и строка под ним (npcTitle / npcSub, src/courtui.js)
+static func npc_title(n: Dictionary, ch: Dictionary) -> String:
+	if String(n.get("seat", "")) != "":
+		return SimDyn.seatName(n.seat) + ": " + String(ch.name)
+	if JS.t(ch.get("pseudo")):
+		return String(ch.name)
+	var t := String(ch.get("title", ""))
+	return (t + " " if t != "" else "") + String(ch.name)
+
+static func npc_sub(n: Dictionary, ch: Dictionary) -> String:
+	if n.has("sub0"):
+		return String(n.sub0)
+	if n.has("petition"):
+		return "Проситель"
+	if n.has("fam"):
+		return SimDyn.famRole(ch)
+	if String(n.key).begins_with("ward"):
+		return "Воспитанник двора · дом " + SimDyn.houseName(ch.get("house"))
+	if String(n.get("seat", "")) != "":
+		var H: Variant = SimDyn.houseOf(ch)
+		return "дом " + String(H.name) if H != null else ""
+	return ""
+
+## человек двора из G (mkNpc): прежняя запись по ключу — с новыми данными, иначе новая (fresh — встанет по расписанию)
+func mk(out: Array, old: Dictionary, key: String, ch: Dictionary, o: Dictionary) -> Dictionary:
+	var n: Dictionary
+	if old.has(key):
+		n = old[key]
+	else:
+		n = make({"key": key, "loc": "keep", "x": 0, "y": 0, "dir": "down", "away": 1, "home": "stairs", "lines": ["…"],
+			"spd": 46.0 - (10.0 if JS.n(ch.get("age")) > 60 else 0.0)})
+	for k in o:
+		n[k] = o[k]
+	var lk := look(c.D, ch)
+	n.cid = ch.id
+	n.sheet = lk[0]
+	n.port = lk[1]
+	n.role = String(ch.get("role", ""))
+	if JS.t(ch.get("fem")):
+		n.fem = 1
+	else:
+		n.erase("fem")
+	if JS.n(ch.get("age")) < 12:
+		n.kid = 1
+	else:
+		n.erase("kid")
+	n.name = npc_title(n, ch)
+	n.sub = npc_sub(n, ch)
+	out.append(n)
+	return n
+
+func populate() -> void:
+	var G := Sim.G
+	var C: Dictionary = G.court
+	var S: Dictionary = c.D.get("sched", {})
+	var old := {}
+	for n in c.npcs:
+		old[String(n.key)] = n
+	var out: Array = []
+	var king: Dictionary = SimPlayer.kingC()
+	# семья: супруга, дети с трёх лет (расписание — по возрасту)
+	for ch: Dictionary in SimDyn.royalFamily():
+		if SimCourt.seatOf(ch) != null:
+			continue
+		if ch.id == king.get("spouse"):
+			mk(out, old, "spouse", ch, {"sched": S.consort, "home": "stairs", "fam": 1})
+			continue
+		var age := JS.n(ch.get("age"))
+		if age < 3:
+			continue
+		mk(out, old, "kid" + JS.s(ch.id), ch, {"sched": S.consort if age >= 16 else (S.heir if age >= 10 else S.child), "home": "stairs", "fam": 1,
+			"spd": 44.0 if age >= 16 else 40.0})
+	# воспитанники двора
+	for w in C.get("wards", []):
+		var ch: Variant = Sim.charOf(w)
+		if ch != null and JS.t(ch.alive):
+			mk(out, old, "ward" + JS.s(w), ch, {"sched": S.child, "home": "stairs", "spd": 40.0})
+	# Малый совет — без отъехавших и умерших; маршал живёт в казармах
+	for s: Dictionary in Sim.SEATS:
+		var id: Variant = C.seats.get(s.k)
+		if id == null or float(id) < 0:
+			continue
+		var ch: Variant = Sim.charOf(id)
+		if ch == null or not JS.t(ch.alive) or JS.t(ch.get("away")):
+			continue
+		mk(out, old, "seat_" + String(s.k), ch, {"sched": S[s.k], "home": "barracks1" if s.k == "marshal" else "stairs", "seat": String(s.k)})
+	# слуги, стража, лекарь — из выгрузки
+	for p: Dictionary in c.D.people:
+		var k := String(p.key)
+		if k.begins_with("srv_") or k.begins_with("grd_"):
+			out.append(old[k] if old.has(k) else make(p))
+	# узники короны — по камерам (homeExtras)
+	var P: Array = G.chars.filter(func(x): return JS.t(x.alive) and float(x.get("prison", -1)) == 0.0 and x.id != G.player.char).slice(0, 12)
+	for i in P.size():
+		var sp := "cell" + str(i % 6) + ("b" if i >= 6 else "")
+		var n := mk(out, old, "pris" + JS.s(P[i].id), P[i], {"pris": 1, "post": sp, "sub0": "Узник короны"})
+		n.lines = [prisoner_line(P[i])]
+	assign_beds(out)
+	# гости (просители) — как были; ушедших — с экрана
+	for n in c.npcs:
+		if n.get("visitor", false):
+			out.append(n)
+	for n in c.npcs:
+		if not out.has(n) and n.get("node") != null:
+			(n.node as Node).queue_free()
+			n.node = null
+	c.npcs = out
+	pop_g = G
+	revs = [SimCourt.seats_rev, SimDyn.pop_rev]
+	snap(true)
+
+## постели (assignBeds, src/castle2.js): советникам — свои, королеве — своя, детям и воспитанникам — детские (старшему — гостевая)
+func assign_beds(L: Array) -> void:
+	var kid := 0
+	var guest := false
+	for n in L:
+		n.erase("bed")
+		var k := String(n.key)
+		if String(n.get("seat", "")) != "":
+			n.bed = "bed_" + String(n.seat)
+		elif k == "spouse":
+			n.bed = "bed_queen"
+		elif k.begins_with("kid") or k.begins_with("ward"):
+			var ch: Variant = Sim.charOf(n.get("cid"))
+			if ch != null and JS.n(ch.get("age")) >= 16 and not guest:
+				n.bed = "bed_guest"
+				guest = true
+			elif kid < 4:
+				n.bed = "bed_kid" + str(kid)
+				kid += 1
+		elif String(n.get("staff", "")) == "maid":
+			n.bed = "bed_maid"
+		elif String(n.get("staff", "")) == "page":
+			n.bed = "bed_page"
+
+## первая реплика узника (prisonerTalk, src/chapel.js): свой — просит милости, чужой — по нраву
+static func prisoner_line(ch: Dictionary) -> String:
+	var tr: Array = ch.get("traits", [])
+	if ch.realm == 0.0:
+		return "«Я служил короне верно, государь. Меня оговорили!»" if tr.has("proud") else "«Смилуйтесь, государь! Я искуплю вину.»"
+	if tr.has("craven"):
+		return "«Пощадите! Я скажу всё, что знаю!»"
+	if tr.has("proud"):
+		return "«Мой господин заплатит за меня золотом — а за эту солому спросит железом.»"
+	if tr.has("brave"):
+		return "«Я бился честно — и в цепях остаюсь воином.»"
+	return "«Солома сырая, похлёбка жидкая. Чего вы хотите, король?»"

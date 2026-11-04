@@ -1,35 +1,32 @@
-extends "res://scripts/world/map_ui_base.gd"
-## Окна карты королевства — перенос screens2.js (drawEncounter, drawBattleResult, drawCapturedModal, drawWarModal,
-## drawEventModal), screens.js (drawSettWin: осада и сведения), ui.js (drawArmyCard — карточка войска короля),
+extends "res://scripts/world/court_wins.gd"
+## Окна карты королевства — перенос screens2.js (drawEncounter, drawBattleResult, drawCapturedModal), screens.js (drawSettWin: осада и сведения), ui.js (drawArmyCard — карточка войска короля),
 ## command.js (capitalGate); окно войск короны (drawCmdWin) и приборы рисования — в основе, map_ui_base.gd. Как в HTML: очередь окон-вестей
 ## UI.modals (на экране — первое), одно окно UI.win и разговор с выбором; пока что-то открыто, время на карте стоит.
 ## «В бой — командовать» и «Штурм — командовать» уходят наружу (battle: main откроет поле боя), въезд в замок — тоже
-## (to_court). Всплывающие строки (toast) — здесь же, поверх окон.
+## (to_court). Всплывающие строки (toast) — здесь же, поверх окон. Окна двора (Малый совет, письма, вести с выбором,
+## объявление войны, Совет короны) — общие с замком, в court_wins.gd.
 func _process(d: float) -> void:
 	super(d)
 	queue_redraw()
 
+## часы мигания в разговоре: время двора на карте стоит
+func _clock() -> float:
+	return now()
+
 
 # ---------- окна ----------
-func alert(k: String, d: Variant) -> void:
-	for m in modals:
-		if m.k == k and typeof(m.d) == typeof(d) and m.d == d:
-			return
-	modals.append({"k": k, "d": d})
-
-func close_modal() -> void:
-	if not modals.is_empty():
-		modals.pop_front()
-
 func open_cmd(sel: Variant = -1, preset: Variant = null) -> void:
 	win = {"k": "cmd", "sel": sel, "mode": "intent", "pick": "", "app": 0, "sc": 0, "preset": preset}
+	Snd.sfx("paper")
 
 ## сведения о поселении со стола карт (settinfo): король при дворе
 func open_settinfo(sid: int) -> void:
 	win = {"k": "settinfo", "id": sid}
+	Snd.sfx("paper")
 
 func open_sett(sid: int) -> void:
 	win = {"k": "sett", "id": sid, "tab": 0}
+	Snd.sfx("paper")
 
 ## каждый кадр карты: всплывающие строки и вести королевства (UI.alert) — в окна, пауза по прибытии
 func tick() -> void:
@@ -60,15 +57,12 @@ func _on_alert(e: Dictionary) -> void:
 			alert("enc", e.b)
 		"captured":
 			alert("captured", int(e.s))
-		"war":
-			alert("war", int(e.r))
 		"svc":
 			var a: Variant = Sim.armyById(e.army)
 			if a != null and a.kind == "player":
 				alert("event", _svc_event(a))
-		"msg":
-			var o: Dictionary = e.m
-			toast("Гонец с письмом: " + String(o.get("text", "")).left(120))
+		_:
+			court_alert(e)
 
 ## пауза по событию (autoPause): часы стоят, строка «… · пауза»
 func auto_pause(reason: String) -> void:
@@ -104,6 +98,9 @@ func key(k: int) -> bool:
 		else:
 			open_cmd()
 		return true
+	if k == KEY_K or k == KEY_L:
+		toggle_win("council" if k == KEY_K else "letters")
+		return true
 	if win != null and k == KEY_SPACE:
 		win = null
 		return false
@@ -116,15 +113,6 @@ func key(k: int) -> bool:
 		return true
 	return false
 
-## щелчок (c = {x, y, ux, uy, b, drag}): в разговоре — выбор, иначе — по областям прошлого кадра
-func click(c: Dictionary) -> void:
-	if dlg != null:
-		if c.b == 0:
-			dlg_click(Vector2(c.ux, c.uy))
-		return
-	if busy != "":
-		return
-	dispatch(c)
 
 
 # ---------- рисование ----------
@@ -140,6 +128,8 @@ func _draw() -> void:
 				_sett_win(win)
 			elif win.k == "settinfo":
 				_settinfo_win(win)
+			else:
+				_court_win(win)
 		if not modals.is_empty():
 			_modal(modals[0])
 		if dlg != null:
@@ -244,12 +234,9 @@ func _modal(m: Dictionary) -> void:
 			_bres(m)
 		"captured":
 			_captured(m)
-		"war":
-			_war(m)
-		"event":
-			_event(m)
 		_:
-			close_modal()
+			if not _court_modal(m):
+				close_modal()
 
 static func advice(r: float) -> String:
 	if r >= 8:
@@ -515,42 +502,8 @@ func cap_spare(sid: int) -> void:
 		if tr.has("honest") or tr.has("generous"):
 			SimDay.addOpn(r, Sim.G.player.realm, 3)
 
-## война объявлена (drawWarModal)
-func _war(m: Dictionary) -> void:
-	var r: int = m.d
-	var ru: Variant = SimDay.rulerOf(r)
-	var pr: float = Sim.G.player.realm
-	var p := dlg_box(380, 170, "Война!")
-	var x := p.x
-	var y := p.y
-	port48(ru, x + 14, y + 26)
-	shield(r, x + 26, y + 78)
-	tx((String(ru.get("title", "")) + " " + String(ru.name)).strip_edges() + " объявляет войну!", x + 72, y + 26, "#a0302a")
-	para("Держава " + Sim.realmName(r) + " " + SimDay.rV(r, "идёт", "идёт", "идут") + " на нас. Их сила: ~" + SimArmy.fmt(SimAI.realmPower(r, pr)) + ", наша: " + SimArmy.fmt(SimAI.realmPower(pr)) + ".\n«Не надейся, что враг не придёт, — надейся на то, что ты готов его встретить» (гл. 8).", x + 72, y + 40, 294, INK)
-	btn("wm_ok", x + 20, y + 140, 160, 16, {"label": "К оружию!", "on": func(_c): close_modal()})
-	btn("wm_d", x + 200, y + 140, 160, 16, {"label": "Дипломатия", "disabled": true, "tip": ["Дипломатия", {"t": "Окно дипломатии — в следующих версиях.", "c": DIM}]})
 
-## событие с выбором (drawEventModal): d = {e: {title, ic, opts: [{t, tip, ok: Callable, fx: Callable}]}, text}
-func _event(m: Dictionary) -> void:
-	var e: Dictionary = m.d.e
-	var lines := wrap_text(String(m.d.text), 330)
-	var opts: Array = e.opts
-	var h := maxf(150, 60 + lines.size() * 10 + opts.size() * 19)
-	var p := dlg_box(420, h, String(e.title))
-	var x := p.x
-	var y := p.y
-	spr_k("i_" + String(e.ic), x + 20, y + 30, 4.0)
-	for i in lines.size():
-		tx(lines[i], x + 66, y + 26 + i * 10, INK)
-	for i in opts.size():
-		var o: Dictionary = opts[i]
-		var ok: bool = not (o.get("ok") is Callable) or bool((o.ok as Callable).call())
-		btn("ev" + str(i), x + 20, y + h - 22 - (opts.size() - 1 - i) * 19, 380, 15, {"label": o.t, "disabled": not ok, "tip": o.get("tip"), "on": func(_c): ev_pick(o)})
 
-func ev_pick(o: Dictionary) -> void:
-	close_modal()
-	if o.get("fx") is Callable:
-		(o.fx as Callable).call()
 
 ## ополчение ропщет (svcAsk): заплатить за 20 дней, отпустить, пусть ропщут
 func _svc_event(a: Dictionary) -> Dictionary:

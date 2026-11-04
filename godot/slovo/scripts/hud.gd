@@ -11,6 +11,9 @@ var dark := 0.0
 var help := true
 var dlg = null                          # {c, name, sub, port, pages, page, shown, full, choices, sel, esc}
 var dlg_rows: Array = []                # строки выбора, нарисованные последними: [Rect2, номер]
+var dlg_q: Array = []                   # разговоры в очереди (DLG.q): после этого — следующий
+var prompt_r := Rect2()                 # подсказка «E — …» внизу (в этом кадре; пусто — нет)
+var prompt_tg := {}                     # к чему она: {n} или {a}; пусто — встать
 var toast_s := ""
 var toast_t := -10.0
 var help_auto := true                  # строка помощи прячется сама через 40 с, пока не нажали H
@@ -87,8 +90,23 @@ func _hi(k: String, use: String, X: float, Y: float, a: float = 1.0) -> bool:
 	return true
 
 # ---------- разговор (dialog.js: DLG.say) ----------
-## o — {choices: [{t, fx: Callable, tip}], name, esc: номер выбора по Esc}; выбор — на последней странице
+## o — {choices: [{t, fx: Callable, tip, ok: Callable, why, keep}], name, esc: номер выбора по Esc, on_end: Callable};
+## выбор — на последней странице. Как DLG.say: если разговор уже идёт — этот ждёт в очереди (dlg_q)
 func say(who, text: String, o: Dictionary = {}) -> void:
+	var d := _mk_dlg(who, text, o)
+	if dlg != null:
+		dlg_q.append(d)
+		return
+	dlg = d
+	dlg_rows = []
+	Snd.sfx("paper")
+
+## разговоры подряд (DLG.seq): [{who, text, o}]
+func say_seq(L: Array) -> void:
+	for e in L:
+		say(e.get("who"), String(e.text), e.get("o", {}))
+
+func _mk_dlg(who, text: String, o: Dictionary) -> Dictionary:
 	var has_p: bool = who != null and int(who.get("port", -1)) >= 0
 	var tw0 := W - 32 - 124 if has_p else W - 32 - 24
 	var pages: Array = []
@@ -105,9 +123,8 @@ func say(who, text: String, o: Dictionary = {}) -> void:
 			pages[-1] = last.slice(0, room)
 			pages.append(last.slice(room))
 	var nm: String = o.get("name", "") if o.get("name", "") != "" else ("" if who == null else String(who["name"]))
-	dlg = {"c": who, "name": nm, "sub": "" if who == null else String(who.get("sub", "")), "port": int(who.get("port", -1)) if who != null else -1, "pages": pages, "page": 0, "shown": 0.0, "full": false,
-		"choices": ch, "sel": 0, "esc": int(o.get("esc", -1))}
-	dlg_rows = []
+	return {"c": who, "name": nm, "sub": "" if who == null else String(who.get("sub", "")), "port": int(who.get("port", -1)) if who != null else -1, "pages": pages, "page": 0, "shown": 0.0, "full": false,
+		"choices": ch, "sel": 0, "esc": int(o.get("esc", -1)), "on_end": o.get("on_end")}
 
 ## на последней странице, текст показан целиком, есть выбор
 func dlg_choosing() -> bool:
@@ -124,20 +141,38 @@ func advance() -> void:
 		dlg["page"] += 1
 		dlg["shown"] = 0.0
 		dlg["full"] = false
+		Snd.sfx("click")
 		return
 	if not (dlg["choices"] as Array).is_empty():
 		choose(int(dlg["sel"]))
 		return
 	close_dlg()
+	Snd.sfx("click")
 
 func choose(i: int) -> void:
 	if dlg == null or i < 0 or i >= (dlg["choices"] as Array).size():
 		return
-	var ch: Dictionary = dlg["choices"][i]
+	var d: Dictionary = dlg
+	var ch: Dictionary = d["choices"][i]
+	var ok: Variant = ch.get("ok")
+	if ok is Callable and (ok as Callable).is_valid() and not bool((ok as Callable).call()):
+		toast(String(ch.get("why", "Недоступно.")))
+		Snd.sfx("click")
+		return
 	dlg = null
+	Snd.sfx("click")
+	var nx: Variant = dlg_q.pop_front() if not dlg_q.is_empty() else null
 	var fx: Variant = ch.get("fx")
 	if fx is Callable and (fx as Callable).is_valid():
 		(fx as Callable).call()
+	if dlg == null and nx != null:
+		dlg = nx
+		dlg_rows = []
+	elif nx != null:
+		dlg_q.push_front(nx)
+	var oe: Variant = d.get("on_end")
+	if oe is Callable and (oe as Callable).is_valid() and not ch.get("keep", false):
+		(oe as Callable).call()
 
 ## клавиша в разговоре (DLG.keys): true — разговор её забрал
 func dlg_key(k: int) -> bool:
@@ -147,9 +182,11 @@ func dlg_key(k: int) -> bool:
 	if dlg_choosing():
 		if k == KEY_UP or k == KEY_W:
 			dlg["sel"] = (int(dlg["sel"]) + n - 1) % n
+			Snd.sfx("click")
 			return true
 		if k == KEY_DOWN or k == KEY_S:
 			dlg["sel"] = (int(dlg["sel"]) + 1) % n
+			Snd.sfx("click")
 			return true
 		if k >= KEY_1 and k <= KEY_9:
 			if k - KEY_1 < n:
@@ -182,7 +219,13 @@ func dlg_click(p: Vector2) -> void:
 	advance()
 
 func close_dlg() -> void:
-	dlg = null
+	var d: Variant = dlg
+	dlg = dlg_q.pop_front() if not dlg_q.is_empty() else null
+	dlg_rows = []
+	if d != null:
+		var oe: Variant = d.get("on_end")
+		if oe is Callable and (oe as Callable).is_valid():
+			(oe as Callable).call()
 
 func _clock() -> float:
 	return court.t if court != null else Time.get_ticks_msec() / 1000.0
@@ -203,6 +246,12 @@ func _process(d: float) -> void:
 func _draw() -> void:
 	if court == null:
 		return
+	court_layer()
+	_dialog()
+	_toast_c()
+
+## слой двора под окнами: облачка, затемнение перехода, верхняя строка, название комнаты, «E — …», «ПАУЗА», строка помощи
+func court_layer() -> void:
 	var C := court
 	var now: float = C.t
 	_bubbles()
@@ -216,6 +265,8 @@ func _draw() -> void:
 		box(8, 24, w, 15, Color8(20, 14, 12, int(209 * a)))
 		stroke(8, 24, w, 15, Color8(138, 106, 58, int(255 * a)))
 		txt(C.room, 8 + w / 2.0, 28, Color8(247, 211, 92, int(255 * a)), "m", "c")
+	prompt_r = Rect2()
+	prompt_tg = {}
 	if dlg == null and not C.blocked():
 		var tg: Dictionary = C.nearest_target()
 		var s := ""
@@ -223,6 +274,8 @@ func _draw() -> void:
 			s = "Поговорить: " + String(tg["n"]["name"])
 		elif tg.has("a"):
 			s = tg["a"]["label"]
+			if tg["a"]["id"] == "council" and C.king["sit"] != null and C.king["sit"] == C.spots.get("seat_king"):
+				s = "Совет: ждать или начать" if C.meet.meeting_open() else "Совет: созвать или раздать дела"
 		elif C.king["sit"] != null:
 			s = "Встать с трона" if C.king["sit"] == C.spots.get("throne") else "Встать"
 		if s != "":
@@ -234,17 +287,21 @@ func _draw() -> void:
 			box(x + 4, y + 3, 11, 10, Color8(232, 213, 168))
 			txt("E", x + 7, y + 5, Color8(58, 38, 20))
 			txt(s, x + 20, y + 5, Color8(244, 236, 216))
+			prompt_r = Rect2(x, y, w, 16)
+			prompt_tg = tg
 	if Game.speed == 0 and dlg == null:
 		pause_mark(now)
 	if help_auto and now > 40.0:
 		help = false
 		help_auto = false
-	if help and dlg == null:
-		var hs := "WASD или мышь — идти · E — говорить · Z — масштаб · Пробел — пауза · 1–3 — скорость · Tab — карта · H — подсказка · Esc — выход"
+	if help and not C.blocked():
+		var hs := "WASD или мышь — идти · E — говорить · K — совет · L — письма · Z — масштаб · Пробел — пауза · 1–3 — скорость · Tab — карта · H — подсказка · Esc — выход"
 		var w := tw(hs, "s") + 10.0
 		box(8, H - 14, w, 11, Color8(20, 14, 12, 204))
 		txt(hs, 13, H - 11, Color8(200, 216, 232), "s")
-	_dialog()
+
+func _toast_c() -> void:
+	var now: float = court.t
 	if toast_t > now:
 		var a := clampf((toast_t - now) * 3.0, 0.0, 1.0)
 		var ls := wrap_text(toast_s, 380)
@@ -259,6 +316,10 @@ func _draw() -> void:
 		stroke(W / 2.0 - w / 2.0, y, w, h, Color(0.79, 0.63, 0.38, a))
 		for i in ls.size():
 			txt(ls[i], W / 2.0, y + 3 + i * 10, Color(0.97, 0.83, 0.36, a), "m", "c")
+
+## время стоит, пока открыто окно (timeHeld): у кнопок скорости светится пауза
+func _held() -> bool:
+	return false
 
 func _top() -> void:
 	box(0, 0, W, 19, PO)
@@ -302,7 +363,7 @@ func _top() -> void:
 	icon("i_" + String(wt.get("ic", "sun")), x3, 7)
 	if wn != "":
 		txt(wn, x3 + 9, 6, Color8(200, 216, 232), "s")
-	speed_btns(SPD_X, get_local_mouse_position())
+	speed_btns(SPD_X, get_local_mouse_position(), _held())
 	var loc_s: String = court.L["name"]
 	txt(loc_s, W - 6, 6, Color8(200, 184, 152), "m", "r")
 

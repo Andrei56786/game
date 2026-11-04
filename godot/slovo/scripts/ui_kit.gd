@@ -289,7 +289,8 @@ func tip_box(lines: Variant, m: Vector2) -> void:
 		var o: Dictionary = {"t": l} if l is String else l
 		var first := true
 		for w in wrap_text(String(o.t), 220):
-			rows.append({"t": w, "c": o.get("c"), "ic": o.get("ic", "") if first else ""})
+			var c0: Variant = o.get("c")
+			rows.append({"t": w, "c": null if c0 is String and c0 == "" else c0, "ic": String(o.get("ic", "")) if first else ""})
 			first = false
 	if rows.is_empty():
 		return

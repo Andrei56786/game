@@ -838,11 +838,11 @@ static func substep(dd: float) -> void:
 
 
 # ---------- летопись царствования (reign.js) ----------
-static func reignInit() -> Variant:
+static func reignInit(force := false) -> Variant:
 	var G := Sim.G
 	if not G.has("court") or not JS.t(G.court):
 		return null
-	if JS.t(G.get("reign")):
+	if JS.t(G.get("reign")) and not force:
 		return G.reign
 	var k: Dictionary = Sim.charOf(G.player.char)
 	var first: bool = not (JS.t(G.get("reigns")) and G.reigns.size() > 0)

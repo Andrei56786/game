@@ -61,6 +61,13 @@ function pageExport() {
     o.wins = L.wins.map(w => [w.x, w.y, w.big ? 1 : 0]);
     o.beams = L.beams || [];
     o.smoke = L.smoke.map(s => [s.x, s.y]);
+    // земля (шаги: surfAt) и источники голосов места (srcOf в sndui.js): огонь, фонтан, ульи, наковальня, цепи, лодки, мельница, колокол, вода
+    o.ter = Array.from(L.ter, v => v.toString(16)).join('');
+    { const SRC = { fireplace: 'fire', brazier: 'fire', campfire: 'fire', cauldron: 'fire', fountain: 'fount', beehive: 'hive', anvil: 'anvil', chains: 'chain', cage: 'chain', boat: 'boat', mill: 'mill', chapelb: 'bell' };
+      const S = {}; const put = (k, p) => (S[k] = S[k] || []).push(p);
+      for (const e of L.objs.concat(L.deco)) { const k = SRC[e.k]; if (k) put(k, [e.x + e.w / 2, e.sy - 6]); }
+      if (L.out) { const st = L.w * L.h > 20000 ? 3 : 2; for (let y = 0; y < L.h; y += st) for (let x = 0; x < L.w; x += st) if (L.ter[y * L.w + x] === GT.WATER) put('water', [x * CT + 8, y * CT + 8]); }
+      o.snd = S; }
     const fo = L.objs.find(q => q.k === 'bld' && q.o && q.o.kind === 'forge'); if (fo) o.forge = [fo.x + 26, fo.sy - 12];
     o.doors = L.doors.map(d => ({ x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, to: d.to, ax: d.ax, ay: d.ay, dir: d.dir, label: d.label || '' }));
     o.spots = {}; for (const k in L.spots) { const s = L.spots[k], q = { x: s.x, y: s.y, dir: s.dir }; for (const f of ['sit', 'lie', 'away', 'sx', 'sy']) if (s[f] !== undefined && s[f] !== null && typeof s[f] !== 'object' && typeof s[f] !== 'function') q[f] = s[f]; o.spots[k] = q; }
@@ -80,6 +87,14 @@ function pageExport() {
   });
   const P = COURT.p, kc = P.c;
   res.king = { name: (kc.title ? kc.title + ' ' : '') + kc.name, short: kc.name, sheet: sheet(kc), port: port(kc), loc: COURT.loc, x: P.x, y: P.y, dir: P.dir };
+  // 0.8: двор из G — расписания (SCHED), лист 4×4, лицо и возраст облика каждого живого по id; запас листов и лиц по полу и возрасту (для
+  // родившихся позже) и по роли просителя (pseudoChar, как в spawnPetitioners): [[лист, лицо] × 4]
+  res.sched = SCHED;
+  const ageK = a => a < 14 ? 'c' : a < 52 ? 'a' : a < 64 ? 'o' : 'v'; // как lookKey: облик меняется с возрастом
+  res.cspr = {}; for (const c of G.chars) if (c.alive) res.cspr[c.id] = [sheet(c), port(c), ageK(c.age)];
+  const stock = (i0, role, fem, age) => [0, 1, 2, 3].map(v => { const c = pseudoChar(i0 + v, role, fem, age(v), ''); return [sheet(c), port(c)]; });
+  res.cstock = {}; [['c', 'child', 7], ['a', 'courtier', 30], ['o', 'courtier', 57], ['v', 'courtier', 70]].forEach(([k, role, age], j) => [0, 1].forEach(fem => { res.cstock[k + fem] = stock(100 + j * 8 + fem * 4, role, fem, () => age); }));
+  res.pstock = {}; Object.keys(PET_ROLE_N).forEach((role, j) => [0, 1].forEach(fem => { res.pstock[role + fem] = stock(140 + j * 8 + fem * 4, role, fem, v => 24 + v * 9); }));
   // животные двора
   const AK = { horse: 1, dog: 1, cat: 1, hen: 1, pigeon: 1 };
   res.animals = COURT.ani.filter(a => AK[a.kind]).map(a => ({ kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), f: [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))] }));
@@ -205,5 +220,5 @@ for (const [fk, F] of Object.entries(res.fonts)) {
 fs.writeFileSync(path.join(out, 'court.json'), JSON.stringify(res));
 fs.writeFileSync(path.join(out, 'world.json'), JSON.stringify(world));
 const nl = Object.keys(res.locs).length, np = res.people.length;
-console.log(`EXPORT OK: мест ${nl}, людей ${np}, животных ${res.animals.length}, мир ${world.seed}: провинций ${world.provs.length}, поселений ${world.setts.length}, спрайтов ${res.spr.length} на ${res.pages} стр., файлов ${Object.keys(files).length + 3}, ${(bytes / 1048576).toFixed(1)} МБ, ${((Date.now() - t0) / 1000).toFixed(1)} с`);
+console.log(`EXPORT OK: мест ${nl}, людей ${np} (листов по id ${Object.keys(res.cspr).length}), животных ${res.animals.length}, мир ${world.seed}: провинций ${world.provs.length}, поселений ${world.setts.length}, спрайтов ${res.spr.length} на ${res.pages} стр., файлов ${Object.keys(files).length + 3}, ${(bytes / 1048576).toFixed(1)} МБ, ${((Date.now() - t0) / 1000).toFixed(1)} с`);
 process.exit(0);
