@@ -1,6 +1,7 @@
 // Проверка веб-сборки Godot в Chromium без окна: заставка, тронный зал и двор днём, в сумерках и ночью, разговор, ходьба, масштаб;
 // карта королевства: вся, державы, куски у столицы, лето, осень и зима; время на карте: королевство догоняет календарь,
-// на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи.
+// на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи;
+// 0.7: король выезжает в поле, встреча с врагом, автобой и итог, бой на поле (расстановка, бой, итог) и снова карта.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -121,9 +122,36 @@ try {
       check(m && m.time.speed === 0 && m.time.day === T2.day && m.time.clock === T2.clock, 'пауза: часы стоят (' + (m && m.time.clock) + ')');
       await cmd('reveal', 'army ai', 'zoom 1'); m = await settle(); await shot('map_ai_army');
       check(m && m.realm.drawn >= 1 && m.realm.kinds.lord_ai >= 1, 'чужое войско вблизи (вся карта открыта): ' + (m && JSON.stringify(m.realm.kinds)) + ', нарисовано ' + (m && m.realm.drawn));
-      await cmd('speed 1', 'court'); await wait(1500);
-      s = await state();
-      check(s && s.loc === 'yard', 'назад ко двору: ' + (s && s.loc));
+      // 0.7: король в поле — выезд со свитой; встреча с врагом — окно, автобой (бой без экрана) и итог; бой на поле — расстановка,
+      // бой, итог, снова карта на паузе
+      const ust = async () => { const n = logs.length; await cmd('ui state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('UISTATE ')); return l ? JSON.parse(l.slice(8)) : null; };
+      const uiw = async (pred, ms = 90000) => { const t = Date.now(); let q = null; while (Date.now() - t < ms) { q = await ust(); if (q && pred(q)) break; await wait(500); } return q; };
+      const bst = async () => { const n = logs.length; await cmd('state'); await wait(250); const l = logs.slice(n).find(x => x.startsWith('BSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
+      await cmd('rideout'); await wait(2500); let u = await ust(); await shot('map_rideout');
+      check(u && u.pa && !u.atCourt && u.speed === 0, 'король выехал в поле со свитой: ' + JSON.stringify(u && u.pa));
+      await cmd('ui enc'); await wait(1500); u = await ust(); await shot('map_enc');
+      check(u && u.modals[0] === 'enc', 'встреча с врагом — окно: ' + (u && u.modals.join()));
+      const men0 = u && u.pa && u.pa.men;
+      await cmd('click 430 210'); u = await uiw(q => q.busy === '' && q.modals[0] === 'bres'); await shot('map_bres');
+      check(u && u.modals[0] === 'bres', 'автобой — итог боя: ' + (u && u.modals.join()) + ', войско ' + men0 + ' → ' + (u && u.pa && u.pa.men));
+      await cmd('click 320 254'); await wait(800); u = await ust();
+      check(u && u.modals.length === 0, '«Далее» — окно итога закрыто');
+      await cmd('ui enc'); await wait(1500); await cmd('click 210 210');
+      const bt = await until(/^BATTLE \d/, 60000); await wait(2500); await shot('battle_setup');
+      let b = await bst();
+      check(!!bt && b && b.phase === 'deploy' && b.units > 2, 'бой на поле — расстановка: ' + (b && JSON.stringify({ phase: b.phase, units: b.units, men: b.men })));
+      await cmd('fight', 'speed 4'); await wait(8000); b = await bst(); await shot('battle_fight');
+      check(b && b.phase === 'fight' && b.t > 1, 'бой идёт: ' + (b && JSON.stringify({ phase: b.phase, t: b.t, men: b.men })));
+      await cmd('win'); await wait(3000); b = await bst(); await shot('battle_result');
+      check(b && b.res, 'итог боя: ' + (b && JSON.stringify(b.over)));
+      await cmd('end'); const bd = await until(/^BATTLE DONE/, 30000); await wait(1500); u = await ust(); await shot('map_after_battle');
+      check(!!bd && u && u.speed === 0 && u.pa, 'после боя — снова карта, пауза: ' + bd);
+      // у ворот столицы: «Въехать в замок — ко двору» — король снова при дворе, у ворот
+      await cmd('ui gate'); await wait(1200); u = await ust(); await shot('map_gate');
+      check(u && u.dlg && u.choices.length === 3, 'у ворот столицы — разговор: ' + (u && u.choices && u.choices.join(' | ')));
+      await cmd('choose 1'); const tc = await until(/^TO COURT /, 20000); await wait(1500);
+      await cmd('speed 1'); s = await state(); await shot('court_gate');
+      check(!!tc && s && s.loc === 'yard', 'въехал в замок — ко двору: ' + tc + ', ' + (s && s.loc));
     }
     await cmd('title'); await wait(800);
   }
