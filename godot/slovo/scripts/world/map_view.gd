@@ -8,6 +8,7 @@ extends CanvasLayer
 ## за туманом и владельцами провинций, верхняя строка — дата, погода, распутица, лента летописи — справа внизу.
 signal leave
 const MapHud = preload("res://scripts/world/map_hud.gd")
+const MapUI = preload("res://scripts/world/map_ui.gd")
 const ZOOMS := [0.125, 0.25, 0.5, 1.0, 2.0]
 const SW := 640.0
 const SH := 360.0
@@ -33,6 +34,7 @@ var chn: Node2D
 var pool: Array[Sprite2D] = []
 var ch_mat: ShaderMaterial
 var hud: Control
+var ui: Control            # окна карты (map_ui.gd): вести, встречи, поселения, войска короны; поверх hud
 var on := false            # материалы готовы (MapGPU.ok)
 var pre_t := 0.0
 var down := {}             # кнопка мыши → {at, moved}
@@ -65,6 +67,9 @@ func _ready() -> void:
 	hud = MapHud.new()
 	hud.mv = self
 	add_child(hud)
+	ui = MapUI.new()
+	ui.mv = self
+	add_child(ui)
 
 func _fog_rect(layer: int) -> ColorRect:
 	var r := ColorRect.new()
@@ -126,7 +131,10 @@ func _setup() -> void:
 		_fog_update()
 		_politics()
 	if not centered:
-		center_capital()
+		if pa_now() != null:
+			center_army()
+		else:
+			center_capital()
 
 ## к столице державы игрока (openMapFromCourt)
 func center_capital() -> void:
@@ -136,6 +144,22 @@ func center_capital() -> void:
 			cam.x = sw[s.id].x
 			cam.y = sw[s.id].y
 	clamp_cam()
+
+## к войску короля (centerArmy): C, кнопка карточки, выезд из замка
+func center_army() -> void:
+	var pa: Variant = pa_now()
+	if pa == null or G == null or not G.ok:
+		return
+	centered = true
+	var vp := Game.view_pos(pa)
+	var q := G.warp_pt(vp.x * WorldData.TS, vp.y * WorldData.TS)
+	cam.x = q.x
+	cam.y = q.y
+	clamp_cam()
+
+## войско короля в поле (playerArmy) или null
+func pa_now() -> Variant:
+	return null if Sim.G.is_empty() else Sim.playerArmy()
 
 # ---------- камера (render.js: cam, camClamp, w2s, s2w; main.js: zoomAt) ----------
 func clamp_cam() -> void:
@@ -168,6 +192,11 @@ func tile_at(s: Vector2) -> int:
 		return -1
 	return G.px_tile(int(w.x), int(w.y))
 
+## всплывающая строка над картой (UI.toast)
+func note(s: String) -> void:
+	if ui:
+		ui.toast(s)
+
 func set_mode(m: String) -> void:
 	mode = "pol" if m == "pol" else "ter"
 
@@ -178,13 +207,15 @@ func _process(dt: float) -> void:
 		return
 	if not on:
 		_setup()
-	Game.advance(dt, true)
+	ui.tick()
+	# пока открыто окно, весть или разговор — время на карте стоит (timeHeld)
+	Game.advance(0.0 if ui.is_open() else dt, true)
 	G.set_day(Game.day)
 	if Sim.pol_dirty and Time.get_ticks_msec() / 1000.0 - pol_t > 0.4:
 		_politics()
 	var d := Vector2.ZERO
 	for k in PANK:
-		if Input.is_physical_key_pressed(k):
+		if Input.is_physical_key_pressed(k) and not ui.is_open():
 			d += PANK[k]
 	if d != Vector2.ZERO:
 		var sp := 320.0 / cam.z * minf(dt, 0.05) * (2.2 if Input.is_physical_key_pressed(KEY_SHIFT) else 1.0)
@@ -296,40 +327,74 @@ func _chunks() -> void:
 # ---------- ввод ----------
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
-		var k: int = e.physical_keycode
-		match k:
-			KEY_TAB, KEY_ESCAPE:
-				leave.emit()
-			KEY_Q, KEY_MINUS, KEY_KP_SUBTRACT:
-				zoom_at(-1, Vector2(SW / 2.0, SH / 2.0))
-			KEY_E, KEY_EQUAL, KEY_KP_ADD:
-				zoom_at(1, Vector2(SW / 2.0, SH / 2.0))
-			KEY_H, KEY_F1:
-				hud.help = not hud.help
-			KEY_SPACE:
-				Game.toggle_pause()
-			KEY_0, KEY_1, KEY_2, KEY_3:
-				Game.set_speed(k - KEY_0)
-			KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3:
-				Game.set_speed(k - KEY_KP_0)
 		get_viewport().set_input_as_handled()
+		key(e.physical_keycode)
 		return
 	if not on:
 		return
+	_mouse(e)
+
+## клавиша карты (mapKeys): сначала окна (разговор, вести, окна), потом карта
+func key(k: int) -> void:
+	if ui.key(k):
+		return
+	var pa: Variant = pa_now()
+	match k:
+		KEY_TAB:
+			# король при дворе — назад к столу; в поле — политическая карта или местность
+			if pa == null:
+				leave.emit()
+			else:
+				set_mode("ter" if mode == "pol" else "pol")
+		KEY_ESCAPE:
+			if pa == null:
+				leave.emit()
+		KEY_Q, KEY_MINUS, KEY_KP_SUBTRACT:
+			zoom_at(-1, Vector2(SW / 2.0, SH / 2.0))
+		KEY_E, KEY_EQUAL, KEY_KP_ADD:
+			zoom_at(1, Vector2(SW / 2.0, SH / 2.0))
+		KEY_H, KEY_F1:
+			hud.help = not hud.help
+		KEY_SPACE:
+			Game.toggle_pause()
+		KEY_0, KEY_1, KEY_2, KEY_3:
+			Game.set_speed(k - KEY_0)
+		KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3:
+			Game.set_speed(k - KEY_KP_0)
+
+## щелчок, как мышью (для проверок): окна, верхняя строка, поле карты
+func click_at(p: Vector2, b := 0) -> void:
+	if ui.is_open() or ui.capture(p):
+		ui.click({"x": p.x, "y": p.y, "ux": p.x, "uy": p.y, "b": b, "drag": false})
+	elif b == 0:
+		hud.click(p)
+	else:
+		hud.rclick(p)
+
+func _mouse(e: InputEvent) -> void:
 	if e is InputEventMouseButton:
 		var b: int = e.button_index
 		var p: Vector2 = e.position
 		if e.pressed:
 			if b == MOUSE_BUTTON_WHEEL_UP or b == MOUSE_BUTTON_WHEEL_DOWN:
-				if not hud.over_ui(p):
+				if ui.is_open():
+					ui.wheel = -1 if b == MOUSE_BUTTON_WHEEL_UP else 1
+				elif not hud.over_ui(p) and not ui.capture(p):
 					zoom_at(1 if b == MOUSE_BUTTON_WHEEL_UP else -1, p)
 			elif b == MOUSE_BUTTON_LEFT or b == MOUSE_BUTTON_MIDDLE or b == MOUSE_BUTTON_RIGHT:
-				down[b] = {"at": p, "moved": false, "ui": hud.over_ui(p)}
+				down[b] = {"at": p, "moved": false, "ui": hud.over_ui(p) or ui.capture(p), "w": ui.capture(p)}
 		elif down.has(b):
 			var d: Dictionary = down[b]
 			down.erase(b)
-			if not d.moved and b == MOUSE_BUTTON_LEFT:
-				hud.click(p)
+			if b != MOUSE_BUTTON_MIDDLE:
+				var bi := 0 if b == MOUSE_BUTTON_LEFT else 2
+				if d.w or ui.is_open():
+					ui.click({"x": d.at.x, "y": d.at.y, "ux": p.x, "uy": p.y, "b": bi, "drag": d.moved})
+				elif not d.moved:
+					if bi == 0:
+						hud.click(p)
+					else:
+						hud.rclick(p)
 			dragging = false
 			for q in down:
 				dragging = dragging or down[q].moved
@@ -337,7 +402,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		var p: Vector2 = e.position
 		for b in down:
 			var d: Dictionary = down[b]
-			if not d.moved and p.distance_to(d.at) > 3.0 and (not d.ui or b == MOUSE_BUTTON_MIDDLE):
+			if not d.moved and p.distance_to(d.at) > 3.0 and (not d.ui or (b == MOUSE_BUTTON_MIDDLE and not ui.is_open())):
 				d.moved = true
 			if d.moved:
 				dragging = true
@@ -389,6 +454,31 @@ func cmd(p: PackedStringArray) -> void:
 					clamp_cam()
 		"hover":
 			hud.hover_at = Vector2(float(p[1]), float(p[2]))
+			ui.hover_at = hud.hover_at
+		"click":
+			# щелчок, как мышью: click x y [r — правой]
+			click_at(Vector2(float(p[1]), float(p[2])), 2 if p.size() > 3 and p[3] == "r" else 0)
+		"key":
+			# клавиша по имени: key V, key Escape, key Space
+			key(OS.find_keycode_from_string(p[1]))
+		"choose":
+			if ui.dlg != null:
+				ui.choose(int(p[1]) - 1)
+		"goto":
+			# войско короля идёт: goto x y — в клетку (x, y), goto Имя — к поселению (как щелчок по нему)
+			if p.size() > 2 and p[1].is_valid_int():
+				SimPlayer.orderMove(int(p[2]) * WorldData.MW + int(p[1]))
+			else:
+				for s: Dictionary in G.W.setts:
+					if String(s.name) == " ".join(p.slice(1)):
+						hud.click_sett(s.id, 0)
+		"rideout":
+			# для проверок: король выезжает со свитой (rideout) или во главе войска у столицы (rideout army)
+			if not Sim.G.is_empty() and JS.t(Sim.G.get("atCourt")):
+				SimPlayer.leaveCourt(SimPlayer.capitalArmy() if p.size() > 1 and p[1] == "army" else null)
+				ui.rode_out()
+		"ui":
+			_ui_cmd(p)
 		"lum":
 			# средняя яркость экрана (0..1) — тест сравнивает зиму с летом
 			var img := get_viewport().get_texture().get_image()
@@ -408,6 +498,52 @@ func cmd(p: PackedStringArray) -> void:
 			if OS.has_feature("web") and not b.is_empty():
 				JavaScriptBridge.download_buffer(b, p[1].replace(":", "_") + ".png", "image/png")
 			print("DUMP ", p[1], " ", b.size())
+
+## окна карты для проверок: ui enc — встреча с ближайшим врагом, ui cmd, ui sett N, ui settinfo N, ui close, ui state
+func _ui_cmd(p: PackedStringArray) -> void:
+	match p[1] if p.size() > 1 else "state":
+		"enc":
+			var pa: Variant = pa_now()
+			var best: Variant = null
+			var bd := INF
+			for b: Dictionary in Sim.G.get("armies", []):
+				if pa == null or not JS.t(b.alive) or b == pa or not Sim.hostile(pa.realm, b.realm):
+					continue
+				var d := Vector2(b.x - pa.x, b.y - pa.y).length()
+				if d < bd:
+					bd = d
+					best = b
+			if best != null:
+				ui.alert("enc", best.id)
+				print("UI ENC ", best.id, " ", snappedf(bd, 0.1))
+		"cmd":
+			ui.open_cmd(float(p[2]) if p.size() > 2 else -1.0)
+		"sett":
+			ui.open_sett(int(p[2]))
+		"settinfo":
+			ui.open_settinfo(int(p[2]))
+		"gate":
+			ui.capital_gate(int(Sim.G.realms[0].capital))
+		"close":
+			ui.win = null
+			ui.close_modal()
+			ui.close_dlg()
+		_:
+			print("UISTATE ", JSON.stringify(ui_state()))
+
+func ui_state() -> Dictionary:
+	var pa: Variant = pa_now()
+	var o := {"modals": ui.modals.map(func(m): return String(m.k)), "win": String(ui.win.k) if ui.win != null else "", "dlg": ui.dlg != null,
+		"target": ui.target != null, "busy": ui.busy, "toast": ui.toast_s if ui.toast_t > ui.now() else "", "speed": Game.speed, "atCourt": JS.t(Sim.G.get("atCourt")),
+		"draws": ui.n_draw, "fps": Engine.get_frames_per_second(), "frame": Engine.get_process_frames()}
+	if ui.dlg != null:
+		o.dlg_name = String(ui.dlg.get("name", ""))
+		o.choices = (ui.dlg.get("choices", []) as Array).map(func(c): return String(c.t))
+	if pa != null:
+		o.pa = {"id": pa.id, "x": snappedf(pa.x, 0.01), "y": snappedf(pa.y, 0.01), "men": Sim.armyMen(pa), "mode": String(pa.mode), "path": (pa.path as Array).size() if pa.path != null else 0,
+			"pi": JS.n(pa.get("pi")), "siege": pa.siegeOf, "follow": Sim.G.player.follow, "here": SimPlayer.settHere(pa)}
+	o.couriers = (Sim.G.get("couriers", []) as Array).size()
+	return o
 
 func state() -> Dictionary:
 	return {"ok": G != null and G.ok, "stage": G.stage if G else "", "ms": G.ms if G else {}, "cam": [snappedf(cam.x, 0.1), snappedf(cam.y, 0.1), cam.z], "mode": mode,
