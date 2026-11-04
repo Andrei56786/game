@@ -20,11 +20,56 @@ func _ready() -> void:
 	if "--selftest" in OS.get_cmdline_user_args():
 		_selftest.call_deferred()
 		return
+	if "--council" in OS.get_cmdline_user_args():   # только совет (быстро): -- --council
+		_council_only.call_deferred()
+		return
+	_hooks()
 	show_title()
 	if OS.has_feature("web"):
 		js_cb = JavaScriptBridge.create_callback(_js_cmd)
 		JavaScriptBridge.get_interface("window").slovo = js_cb
 	print("READY ", Game.VERSION, " · ", Engine.get_version_info().string)
+
+## окна текущего экрана (двор или карта): разговоры королевства — туда
+func cur_ui() -> Variant:
+	if court != null and cur == court:
+		return court.hud
+	if mapv != null and cur == mapv:
+		return mapv.ui
+	return null
+
+## слова королевства на экране (DLG.say и say в HTML): ответ советника на поручение — над его головой (если он здесь;
+## иначе — строкой), весть о смерти короля — разговором, «Как назовёте?» при рождении — разговором с выбором имени
+func _hooks() -> void:
+	SimCourt.say_hook = func(k: String, line: String) -> bool:
+		if court == null or cur != court:
+			return false
+		var n: Dictionary = court.npc_by("seat_" + k)
+		if n.is_empty():
+			return false
+		if n["loc"] == court.loc_id and not n["away"]:
+			court.people.say(n, line, 4.0)
+		else:
+			court.hud.toast(SimDyn.seatName(k) + ": «" + line + "»")
+		return true
+	SimDyn.say_hook = func(k: Variant, text: String) -> void:
+		if k == null:
+			var u: Variant = cur_ui()
+			if u != null:
+				u.say(null, text)
+		elif court != null and cur == court:
+			var n: Dictionary = court.npc_by(String(k))
+			if not n.is_empty() and n["loc"] == court.loc_id and not n["away"]:
+				court.people.say(n, text, 4.0)
+	SimDyn.birth_hook = func(text: String, opts: Array, mk: Callable) -> void:
+		var u: Variant = cur_ui()
+		if u == null:
+			mk.call(String(opts[0]))
+			return
+		var ch: Array = []
+		for nm in opts:
+			ch.append({"t": String(nm), "fx": func(): mk.call(String(nm))})
+		u.say(null, text, {"name": "Рождение", "choices": ch, "esc": 0})
 
 func _set_cur(n: Node) -> void:
 	if cur == n:
@@ -83,6 +128,7 @@ func show_map() -> void:
 		else:
 			mapv.center_capital()
 	_set_cur(mapv)
+	mapv.ui.court = court       # окна двора на карте (Малый совет, письма) знают о дворе
 	if first:
 		mapv.ui.battle.connect(show_battle)
 		mapv.ui.to_court.connect(_to_court)
@@ -206,14 +252,34 @@ func _selftest() -> void:
 	add_child(c)
 	await get_tree().process_frame
 	var ok: bool = c.selftest()
+	remove_child(c)           # дальше — королевство без двора (окна двора не берут вести карты)
+	c.queue_free()
 	var sok: bool = await _sim_selftest()
 	ok = sok and ok
 	var pok: bool = await _player_selftest()
 	ok = pok and ok
 	var bok: bool = await _battle_selftest()
 	ok = bok and ok
+	var cok: bool = await _council_selftest()
+	ok = cok and ok
 	print("SELFTEST OK" if ok else "SELFTEST FAIL")
 	get_tree().quit(0 if ok else 1)
+
+func _council_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _council_selftest()
+	print("COUNCIL OK" if ok else "COUNCIL FAIL")
+	get_tree().quit(0 if ok else 1)
+
+## совет при дворе на данных королевства (court.council_test)
+func _council_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.council_test()
+	remove_child(c)
+	c.queue_free()
+	return ok
 
 ## королевство без экрана: новая игра в мире из выгрузки, подсказки всех поселений и войск, обзор, казна
 func _sim_selftest() -> bool:

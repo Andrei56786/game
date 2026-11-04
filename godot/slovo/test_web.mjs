@@ -2,6 +2,7 @@
 // карта королевства: вся, державы, куски у столицы, лето, осень и зима; время на карте: королевство догоняет календарь,
 // на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи;
 // 0.7: король выезжает в поле, встреча с врагом, автобой и итог, бой на поле (расстановка, бой, итог) и снова карта.
+// 0.8: двор на данных королевства — окна совета (K) и писем (L), срочный сбор: советники сходятся, король во главе стола, доклады.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -158,6 +159,19 @@ try {
       await cmd('choose 1'); const tc = await until(/^TO COURT /, 20000); await wait(1500);
       await cmd('speed 1'); s = await state(); for (let i = 0; i < 20 && !(s && s.loc === 'yard'); i++) { await wait(500); s = await state(); } await shot('court_gate');
       check(!!tc && s && s.loc === 'yard', 'въехал в замок — ко двору: ' + tc + ', ' + (s && s.loc));
+      // двор на данных королевства: окна совета и писем (K, L), срочный сбор — советники сходятся, король во главе стола
+      await cmd('time 14', 'speed 0', 'win council'); await wait(1500); s = await state(); await shot('court_council');
+      check(s && s.win === 'council', 'окно совета (K): ' + (s && s.win));
+      await cmd('tab 3'); await wait(800); await shot('court_cand');
+      await cmd('win letters'); await wait(800); s = await state(); await shot('court_letters');
+      check(s && s.win === 'letters', 'окно писем (L): ' + (s && s.win));
+      await cmd('close', 'council'); const ccall = await until(/^COUNCIL CALL [1-9]/, 10000); await wait(800); await shot('court_call');
+      await cmd('choose 1', 'speed 3'); const cmeet = await until(/^COUNCIL MEETING /, 90000); await wait(1500); s = await state(); await shot('court_meeting');
+      check(!!ccall && !!cmeet && s && s.talk && s.sit && s.loc === 'keep', 'срочный совет: ' + ccall + ' → ' + cmeet + ', ' + (s && JSON.stringify({ hour: s.hour, loc: s.loc, sit: s.sit, talk: s.talk })));
+      for (let i = 0; i < 60 && s && s.talk && !s.choosing; i++) { await cmd('next'); await wait(60); s = await state(); }
+      await shot('court_meeting_end'); check(s && s.choosing, 'доклады выслушаны — что прикажет государь: ' + (s && JSON.stringify({ talk: s.talk, choosing: s.choosing })));
+      await cmd('choose 2'); await wait(600); s = await state();
+      check(s && !s.talk && !s.win, 'совет распущен: ' + (s && JSON.stringify({ talk: s.talk, win: s.win })));
     }
     await cmd('title'); await wait(800);
   }

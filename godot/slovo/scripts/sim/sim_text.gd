@@ -268,6 +268,14 @@ const WEEKDAYS := ["понедельник", "вторник", "среда", "ч
 static func inDays(n: int) -> String:
 	return "сегодня" if n <= 0 else ("завтра" if n == 1 else "через " + str(n) + " " + plural(n, "день", "дня", "дней"))
 
+## дата дня (dateStr): «Чт, 4 д. · Весна · 1 г.»
+static func dateStr(d: float) -> String:
+	var i := int(d)
+	return Game.WDAY[posmod(i, 7)] + ", " + str(posmod(i, Game.DAYS_SEASON) + 1) + " д. · " + Game.SEASONS[int(posmod(i, Game.DAYS_YEAR) / Game.DAYS_SEASON)] + " · " + str(i / Game.DAYS_YEAR + 1) + " г."
+
+static func yrs(n: float) -> String:
+	return JS.s(n) + " " + plural(n, "год", "года", "лет")
+
 static func nextCouncilDay() -> int:
 	var C: Variant = Sim.G.get("court") if not Sim.G.is_empty() else null
 	var d := Game.day

@@ -9,8 +9,9 @@ const CT := 16
 const DIRS := ["down", "left", "right", "up"]
 const NPC_SPDK := [1.0, 1.0, 1.4, 2.2]
 const ANISP := {"horse": 12.0, "dog": 44.0, "cat": 20.0, "hen": 11.0, "pigeon": 9.0}
-const Hud = preload("res://scripts/hud.gd")
+const Hud = preload("res://scripts/court_ui.gd")
 const People = preload("res://scripts/people.gd")
+const Council = preload("res://scripts/court_council.gd")
 
 var D: Dictionary
 var Z := 2
@@ -40,6 +41,8 @@ var practice_t := -10.0
 var trees: Array = []
 var forge := Vector2.ZERO
 var people: RefCounted
+var meet: RefCounted          # Малый совет: заседания, сбор, разговор с советником (court_council.gd)
+var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
 
 var layer: Node2D
 var world: Node2D
@@ -79,6 +82,7 @@ func _ready() -> void:
 				spots[nm] = sp
 		grids[id] = _grid(Ld)
 	people = People.new(self)
+	meet = Council.new(self)
 	var K: Dictionary = D["king"]
 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
 	var sp0: Dictionary = spots["throne_front"]
@@ -439,23 +443,28 @@ func _sync_nodes() -> void:
 
 # ---------- ход времени ----------
 func blocked() -> bool:
-	return hud.dlg_open() or fade > 0.0
+	return hud.is_open() or fade > 0.0
 
 func _process(d: float) -> void:
 	_tick(minf(d, 0.05))
 
 func _tick(dt: float) -> void:
 	t += dt
-	var run: bool = not hud.dlg_open() and fade == 0.0
+	hud.tick()
+	var run: bool = not hud.is_open() and fade == 0.0
 	if run:
 		var s0 := sea_key
-		Game.advance(dt)
+		Game.advance(dt * meet.time_k())
 		if L["out"] and season_key() != s0:
 			go_loc(loc_id)
 	var ha := Game.day * 24.0 + Game.hour_abs()
 	if last_ha >= 0.0 and ha - last_ha > 0.75:
 		people.snap(false)
 	last_ha = ha
+	var hh := floori(Game.hour_abs() * 2.0)
+	if hh != last_hh:
+		last_hh = hh
+		meet.half_hour(hh / 2.0)
 	if run:
 		var k: float = NPC_SPDK[Game.speed]
 		for n in npcs:
@@ -466,6 +475,8 @@ func _tick(dt: float) -> void:
 		_player_update(dt)
 	else:
 		king["moving"] = false
+	if fade == 0.0:
+		meet.update()
 	_cam_update(dt)
 	if fade > 0.0:
 		var ph := (t - fade_t) / 0.22
@@ -934,6 +945,10 @@ func talk_to(n: Dictionary) -> void:
 	if n.get("sit") == null and n.get("path") == null:
 		var v := Vector2(float(king["x"]) - n["x"], float(king["y"]) - n["y"])
 		n["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
+	if String(n.get("seat", "")) != "" and SimPlayer.ensure_sim() and SimDyn.seatChar(n["seat"]) != null:
+		meet.talk_seat(n)
+		print("TALK ", n["name"])
+		return
 	var ls: Array = n["lines"]
 	var line: String = ls[randi() % ls.size()]
 	if n.has("staff"):
@@ -949,6 +964,22 @@ func do_act(a: Dictionary) -> void:
 			sit_at(spots["throne"])
 		"council":
 			sit_at(spots["seat_king"])
+			if SimPlayer.ensure_sim():
+				meet.sit()
+		"maptable":
+			to_map.emit()
+		"research":
+			hud.open_council("magister", "research")
+		"eyeboard":
+			hud.open_council("eye")
+		"dovecote":
+			hud.open_letters()
+		"treasury":
+			if SimPlayer.ensure_sim():
+				meet.treasury()
+		"barracks":
+			if SimPlayer.ensure_sim():
+				meet.barracks()
 		"bed":
 			var h := Game.hour_abs()
 			if h >= 18.5 or h < 6.0:
@@ -999,6 +1030,16 @@ func gate_act(intro := "") -> void:
 		{"name": "Выезд из замка", "choices": ch, "esc": ch.size() - 1})
 	print("GATE ", ch.size())
 
+## часы вперёд наяву (advanceHours): пересчитать казну и т. п.; королевство догонит само
+func advance_hours(h: float) -> void:
+	var ha := Game.hour_abs() + h
+	if ha >= 29.0:
+		Game.day += 1
+		ha -= 24.0
+	Game.frac = clampf((ha - 5.0) / 24.0, 0.0, 0.9999)
+	people.snap(false)
+	last_ha = Game.day * 24.0 + Game.hour_abs()
+
 func sleep_until(ha: float) -> void:
 	fade_to(func() -> void:
 		if ha >= 29.0:
@@ -1039,30 +1080,56 @@ func _walk_to(w: Vector2, then: Callable, near: float) -> void:
 	path = p
 	on_arrive = then
 
-# ---------- клавиши ----------
+# ---------- мышь и клавиши ----------
+## щелчок — по месту отпускания (dispatchClicks): над окнами, кнопками верхней строки и «E — …» — окнам, иначе — идти
+var down_at = null            # {at, ui}: где нажали левую кнопку и было ли это над окнами
+
 func _unhandled_input(e: InputEvent) -> void:
-	if e is InputEventMouseButton and e.pressed:
-		if e.button_index == MOUSE_BUTTON_LEFT:
-			var mp: Vector2 = hud.get_local_mouse_position()
-			var si: int = hud.speed_hit(hud.SPD_X, mp)
-			if si >= 0:
-				Game.set_speed(si)
-			elif hud.dlg_open():
-				hud.dlg_click(mp)
+	if e is InputEventMouseButton:
+		var mp: Vector2 = hud.get_local_mouse_position()
+		var b: int = e.button_index
+		if e.pressed:
+			if b == MOUSE_BUTTON_LEFT:
+				down_at = {"at": mp, "ui": hud.capture(mp)}
+			elif b == MOUSE_BUTTON_RIGHT:
+				if hud.is_open():
+					hud.click({"x": mp.x, "y": mp.y, "ux": mp.x, "uy": mp.y, "b": 2, "drag": false})
+				else:
+					path = []
+			elif b == MOUSE_BUTTON_WHEEL_UP or b == MOUSE_BUTTON_WHEEL_DOWN:
+				if hud.is_open():
+					hud.wheel = -1 if b == MOUSE_BUTTON_WHEEL_UP else 1
+				else:
+					Z = 2 if b == MOUSE_BUTTON_WHEEL_UP else 1
+		elif b == MOUSE_BUTTON_LEFT and down_at != null:
+			var d: Dictionary = down_at
+			down_at = null
+			if d.ui or hud.is_open():
+				hud.click({"x": d.at.x, "y": d.at.y, "ux": mp.x, "uy": mp.y, "b": 0, "drag": (d.at as Vector2).distance_to(mp) > 3.0})
 			else:
 				click(mp)
-		elif e.button_index == MOUSE_BUTTON_RIGHT:
-			path = []
-		elif e.button_index == MOUSE_BUTTON_WHEEL_UP and not hud.dlg_open():
-			Z = 2
-		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN and not hud.dlg_open():
-			Z = 1
 		return
 	if not (e is InputEventKey and e.pressed and not e.echo):
 		return
-	var k: int = e.physical_keycode
+	key(e.physical_keycode)
+
+## клавиша двора (courtKeys): разговор, окна (K — совет, L — письма; Esc закрывает), весть ждёт ответа; потом — двор
+func key(k: int) -> void:
 	if hud.dlg_open():
 		hud.dlg_key(k)
+		return
+	if k == KEY_ESCAPE:
+		if hud.win != null:
+			hud.win = null
+		elif hud.modals.is_empty():
+			leave.emit()
+		return
+	if not hud.modals.is_empty():
+		return
+	if k == KEY_K or k == KEY_L:
+		hud.toggle_win("council" if k == KEY_K else "letters")
+		return
+	if hud.win != null:
 		return
 	match k:
 		KEY_E, KEY_ENTER, KEY_KP_ENTER:
@@ -1085,8 +1152,6 @@ func _unhandled_input(e: InputEvent) -> void:
 			hud.help_auto = false
 		KEY_TAB:
 			to_map.emit()
-		KEY_ESCAPE:
-			leave.emit()
 
 # ---------- команды для тестов веб-сборки (window.slovo('…')) ----------
 func npc_by(s: String) -> Dictionary:
@@ -1143,7 +1208,36 @@ func cmd(p: PackedStringArray) -> void:
 		"gate":
 			gate_act()
 		"close":
-			hud.close_dlg()
+			if hud.dlg_open():
+				hud.close_dlg()
+			elif not hud.modals.is_empty():
+				hud.close_modal()
+			else:
+				hud.win = null
+		"win":
+			hud.toggle_win(p[1])
+		"click":
+			# щелчок, как мышью (окна, кнопки верхней строки, «E — …»; мимо — идти туда)
+			var mp := Vector2(float(p[1]), float(p[2]))
+			if hud.capture(mp) or hud.is_open():
+				hud.click({"x": mp.x, "y": mp.y, "ux": mp.x, "uy": mp.y, "b": 0, "drag": false})
+			else:
+				click(mp)
+		"hover":
+			hud.hover_at = Vector2(float(p[1]), float(p[2]))
+		"tab":
+			if hud.win != null:
+				hud.win.tab = int(p[1])
+				hud.win.sc = 0
+		"key":
+			key(OS.find_keycode_from_string(p[1]))
+		"council":
+			# созвать совет (как кнопка в окне) или сесть во главе стола
+			if p.size() > 1 and p[1] == "sit":
+				cmd(PackedStringArray(["spot", "seat_king"]))
+				do_act({"id": "council", "label": ""})
+			elif SimPlayer.ensure_sim():
+				meet.call_council()
 		"walk":
 			for i in int(float(p[3]) * 60.0):
 				move_king(float(p[1]), float(p[2]), 1.0 / 60.0)
@@ -1162,7 +1256,8 @@ func state() -> Dictionary:
 			here += 1
 		if n["away"] or n.get("lie", false):
 			away += 1
-	return {"day": Game.day, "hour": snappedf(Game.hour(), 0.01), "loc": loc_id, "room": room, "king": [int(king["x"]), int(king["y"])], "dir": king["dir"], "sit": king["sit"] != null, "talk": hud.dlg_open(), "here": here, "asleep": away, "npcs": npcs.size(), "walked": int(walked), "dark": snappedf(hud.dark, 0.01), "zoom": Z, "fade": fade > 0.0, "sea": sea_key}
+	return {"day": Game.day, "hour": snappedf(Game.hour(), 0.01), "loc": loc_id, "room": room, "king": [int(king["x"]), int(king["y"])], "dir": king["dir"], "sit": king["sit"] != null, "talk": hud.dlg_open(), "choosing": hud.dlg_choosing(), "here": here, "asleep": away, "npcs": npcs.size(), "walked": int(walked), "dark": snappedf(hud.dark, 0.01), "zoom": Z, "fade": fade > 0.0, "sea": sea_key,
+		"win": String(hud.win.k) if hud.win != null else "", "modals": hud.modals.size(), "meet": meet.meeting_open()}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается
 func selftest() -> bool:
@@ -1229,3 +1324,63 @@ func selftest() -> bool:
 	ok = ok and talked and not hud.dlg_open() and loc_id == g["loc"]
 	print("selftest: разговор ", talked, " → ", JSON.stringify(state()))
 	return ok
+
+## совет на данных королевства (без экрана): срочный сбор днём, король идёт во главе стола — советники сходятся
+## и садятся, заседание (доклады, «что прикажет государь»), никто не встаёт раньше короля
+func council_test() -> bool:
+	if not meet.ok():
+		print("selftest: совет — нет королевства")
+		return false
+	Game.speed = 3
+	Game.set_hour(14.0)
+	people.snap(false)
+	last_ha = -1.0     # без «перевода часов»: советники идут к столу сами
+	var why: String = meet.can_call()
+	var called: bool = meet.call_council()
+	var pr: Dictionary = meet.presence()
+	print("selftest: совет — созыв ", called, " (", why, "): придут ", pr.come.size(), ", в отъезде ", pr.away.size(), ", больны ", pr.sick.size(), ", пустуют ", pr.vac.size())
+	for i in 10:
+		if hud.dlg_choosing() or not hud.dlg_open():
+			break
+		hud.advance()
+	var asked: bool = hud.dlg_choosing()
+	hud.choose(0)
+	var ran := false
+	var fr := 0
+	var trace := PackedStringArray()   # кто где, пока сходятся (печать — если совет не собрался)
+	while fr < 4000 and not ran:
+		_tick(0.05)
+		fr += 1
+		ran = hud.dlg_open()
+		if fr % 40 == 0 and fr <= 400:
+			var a := PackedStringArray()
+			for e in pr.come:
+				var n: Dictionary = e.n
+				a.append("%s %s (%d,%d) %s%s п%d" % [String(n["key"]).substr(5, 4), n["loc"], n["x"], n["y"], n["cur"], "✓" if meet.seated_now(n) else "", (n["path"] as Array).size() if n["path"] is Array else -1])
+			trace.append("  " + Game.clock_text() + " " + " | ".join(a))
+	var C: Dictionary = Sim.G.court
+	print("selftest: совет — выбор ", asked, ", кадров ", fr, ", ", Game.clock_text(), ", король за столом ", meet.king_at_table(), ", заседание ", ran, " (meetDone ", C.get("meetDone"), ")")
+	if not ran:
+		print("\n".join(trace))
+		for e in pr.come:
+			var n: Dictionary = e.n
+			print("  ", n["key"], " ", n["loc"], " ", Vector2(n["x"], n["y"]), " sit ", n["sit"] != null, " сел ", meet.seated_now(n), " cur ", n["cur"], " путь ", (n["path"] as Array).size() if n["path"] is Array else -1, " ov ", n.get("override"))
+	var reps := 0
+	for i in 40:
+		if not hud.dlg_open():
+			break
+		if hud.dlg_choosing():
+			hud.choose(1)
+		else:
+			reps += 1
+			hud.advance()
+	for i in 20:
+		_tick(0.05)
+	var held: bool = pr.come.all(func(e): return meet.seated_now(e.n))
+	stand_up()
+	for i in 20:
+		_tick(0.05)
+	var rose: bool = pr.come.all(func(e): return e.n.get("override") == null)
+	print("selftest: совет — докладов ", reps, ", сидят до короля ", held, ", встали после ", rose)
+	Game.speed = 1
+	return called and asked and ran and reps >= 1 and held and rose and float(C.get("meetDone", -1.0)) == float(Game.day)

@@ -50,6 +50,10 @@ func sched_target(n: Dictionary) -> String:
 	for e in S:
 		if float(e[0]) <= h:
 			cur = e
+	# на время — другое место (совет, пир, месса): {spot, until, day}
+	var ov: Variant = n.get("override")
+	if ov is Dictionary and float(ov.until) > h and int(ov.day) == Game.day:
+		return String(ov.spot)
 	if cur[1] == "stairs" and n.has("bed") and not spot_of(n["bed"]).is_empty():
 		return n["bed"]
 	return cur[1]
