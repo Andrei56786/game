@@ -497,7 +497,7 @@ static func econCaravans() -> void:
 		if JS.t(a.get("cargo")) and JS.t(a.get("ai")) and a.ai.to >= 0:
 			var key := JS.s(a.ai.to)
 			if not inc.has(key):
-				inc[key] = {}
+				JS.oset(inc, key, {})
 			var o: Dictionary = inc[key]
 			for k in a.cargo:
 				o[k] = JS.n(o.get(k)) + a.cargo[k]
@@ -541,6 +541,261 @@ static func dutyTo(r: float, v: float) -> void:
 		return
 	var R0: Dictionary = Sim.G.realms[int(r)]
 	R0.dutyAcc = JS.n(R0.get("dutyAcc")) + v
+
+## цена закупки n единиц с рынка (по Симпсону: цена растёт по мере того, как пустеет рынок)
+static func buyCost(S: Dictionary, k: String, n: float) -> float:
+	if n <= 0:
+		return 0.0
+	var s := JS.n(S.mk.get(k))
+	return n * (pxAt(S, k, s) + 4 * pxAt(S, k, maxf(0.0, s - n / 2)) + pxAt(S, k, maxf(0.0, s - n))) / 6 * (1.5 if JS.t(S.siege) else 1.0)
+
+## выручка за n единиц на рынке (цена падает, пока товар прибывает)
+static func sellGain(S: Dictionary, k: String, n: float) -> float:
+	if n <= 0:
+		return 0.0
+	var s := JS.n(S.mk.get(k))
+	return n * (pxAt(S, k, s) + 4 * pxAt(S, k, s + n / 2) + pxAt(S, k, s + n)) / 6
+
+static func caravanCap(a: Dictionary) -> float:
+	return float(JS.o(a.get("wagons"), 2.0)) * 400
+
+## купцы несут вести о последних рынках; писцы короля слышат их на его собственных рынках
+static func caravanNews(a: Dictionary, S: Dictionary) -> void:
+	var G := Sim.G
+	if S.ctrl == G.player.realm and JS.t(a.get("news")):
+		for nw in a.news:
+			var ti := int(nw.id)
+			var T: Variant = G.setts[ti] if ti >= 0 and ti < G.setts.size() else null
+			if T == null or nw.id == S.id or G.day - nw.d > 60 or (JS.t(T.get("seen")) and T.seen.d >= nw.d):
+				continue
+			T.seen = {"d": nw.d, "px": nw.px}
+	if not JS.t(a.get("news")):
+		a.news = []
+	var L: Array = a.news
+	var i := -1
+	for j in L.size():
+		if L[j].id == S.id:
+			i = j
+			break
+	var sn := mkSnap(S)
+	sn.id = S.id
+	if i >= 0:
+		L.remove_at(i)
+	L.append(sn)
+	if L.size() > 3:
+		L.pop_front()
+
+## лучшая поездка с рынка M: один товар, одно место, наибольшая прибыль за день пути
+static func planTrip(a: Dictionary, M: Dictionary) -> Variant:
+	var G := Sim.G
+	var W := Sim.W
+	var ws: Dictionary = W.setts[int(M.id)]
+	var inc: Dictionary = JS.o(Sim.ECON.get("incoming"), {})
+	var cand := []
+	var best: Variant = null
+	if a.cash < 90:
+		return null
+	for k in Sim.GOODS:
+		var avail: float = JS.n(M.mk.get(k)) - M.mkT[k] * 0.6
+		if avail > 0:
+			cand.append_array([k, avail, pxAt(M, k, JS.n(M.mk.get(k)))])
+	if cand.is_empty():
+		return null
+	var seatK := Sim.SEAT_K
+	var bs := float(Sim.T.BASE_SPEED)
+	var ECONK: Dictionary = Sim.ECONK
+	var bad: Array = a.bad if JS.t(a.get("bad")) else []
+	for D in G.setts:
+		if is_same(D, M) or JS.t(D.siege) or D.ctrl == 6.0 or bad.has(D.id):
+			continue
+		var wd: Dictionary = W.setts[int(D.id)]
+		if wd.type == "village":
+			continue
+		if D.ctrl < 5 and a.realm < 5 and Sim.hostile(a.realm, D.ctrl):
+			continue
+		var d := JS.hypot(wd.x - ws.x, wd.y - ws.y)
+		if d > 80 * seatK:
+			continue
+		var days := d * 1.3 / (bs * 0.8) + 1.5
+		var incD: Dictionary = inc.get(JS.s(D.id), {})
+		for c in range(0, cand.size(), 3):
+			var k: String = cand[c]
+			var pb: float = cand[c + 2]
+			if pxAt(D, k, JS.n(D.mk.get(k))) * 0.91 < pb * 1.12:
+				continue # цена там не окупит пошлин и дороги
+			var want: float = D.mkT[k] * 1.2 - JS.n(D.mk.get(k)) - JS.n(incD.get(k))
+			if want <= 0:
+				continue
+			var b: float = Sim.GD[k].bulk
+			var q := minf(minf(cand[c + 1], want), caravanCap(a) / b if b > 0 else 25.0)
+			if q * Sim.GD[k].p < 15:
+				continue
+			q = minf(q, (a.cash - 60) / (pb * 1.15))
+			if q * Sim.GD[k].p < 15:
+				continue
+			var cost: float = buyCost(M, k, q) * (1 + ECONK.dutyBuy)
+			var gain: float = sellGain(D, k, q) * (1 - ECONK.dutySell) * 0.97
+			var prof: float = gain - cost
+			var sc: float = prof / days
+			if prof > 12 and (best == null or sc > best.sc):
+				best = {"D": D, "k": k, "q": q, "cost": cost, "gain": gain, "prof": prof, "sc": sc, "days": days}
+	return best
+
+## ближайший укреплённый рынок, где купцу рады (своей державы или дружественной)
+static func safeSeat(a: Dictionary) -> int:
+	var G := Sim.G
+	var W := Sim.W
+	var best := -1
+	var bd := 1e9
+	for S in G.setts:
+		var w: Dictionary = W.setts[int(S.id)]
+		if w.type == "village" or JS.t(S.siege) or S.ctrl >= 5 or (S.ctrl != a.realm and Sim.hostile(a.realm, S.ctrl)):
+			continue
+		var d := JS.hypot(w.x - a.x, w.y - a.y) * (0.8 if S.ctrl == a.realm else 1.0)
+		if d < bd:
+			bd = d
+			best = int(S.id)
+	return best
+
+## день купца (aiCaravan): бегство от угроз, продажа по прибытии, новая поездка, поиски рынка
+static func aiCaravan(a: Dictionary) -> void:
+	var G := Sim.G
+	var W := Sim.W
+	var ECONK: Dictionary = Sim.ECONK
+	var th := SimAI.threatsNear(a, 4)
+	if th.size() > 0 and a.ai.task != "flee":
+		var s0 := safeSeat(a)
+		if s0 >= 0:
+			SimAI.goTo(a, int(W.setts[s0].i), "flee")
+		a.ai.t = 3.0
+		return
+	if JS.t(a.get("path")):
+		return
+	if a.ai.task == "flee":
+		a.ai.task = "trade" if JS.t(a.get("cargo")) else "idle"
+	var here := SimDay.settNear(a.x, a.y, 1.5)
+	var H0: Variant = G.setts[here] if here >= 0 else null
+	var hereSeat: bool = H0 != null and W.setts[here].type != "village"
+	# прибыли: продать товар
+	if JS.t(a.get("cargo")) and a.ai.to >= 0 and float(here) == a.ai.to:
+		var D: Dictionary = G.setts[here]
+		var gain := 0.0
+		for k in a.cargo:
+			var q: float = a.cargo[k]
+			var g := sellGain(D, k, q)
+			D.mk[k] = JS.n(D.mk.get(k)) + q
+			gain += g
+			stAdd(D, "imp", k, q)
+		var duty: float = gain * ECONK.dutySell * (1.25 if D.ctrl == 0.0 and JS.t(G.get("court")) and SimDyn.hasTech("fairs") else 1.0)
+		dutyTo(D.ctrl, duty)
+		var net := gain * 0.97 - duty
+		a.cash += net
+		a.profit = JS.n(a.get("profit")) + net - JS.n(a.ai.get("cost"))
+		a.trips = JS.n(a.get("trips")) + 1
+		if D.ctrl == G.player.realm or a.realm == G.player.realm:
+			var R1: Dictionary = G.realms[int(G.player.realm)]
+			R1.tradeN = JS.n(R1.get("tradeN")) + 1
+		if a.realm == G.player.realm:
+			seeMarket(D)
+		caravanNews(a, D)
+		a.cargo = null
+		a.ai.task = "idle"
+		a.ai.from = float(here)
+		a.ai.to = -1.0
+		a.ai.t = 0.0
+		if a.cash > 900: # богатая гильдия платит взносы дома
+			var x: float = a.cash - 700
+			a.cash = 700.0
+			dutyTo(a.realm, x * 0.2)
+	if not JS.t(a.get("cargo")) and a.cash < 50 and hereSeat:
+		SimDay.destroyArmy(a, "разорились") # разорившийся купец: люди расходятся по домам
+		return
+	if a.ai.t > 0:
+		a.ai.t -= 1
+		return
+	# на рынке: задумать следующую поездку
+	if hereSeat and not JS.t(a.get("cargo")):
+		var tr: Variant = planTrip(a, H0)
+		if tr != null:
+			var M: Dictionary = H0
+			var k: String = tr.k
+			var purse: float = a.cash - 60
+			var q: float = tr.q
+			var cost := buyCost(M, k, q)
+			if cost * (1 + ECONK.dutyBuy) > purse:
+				q *= purse / (cost * (1 + ECONK.dutyBuy)) * 0.95
+				cost = buyCost(M, k, q)
+			var wd: Dictionary = W.setts[int(tr.D.id)]
+			var p: Variant = SimArmy.planPath(a, int(wd.i))
+			if p == null or p.size() < 2 or p.size() > 40 + 2.2 * JS.hypot(wd.x - a.x, wd.y - a.y):
+				# не дойти (другой остров): больше туда не ходить
+				if not JS.t(a.get("bad")):
+					a.bad = []
+				a.bad.append(tr.D.id)
+				if a.bad.size() > 12:
+					a.bad.pop_front()
+				a.ai.t = 1.0
+				return
+			var duty: float = cost * ECONK.dutyBuy
+			M.mk[k] -= q
+			a.cash -= cost + duty
+			dutyTo(M.ctrl, duty)
+			stAdd(M, "exp", k, q)
+			a.cargo = {k: q}
+			a.ai = {"task": "trade", "to": tr.D.id, "from": M.id, "t": 0.0, "k": k, "cost": cost + duty, "goal": float(wd.i)}
+			SimArmy.setPath(a, p)
+			SimDay.caravanSupply(a, M, p.size() / (float(Sim.T.BASE_SPEED) * 0.6) + 6) # хлеб в дорогу
+			if a.realm == G.player.realm:
+				seeMarket(M)
+			caravanNews(a, M)
+			return
+		a.ai.idle = JS.n(a.ai.get("idle")) + 1
+		a.ai.t = Sim.R.i(2, 4)
+		if a.ai.idle < 3:
+			return
+	# здесь нечего везти (или не на рынке): искать в другом месте
+	if JS.t(a.get("cargo")) and a.ai.to >= 0:
+		if not SimAI.goTo(a, int(W.setts[int(a.ai.to)].i), "trade"):
+			a.ai.lost = JS.n(a.ai.get("lost")) + 1
+			if a.ai.lost > 3:
+				a.cargo = null
+				a.ai.to = -1.0
+				a.ai.lost = 0.0
+			a.ai.t = 2.0
+		return
+	var seatK := Sim.SEAT_K
+	var L: Array = G.setts.filter(func(S):
+		var t: String = W.setts[int(S.id)].type
+		if t == "village" or JS.t(S.siege) or S.ctrl == 6.0 or S.id == float(here):
+			return false
+		if S.ctrl < 5 and a.realm < 5 and Sim.hostile(a.realm, S.ctrl):
+			return false
+		var w: Dictionary = W.setts[int(S.id)]
+		return JS.hypot(w.x - a.x, w.y - a.y) < 55 * seatK)
+	if L.size() > 0:
+		var S2: Dictionary = Sim.R.pick(L)
+		a.ai.idle = 0.0
+		a.ai.task = "seek"
+		SimAI.goTo(a, int(W.setts[int(S2.id)].i), "trade")
+	else:
+		a.ai.t = 5.0
+
+## что достаётся победителю от разбитого обоза (золото за товар и кошель)
+static func caravanLoot(la: Dictionary) -> float:
+	var G := Sim.G
+	var v := JS.n(la.get("cash")) * 0.6
+	if JS.t(la.get("cargo")):
+		for k in la.cargo:
+			v += la.cargo[k] * Sim.GD[k].p * 0.5
+	la.cash = 0.0
+	la.cargo = null
+	if not JS.t(G.get("robbed")):
+		G.robbed = []
+	var L: Array = G.robbed
+	L.append({"d": G.day, "r": la.realm, "v": JS.rnd(v / 0.55), "x": JS.rnd(la.x), "y": JS.rnd(la.y)})
+	if L.size() > 40:
+		L.pop_front()
+	return JS.rnd(v)
 
 # ---------- казна ----------
 static func provIncome(p: int) -> float:
