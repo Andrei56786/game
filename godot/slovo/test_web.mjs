@@ -121,6 +121,9 @@ try {
         'походы: шагов ' + (T1 && T1.steps) + ' (последний ' + (T1 && T1.step_ms) + ' мс), в походе ' + (R1 && R1.march) + ', в осаде ' + (R1 && R1.sieges) + ', путей ' + (R1 && R1.paths) + ' (' + (R1 && R1.path_ms) + ' мс на путь), войн ' + (R1 && R1.wars) + ', вестей о чужих войсках ' + (R1 && R1.know));
       await cmd('speed 0'); await wait(1200); const T2 = (await mst()).time; await wait(2500); m = await mst(); await shot('map_pause');
       check(m && m.time.speed === 0 && m.time.day === T2.day && m.time.clock === T2.clock, 'пауза: часы стоят (' + (m && m.time.clock) + ')');
+      // начатый день королевство досчитывает и на паузе (бои без экрана идут кусками по кадрам), а в конце дня обзор (computeVision)
+      // снова закрывает карту туманом — поэтому «reveal» только когда королевство догнало календарь и ничего не считает
+      await tm(t => !t.busy && t.sim >= t.day, 60000);
       await cmd('reveal', 'army ai', 'zoom 1'); m = await settle(); await shot('map_ai_army');
       check(m && m.realm.drawn >= 1 && m.realm.kinds.lord_ai >= 1, 'чужое войско вблизи (вся карта открыта): ' + (m && JSON.stringify(m.realm.kinds)) + ', нарисовано ' + (m && m.realm.drawn));
       // 0.7: король в поле — выезд со свитой; встреча с врагом — окно, автобой (бой без экрана) и итог; бой на поле — расстановка,
