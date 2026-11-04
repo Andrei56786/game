@@ -3,8 +3,9 @@ extends CanvasLayer
 ## детализации от MapGPU, границы и державы цветом, масштабы 1/8…2 (колесо, Q/E), перетаскивание мышью, WASD и стрелки.
 ## Поверх — поселения, войска, подписи, мини-карта и верхняя строка (map_hud.gd). Вид года — по дню (MapGPU.set_day): обзор
 ## перекрашивается сразу, видимые куски — по два за кадр. Королевство — Sim.G (новая игра при первом открытии карты):
-## туман войны (map_show_fog: тень над невидимым, бумага над неразведанным), владельцы — по поселениям. Время на карте
-## пока не идёт.
+## туман войны (map_show_fog: тень над невидимым, бумага над неразведанным), владельцы — по поселениям. Время идёт
+## (скорость 1–3, пауза — Пробел): сутки за 1,6 / 0,8 / 0,3 с, дни королевства считает Game (SimDay), карта следит
+## за туманом и владельцами провинций, верхняя строка — дата, погода, распутица, лента летописи — справа внизу.
 signal leave
 const MapHud = preload("res://scripts/world/map_hud.gd")
 const ZOOMS := [0.125, 0.25, 0.5, 1.0, 2.0]
@@ -39,6 +40,7 @@ var dragging := false
 var centered := false
 var sw := PackedVector2Array()   # поселения: точка на картинке (settWorld)
 var vis := {"n": 0, "miss": 0, "made": 0}
+var pol_t := -1.0          # когда последний раз перекрашивали державы (не чаще 2,5 раза в секунду, как в HTML)
 
 func _ready() -> void:
 	layer = 1
@@ -99,6 +101,8 @@ func _fog_update() -> void:
 func _politics() -> void:
 	for P: Dictionary in G.W.provs:
 		G.set_prov_owner(P.id, int(Sim.G.setts[P.seat].ctrl))
+	Sim.pol_dirty = 0
+	pol_t = Time.get_ticks_msec() / 1000.0
 
 func _setup() -> void:
 	on = true
@@ -174,7 +178,10 @@ func _process(dt: float) -> void:
 		return
 	if not on:
 		_setup()
+	Game.advance(dt, true)
 	G.set_day(Game.day)
+	if Sim.pol_dirty and Time.get_ticks_msec() / 1000.0 - pol_t > 0.4:
+		_politics()
 	var d := Vector2.ZERO
 	for k in PANK:
 		if Input.is_physical_key_pressed(k):
@@ -299,6 +306,12 @@ func _unhandled_input(e: InputEvent) -> void:
 				zoom_at(1, Vector2(SW / 2.0, SH / 2.0))
 			KEY_H, KEY_F1:
 				hud.help = not hud.help
+			KEY_SPACE:
+				Game.toggle_pause()
+			KEY_0, KEY_1, KEY_2, KEY_3:
+				Game.set_speed(k - KEY_0)
+			KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3:
+				Game.set_speed(k - KEY_KP_0)
 		get_viewport().set_input_as_handled()
 		return
 	if not on:
@@ -399,7 +412,17 @@ func cmd(p: PackedStringArray) -> void:
 func state() -> Dictionary:
 	return {"ok": G != null and G.ok, "stage": G.stage if G else "", "ms": G.ms if G else {}, "cam": [snappedf(cam.x, 0.1), snappedf(cam.y, 0.1), cam.z], "mode": mode,
 		"chunks": G.chunks.size() if G else 0, "built": G.nbuilt if G else 0, "cms": snappedf(G.cms, 0.01) if G else 0.0, "prof": G.prof if G else {}, "vis": vis,
-		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s(), "realm": _realm_state()}
+		"sea": [G.sea_k.x, G.sea_k.y, G.sea_k.z] if G else [], "nsea": G.nsea if G else 0, "hover": hud.hover_s(), "realm": _realm_state(), "time": _time_state()}
+
+## часы и дни королевства: день календаря и симуляции, скорость, сколько счёта уходит на день
+func _time_state() -> Dictionary:
+	var o := {"day": Game.day, "clock": Game.clock_text(), "speed": Game.speed, "lag_max": Game.lag_max, "fps": Engine.get_frames_per_second()}
+	if not Sim.G.is_empty():
+		o.merge({"sim": int(Sim.G.day), "busy": SimDay.busy, "ms": snappedf(SimDay.ms_day, 0.1), "frames": SimDay.frames, "n": SimDay.n_days,
+			"avg": snappedf(SimDay.sum_ms / maxf(1.0, SimDay.n_days), 0.1), "max": snappedf(SimDay.max_ms, 0.1), "log": Sim.G.log.size(),
+			"feed": Sim.feed.size(), "mud": snappedf(JS.n(Sim.G.get("mud")), 0.01), "mudOn": JS.t(Sim.G.get("mudOn")),
+			"last": (Sim.G.log as Array).slice(-3).map(func(e): return "%d: %s" % [int(e.d), String(e.t).left(48)])})
+	return o
 
 func _realm_state() -> Dictionary:
 	if Sim.G.is_empty():

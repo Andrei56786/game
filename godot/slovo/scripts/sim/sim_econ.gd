@@ -205,14 +205,24 @@ static func priceOf(S: Dictionary, k: String, sell := false) -> float:
 		p *= 0.55
 	return p
 
+## взять с рынка (mkTake): что купили войска — в книги рынка
+static func mkTake(S: Dictionary, k: String, n: float) -> void:
+	if not (n > 0):
+		return
+	S.mk[k] = maxf(0.0, JS.n(S.mk.get(k)) - n)
+	if S.has("st") and JS.t(S.st.get("arm")):
+		stAdd(S, "arm", k, n)
+
 static func ema(o: Dictionary, k: String, v: float, a: float) -> void:
 	o[k] = JS.rnd((JS.n(o.get(k)) * (1 - a) + v * a) * 100) / 100.0
 
 # ---------- дневной круг ----------
+## день рынков (econDaily): корутина — при SimDay.budget_us > 0 растягивается на несколько кадров (между поселениями)
 static func econDaily() -> void:
 	var G := Sim.G
 	var W := Sim.W
 	var t0 := Time.get_ticks_usec()
+	var ci := 0   # части дня по кадрам (SimDay.due): каждые 32 поселения — проверка времени
 	var sf := Sim.seasonOf(G.day)
 	var day: float = G.day
 	var fairs: bool = G.has("court") and SimDyn.hasTech("fairs")
@@ -242,8 +252,13 @@ static func econDaily() -> void:
 	var SFd := []
 	for k in RAW_G:
 		SFd.append(Sim.SEASON_F[k][sf] if Sim.SEASON_F.has(k) else 1.0)
+	if SimDay.due():
+		await SimDay.pause()
 	var ECONK: Dictionary = Sim.ECONK
 	for S in G.setts:
+		ci += 1
+		if (ci & 31) == 0 and SimDay.due():
+			await SimDay.pause()
 		var ws: Dictionary = W.setts[int(S.id)]
 		var P: Dictionary = G.provs[ws.prov]
 		var seat: Dictionary = G.setts[W.provs[ws.prov].seat]
@@ -281,8 +296,13 @@ static func econDaily() -> void:
 			P.ecTax += tx
 		else:
 			inc[int(S.ctrl)].occ += tx
+	if SimDay.due():
+		await SimDay.pause()
 	# 2. мастерские: работают, пока товар окупает сырьё и склады не полны
 	for S in G.setts:
+		ci += 1
+		if (ci & 31) == 0 and SimDay.due():
+			await SimDay.pause()
 		var ws: Dictionary = W.setts[int(S.id)]
 		var t: String = ws.type
 		if t == "village" or S.ctrl == 6.0:
@@ -324,10 +344,17 @@ static func econDaily() -> void:
 				P.ecCraft += cr
 			else:
 				inc[int(S.ctrl)].occ += cr
+	if SimDay.due():
+		await SimDay.pause()
 	# 3. мелкая торговля: разносчики и возчики между соседними городами, где товар дороже провоза
 	econTrade(inc, fairs)
+	if SimDay.due():
+		await SimDay.pause()
 	# 4. горожане едят, топят и носят (меньше, когда дорого); нехватка вредит
 	for S in G.setts:
+		ci += 1
+		if (ci & 31) == 0 and SimDay.due():
+			await SimDay.pause()
 		var ws: Dictionary = W.setts[int(S.id)]
 		if ws.type == "village":
 			continue
@@ -355,6 +382,8 @@ static func econDaily() -> void:
 		for k in (RAW_G if EC[int(S.id)].vil else Sim.GOODS):
 			if mk[k] > cap[k]:
 				mk[k] = cap[k]
+	if SimDay.due():
+		await SimDay.pause()
 	# 6. что игрок знает о чужих рынках: что видят его глаза и что рассказывают купцы
 	var me: float = G.player.realm
 	var inw: Variant = null
@@ -378,6 +407,8 @@ static func econDaily() -> void:
 			seeMarket(B if A.ctrl == me else A)
 	Sim.ECON.inc = inc
 	Sim.ECON.incDay = day
+	if SimDay.due():
+		await SimDay.pause()
 	econCaravans()
 	Sim.ECON.ms = Sim.ECON.ms * 0.9 + (Time.get_ticks_usec() - t0) / 1000.0 * 0.1
 

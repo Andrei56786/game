@@ -4,6 +4,8 @@ extends Control
 const W := 640
 const H := 360
 const PO := Color8(27, 20, 32)          # PAL.o
+const SPD_IC := ["i_pause", "i_play1", "i_play2", "i_play3"]
+const SPD_X := W - 262.0                # кнопки скорости во дворе
 var court: Node2D
 var dark := 0.0
 var help := true
@@ -154,10 +156,7 @@ func _draw() -> void:
 			txt("E", x + 7, y + 5, Color8(58, 38, 20))
 			txt(s, x + 20, y + 5, Color8(244, 236, 216))
 	if Game.speed == 0 and dlg == null:
-		var a := 0.6 + sin(now * 3.0) * 0.3
-		var w := tw("ПАУЗА") + 12.0
-		box(W / 2.0 - w / 2.0, 22, w, 12, Color(0.165, 0.114, 0.086, a))
-		txt("ПАУЗА", W / 2.0, 25, Color(0.97, 0.83, 0.36, a), "m", "c")
+		pause_mark(now)
 	if help_auto and now > 40.0:
 		help = false
 		help_auto = false
@@ -208,7 +207,7 @@ func _top() -> void:
 	var night := Game.is_night()
 	var ds := Game.date_text()
 	var clk := Game.clock_text()
-	var wt: Dictionary = D.get("weather", {})
+	var wt: Dictionary = D.get("weather", {}) if Sim.G.is_empty() else Sim.weatherOf()
 	var wn: String = wt.get("n", "")
 	var end_x := W - 266.0
 	var tot := tw(ds) + 6 + 8 + tw(clk) + 12 + 9 + tw(wn, "s")
@@ -224,12 +223,18 @@ func _top() -> void:
 	icon("i_" + String(wt.get("ic", "sun")), x3, 7)
 	if wn != "":
 		txt(wn, x3 + 9, 6, Color8(200, 216, 232), "s")
-	var bx := W - 262.0
+	speed_btns(SPD_X, get_local_mouse_position())
+	var loc_s: String = court.L["name"]
+	txt(loc_s, W - 6, 6, Color8(200, 184, 152), "m", "r")
+
+## кнопки скорости (speedBtns в HTML): пауза и три скорости; нажатая и та, что под мышью, — светлее
+func speed_btns(bx: float, m: Vector2) -> void:
 	for i in 4:
 		var bxx := bx + i * 15
+		var lit := Game.speed == i or Rect2(bxx, 2, 14, 14).has_point(m)
 		box(bxx, 2, 14, 14, PO)
-		box(bxx + 1, 3, 12, 12, Color8(90, 64, 48) if Game.speed == i else Color8(44, 32, 24))
-		var ik: String = ["i_pause", "i_play1", "i_play2", "i_play3"][i]
+		box(bxx + 1, 3, 12, 12, Color8(90, 64, 48) if lit else Color8(44, 32, 24))
+		var ik: String = SPD_IC[i]
 		var ic: Array = Art.D["icons"].get(ik, [])
 		if not ic.is_empty():
 			var sz := Art.size(ic[0])
@@ -238,8 +243,20 @@ func _top() -> void:
 			var Y := roundf(2 + (14 - sz.y * sc) / 2.0)
 			if not _hi(ik, "btn", X, Y):
 				spr(ic[0], X, Y, sc)
-	var loc_s: String = court.L["name"]
-	txt(loc_s, W - 6, 6, Color8(200, 184, 152), "m", "r")
+
+## какая кнопка скорости под точкой (−1 — никакая)
+func speed_hit(bx: float, p: Vector2) -> int:
+	if p.y < 2.0 or p.y >= 16.0 or p.x < bx:
+		return -1
+	var i := int((p.x - bx) / 15.0)
+	return i if i < 4 and p.x - bx - i * 15.0 < 14.0 else -1
+
+## «ПАУЗА» под верхней строкой (мигает)
+func pause_mark(t: float) -> void:
+	var a := 0.6 + sin(t * 3.0) * 0.3
+	var w := tw("ПАУЗА") + 12.0
+	box(W / 2.0 - w / 2.0, 22, w, 12, Color(0.165, 0.114, 0.086, a))
+	txt("ПАУЗА", W / 2.0, 25, Color(0.97, 0.83, 0.36, a), "m", "c")
 
 func _bubbles() -> void:
 	var C := court
