@@ -1,6 +1,6 @@
 class_name SimText
 ## Слова и подсказки карты — перенос engine.js (fmt, plural), army.js (kmTxt), ai.js (armyLabel), econui.js (fq, agoTxt,
-## строки рынка и каравана) и ui.js (settLabelCol, settTip, armyTip, tileTip, goldTip). Строка подсказки — {t, c, ic}:
+## строки рынка и каравана), ui.js (settLabelCol, settTip, armyTip, tileTip, goldTip) и deceitui.js (ghostTip, строки уловок). Строка подсказки — {t, c, ic}:
 ## текст, цвет (#rrggbb или "") и значок ("shield3", "" — без значка), как строки tip в HTML.
 
 const UIC := {"good": "#9fe07a", "bad": "#ee7a6a", "warn": "#f7d35c", "dim": "#9a8a70", "text": "#f4ecd8", "blue": "#a8c8ff"}
@@ -187,6 +187,42 @@ static func armyTip(a: Dictionary) -> Array:
 		L.append_array(caravanTipLines(a, exact))
 	if not isP and Sim.hostile(G.player.realm, a.realm):
 		L.append(row("Враг.", UIC.dim))   # в HTML: «Враг. Щелчок — преследовать.» — походов пока нет
+	# обёртка deceitui.js: свои уловки; что Око знает о замыслах чужого полководца
+	if a.realm == G.player.realm:
+		if JS.n(a.get("feign")) > G.day:
+			L.insert(mini(2, L.size()), row("Притворное отступление · ещё " + JS.s(a.feign - G.day) + " дн.", UIC.warn))
+		if JS.t(a.get("feint")):
+			var fe: Dictionary = a.feint
+			L.insert(mini(2, L.size()), row("Ложный марш" + (": враг стянул " + SimBel.nArm(fe.drew) if JS.t(fe.get("drew")) else "") + (" · ещё " + JS.s(maxf(0.0, fe.until - G.day)) + " дн." if JS.t(fe.get("until")) else ""), UIC.warn))
+	elif a.realm >= 1 and a.realm < 5 and a.kind == "lord" and SimBel.insight(a.realm):
+		var ai: Variant = a.get("ai")
+		var W := Sim.W
+		if JS.t(a.get("fires")):
+			L.insert(mini(3, L.size()), row("Око: костров вдвое больше, чем людей — на деле ≈" + fmt(JS.rnd(Sim.armyMen(a) / 10) * 10), UIC.good))
+		if typeof(ai) == TYPE_DICTIONARY and JS.t(ai.get("feint")) and _sett_ok(ai.feint.s):
+			L.insert(mini(3, L.size()), row("Око: это ложный марш на " + String(W.setts[int(ai.feint.s)].name), UIC.good))
+		if typeof(ai) == TYPE_DICTIONARY and JS.t(ai.get("guard")) and _sett_ok(ai.guard.s):
+			L.insert(mini(3, L.size()), row("Стережёт " + String(W.setts[int(ai.guard.s)].name), UIC.blue))
+	return L
+
+
+static func _sett_ok(s: Variant) -> bool:
+	return typeof(s) in [TYPE_FLOAT, TYPE_INT] and s >= 0 and s < Sim.W.setts.size()
+
+
+const BSRC := {"eye": "свои глаза", "spy": "шпион при нашем дворе", "rumor": "слухи с дорог", "net": "сеть Ока", "icp": "перехваченный гонец", "inw": "внутренний лазутчик"}
+
+## подсказка призрака (ghostTip, deceitui.js): последнее донесение о чужом войске
+static func ghostTip(k: Dictionary) -> Array:
+	var G := Sim.G
+	var g: Variant = Sim.charOf(k.gen)
+	var n: float = G.day - k.day
+	var L := [row("Последнее донесение", "", "shield" + JS.s(k.realm)), row((Sim.charName(g) if g != null else "Войско") + " (" + realmName(k.realm) + ")"),
+		row("Воинов: около " + fmt(k.men) + (" (костров много)" if JS.t(k.get("fires")) else "")),
+		row(agoTxt(n) + " · " + String(BSRC.get(String(k.src), String(k.src))), UIC.dim)]
+	if JS.n(k.get("tgt", -1.0)) >= 0 and _sett_ok(k.tgt):
+		L.append(row("Шло на " + String(Sim.W.setts[int(k.tgt)].name), UIC.warn))
+	L.append(row("Где оно сейчас — неизвестно." if n > 0 else "Сейчас его не видно.", UIC.dim))
 	return L
 
 

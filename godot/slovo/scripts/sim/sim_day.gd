@@ -1,7 +1,8 @@
 class_name SimDay
-## День королевства — перенос dailyTick (events.js) без того, что Godot ещё не считает: замыслов держав (aiRealm),
-## походов ИИ (aiArmy), жизни двора (совет, династия, науки, DAILY_EXT — кроме распутицы из march.js), собора, случайных
-## событий. Войска (army.js: dailyArmy с обёрткой march.js — мороз и служба ополчения), поселения (dailySett), смена сезона,
+## День королевства — перенос dailyTick (events.js) без того, что Godot ещё не считает: жизни двора (совет, династия, науки,
+## DAILY_EXT — кроме распутицы из march.js), собора, случайных событий. Замыслы держав (SimAI.aiRealm: войны, мир, походы,
+## вера и обман — SimBel) и походы ИИ (SimAI.aiArmy: осады, купцы, разбойники, приказы короля — SimCmd) — с 0.6.
+## Войска (army.js: dailyArmy с обёрткой march.js — мороз и служба ополчения), поселения (dailySett), смена сезона,
 ## недельная дипломатия (diplo.js), разбойники у пустых логовищ, пленники, гонцы, падение держав и победа — как в HTML.
 ## Эталон — pageDay в tools/sim_export.mjs: тот же день в HTML; tools/state_check.gd сверяет состояние каждый день.
 ## День можно растянуть на несколько кадров: dailyTick(бюджет в мкс) — корутина, между частями ждёт следующего кадра;
@@ -28,6 +29,7 @@ static var done_frame := -1          # кадр, в котором досчит�
 static var n_days := 0               # дней посчитано с начала игры (для проверок: среднее и худшее время дня)
 static var sum_ms := 0.0
 static var max_ms := 0.0
+static var prof := {}                # время частей дня, мкс (накопительно): войска, рынки, поселения, замыслы, походы…
 static var nb_cache := {"d": -1.0, "m": {}}
 static var alerts: Array = []        # для экрана: события, которые в HTML открывают окно (UI.alert)
 static var near_ok := -1             # в каждой клетке не больше одного поселения (тогда settNear ищет по соседним клеткам)
@@ -46,8 +48,15 @@ static func pause() -> void:
 	slice_t = Time.get_ticks_usec()
 
 
+## время части дня — в prof (паузы между кадрами тоже попадают; без бюджета их нет)
+static func _prof(k: String, t0: int) -> int:
+	var t := Time.get_ticks_usec()
+	prof[k] = int(prof.get(k, 0)) + t - t0
+	return t
+
+
 # ---------- день ----------
-## dailyTick (events.js) без ИИ и двора; budget — мкс счёта на кадр (0 — весь день сразу)
+## dailyTick (events.js) без двора; budget — мкс счёта на кадр (0 — весь день сразу)
 static func dailyTick(budget := 0) -> void:
 	busy = true
 	budget_us = budget
@@ -63,12 +72,15 @@ static func dailyTick(budget := 0) -> void:
 		Sim.rollWeather()
 	if fmod(G.day, Sim.DAYS_SEASON) == 0.0:
 		onSeason()
+	var pt := Time.get_ticks_usec()
 	for a in G.armies.duplicate():
 		if JS.t(a.alive):
 			dailyArmy(a)
 		if due():
 			await pause()
+	pt = _prof("army", pt)
 	await SimEcon.econDaily()
+	pt = _prof("econ", pt)
 	for r in 5:
 		if alive(r):
 			SimEcon.realmEconomy(r)
@@ -81,6 +93,19 @@ static func dailyTick(budget := 0) -> void:
 		i += 1
 		if (i & 63) == 0 and due():
 			await pause()
+	pt = _prof("setts", pt)
+	# замыслы держав и походы ИИ (ai.js с обёртками belief.js и command.js)
+	for r in 5:
+		SimAI.aiRealm(r)
+		if due():
+			await pause()
+	pt = _prof("realm", pt)
+	for a in G.armies.duplicate():
+		if JS.t(a.alive) and a.kind != "player":
+			SimAI.aiArmy(a)
+		if due():
+			await pause()
+	pt = _prof("aiArmy", pt)
 	if fmod(G.day, 7.0) == 0.0:
 		diploWeekly()
 	# разбойники возвращаются в пустые логова
@@ -116,8 +141,10 @@ static func dailyTick(budget := 0) -> void:
 	checkVictory()
 	if due():
 		await pause()
+	pt = _prof("rest", pt)
 	SimIntel.computeVision()
 	SimIntel.updateSigns()
+	_prof("vision", pt)
 	calc_us += Time.get_ticks_usec() - slice_t
 	ms_day = calc_us / 1000.0
 	n_days += 1
@@ -974,7 +1001,7 @@ static func _dailyArmy(a: Dictionary) -> void:
 		if isP and lost > 0:
 			Sim.glog("Дезертирство: " + _voinLost(lost, "ушёл ", "ушли ") + ". Боевой дух слишком низок.", "bad")
 	if a.mode == "siege":
-		push_error("SimDay: осада (siegeDaily) ещё не перенесена")
+		SimArmy.siegeDaily(a)
 	if Sim.armyMen(a) <= 0 and JS.t(a.alive):
 		destroyArmy(a, "погибло")
 

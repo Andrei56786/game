@@ -41,9 +41,13 @@ func stroke(x: float, y: float, w: float, h: float, c: Color) -> void:
 	draw_rect(Rect2(x, y, 1, h), c)
 	draw_rect(Rect2(x + w - 1, y, 1, h), c)
 
-func spr(i: int, x: float, y: float, sc: float = 1.0, a: float = 1.0) -> void:
+func spr(i: int, x: float, y: float, sc: float = 1.0, a: float = 1.0, flip := false) -> void:
 	var r := Art.rect(i)
-	draw_texture_rect_region(Art.page(i), Rect2(roundf(x), roundf(y), r.size.x * sc, r.size.y * sc), r, Color(1, 1, 1, a))
+	var w := r.size.x * sc
+	if flip:   # зеркально в той же клетке (ширина < 0 — Godot отражает рисунок)
+		draw_texture_rect_region(Art.page(i), Rect2(roundf(x) + w, roundf(y), -w, r.size.y * sc), r, Color(1, 1, 1, a))
+		return
+	draw_texture_rect_region(Art.page(i), Rect2(roundf(x), roundf(y), w, r.size.y * sc), r, Color(1, 1, 1, a))
 
 # значок у чисел верхней строки, как sprBar в HTML: в книжном шрифте — чёткий рисунок ×1.4 под масштаб окна
 func icon(k: String, x: float, y: float) -> float:

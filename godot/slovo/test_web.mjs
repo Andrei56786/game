@@ -1,6 +1,6 @@
 // Проверка веб-сборки Godot в Chromium без окна: заставка, тронный зал и двор днём, в сумерках и ночью, разговор, ходьба, масштаб;
 // карта королевства: вся, державы, куски у столицы, лето, осень и зима; время на карте: королевство догоняет календарь,
-// на скорости 3 дни идут, казна меняется, весна в летописи, пауза.
+// на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -104,8 +104,8 @@ try {
       // 0.5: время на карте — королевство догоняет календарь день за днём, на скорости 3 дни идут сами, весна — в летописи
       const tm = async (pred, ms = 150000) => { const t = Date.now(); let q = null; while (Date.now() - t < ms) { q = await mst(); if (q && pred(q.time)) break; await wait(400); } return q; };
       await cmd('day 83'); m = await tm(t => t.sim === 83 && !t.busy);
-      const T0 = m && m.time;
-      check(T0 && T0.sim === 83 && T0.n >= 83, 'королевство догнало календарь: день ' + (T0 && T0.sim) + ', посчитано дней ' + (T0 && T0.n) + ', в среднем ' + (T0 && T0.avg) + ' мс на день (худший ' + (T0 && T0.max) + '), кадров в секунду ' + (T0 && T0.fps));
+      const T0 = m && m.time, P0 = m && m.realm && m.realm.pos;
+      check(T0 && T0.sim === 83 && T0.n >= 83, 'королевство догнало календарь: день ' + (T0 && T0.sim) + ', посчитано дней ' + (T0 && T0.n) + ', в среднем ' + (T0 && T0.avg) + ' мс на день (худший ' + (T0 && T0.max) + '), кадров в секунду ' + (T0 && T0.fps) + ', кадр ' + (T0 && T0.dt) + ' мс, из них на королевство до ' + (T0 && T0.b) + ' мс');
       const g0 = m && m.realm.gold; let lag = 0;
       await cmd('speed 3');
       m = await tm(t => { lag = Math.max(lag, t.day - t.sim); return t.sim >= 85 && !t.busy; });
@@ -113,8 +113,14 @@ try {
       const T1 = m && m.time;
       check(T1 && T1.sim >= 85 && lag <= 1 && m.realm.gold !== g0, 'скорость 3: дни идут (день ' + (T1 && T1.day) + ', ' + (T1 && T1.clock) + '), королевство отстаёт не больше чем на день (' + lag + '), казна ' + g0 + ' → ' + (m && m.realm.gold) + ', погода ' + (m && m.realm.weather) + (T1 && T1.mudOn ? ', распутица' : ''));
       check(T1 && T1.feed >= 1 && T1.last.some(x => /весна/.test(x)), 'летопись: ' + (T1 && T1.last.join(' | ')));
+      // 0.6: шаги движения по часам (24 на сутки), походы ИИ — войска сдвинулись, пути проложены
+      const R1 = m && m.realm;
+      check(T1 && T1.steps >= 24 * 85 && R1 && R1.march >= 3 && R1.paths >= 50 && R1.pos !== P0,
+        'походы: шагов ' + (T1 && T1.steps) + ' (последний ' + (T1 && T1.step_ms) + ' мс), в походе ' + (R1 && R1.march) + ', в осаде ' + (R1 && R1.sieges) + ', путей ' + (R1 && R1.paths) + ' (' + (R1 && R1.path_ms) + ' мс на путь), войн ' + (R1 && R1.wars) + ', вестей о чужих войсках ' + (R1 && R1.know));
       await cmd('speed 0'); await wait(1200); const T2 = (await mst()).time; await wait(2500); m = await mst(); await shot('map_pause');
       check(m && m.time.speed === 0 && m.time.day === T2.day && m.time.clock === T2.clock, 'пауза: часы стоят (' + (m && m.time.clock) + ')');
+      await cmd('reveal', 'army ai', 'zoom 1'); m = await settle(); await shot('map_ai_army');
+      check(m && m.realm.drawn >= 1 && m.realm.kinds.lord_ai >= 1, 'чужое войско вблизи (вся карта открыта): ' + (m && JSON.stringify(m.realm.kinds)) + ', нарисовано ' + (m && m.realm.drawn));
       await cmd('speed 1', 'court'); await wait(1500);
       s = await state();
       check(s && s.loc === 'yard', 'назад ко двору: ' + (s && s.loc));

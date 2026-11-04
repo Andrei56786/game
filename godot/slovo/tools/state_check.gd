@@ -1,7 +1,8 @@
 extends SceneTree
 ## Сверка симуляции Godot с HTML-версией: godot --headless --path godot/slovo --script tools/state_check.gd
 ## Эталон — art/sim_ref.bin (tools/sim_export.mjs): состояние HTML после newGame и после newGame3 + обзора по зерну мира,
-## затем дни королевства (pageDay в HTML, SimDay.dailyTick здесь): сводка каждого дня и полные снимки на нескольких днях.
+## затем дни королевства: шаги движения (pageStep в HTML, SimArmy.substep здесь) и сам день (pageDay в HTML, SimDay.dailyTick
+## здесь) — сводка каждого дня (с суммой координат войск) и полные снимки на нескольких днях.
 ## Сравнивается всё: ключи и их порядок, типы (в G только float, как числа JS), числа — точно, генератор R, доход, знаки.
 
 const MAXP := 40
@@ -50,7 +51,17 @@ func _initialize() -> void:
 	var ms_days := 0.0
 	var ms_max := 0.0
 	var bad_day := -1
+	var steps := int(meta.get("steps", 24.0))
+	var ms_steps := 0.0
 	for d in range(1, days + 1):
+		# шаги движения дня (pageStep в HTML: походы войск и встречи), затем сам день
+		t0 = Time.get_ticks_usec()
+		for k in steps:
+			SimArmy.substep(1.0 / steps)
+		ms_steps += (Time.get_ticks_usec() - t0) / 1000.0
+		var pos := 0.0
+		for a in Sim.G.armies:
+			pos = pos + a.x * 7 + a.y * 13
 		t0 = Time.get_ticks_usec()
 		await SimDay.dailyTick(0)
 		var ms := (Time.get_ticks_usec() - t0) / 1000.0
@@ -60,7 +71,7 @@ func _initialize() -> void:
 		var golds := []
 		for r in G.realms:
 			golds.append(r.gold)
-		var me := {"day": G.day, "R": float(Sim.R.st), "gold": golds, "armies": float(G.armies.size()), "log": float(G.log.size()), "w": G.weather.k, "mud": JS.n(G.get("mud")), "chars": float(G.chars.size())}
+		var me := {"day": G.day, "R": float(Sim.R.st), "gold": golds, "armies": float(G.armies.size()), "log": float(G.log.size()), "w": G.weather.k, "mud": JS.n(G.get("mud")), "chars": float(G.chars.size()), "pos": pos}
 		nd = 0
 		var rd: Dictionary = dig[d - 1]
 		for k in rd:
@@ -75,7 +86,12 @@ func _initialize() -> void:
 			if bad_day > 0:
 				break
 	if days > 0:
-		print("дней %d: %.1f мс на день в среднем, самый долгий %.1f мс (в HTML %.1f мс на день)" % [days, ms_days / maxf(1, days), ms_max, float(meta.get("ms", 0.0)) / maxf(1, days)])
+		print("дней %d по %d шагов: день %.1f мс в среднем, самый долгий %.1f мс, шаги %.1f мс на день (в HTML всё вместе %.1f мс на день)" % [days, steps, ms_days / maxf(1, days), ms_max, ms_steps / maxf(1, days), float(meta.get("ms", 0.0)) / maxf(1, days)])
+	if days > 0:
+		var pr := []
+		for k in SimDay.prof:
+			pr.append("%s %.1f" % [k, SimDay.prof[k] / 1000.0 / days])
+		print("части дня, мс на день: ", ", ".join(pr), "; путей %d (%.1f мс на день, %d узлов на путь, самый долгий %.1f мс)" % [SimArmy.path_n, SimArmy.path_us / 1000.0 / days, SimArmy.path_nodes / maxi(1, SimArmy.path_n), SimArmy.path_max_us / 1000.0])
 	var ok := n1 + n2 + n3 == 0
 	print("STATE CHECK ", "OK" if ok else "FAIL (newGame %d, newGame3 %d, дни %d%s)" % [n1, n2, n3, ", первый день расхождения %d" % bad_day if bad_day > 0 else ""])
 	quit(0 if ok else 1)

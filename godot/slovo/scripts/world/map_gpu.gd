@@ -95,6 +95,12 @@ func prepare(dir := "res://art") -> void:
 		t0 = Time.get_ticks_msec()
 		Sim.start(w, Game.seed)
 		ms.sim = Time.get_ticks_msec() - t0
+		# цены клеток и связность суши для путей — заранее, а не в первый день похода
+		stage = "королевство: дороги и броды"
+		await get_tree().process_frame
+		t0 = Time.get_ticks_msec()
+		SimArmy.prep()
+		ms.paths = Time.get_ticks_msec() - t0
 	await build(w)
 	print("MAP READY ", JSON.stringify(ms))
 
