@@ -1,27 +1,83 @@
 extends Node
 # Общее состояние (как G в браузерной версии): день, доля суток, скорость, календарь, свет неба, шрифт.
-const VERSION := "0.4.0"
+# Часы общие для двора и карты. Королевство (Sim.G — с первого открытия карты) живёт по этим часам: когда часы
+# ушли вперёд, здесь запускается день королевства (SimDay.dailyTick), растянутый на несколько кадров. Пока день не
+# досчитан, часы ждут на исходе суток (4:59), поэтому королевство не отстаёт от календаря больше чем на день —
+# кроме догонялки после сна, команды day или долгой жизни при дворе до первого открытия карты.
+const VERSION := "0.5.0"
 const DAY_SEC := [0.0, 360.0, 180.0, 60.0]   # секунд на игровые сутки при дворе (COURT_SPD в HTML)
+const MAP_SPD := [0.0, 1.6, 0.8, 0.3]        # секунд на сутки на карте (SPD в HTML)
 const DAYS_SEASON := 21
 const DAYS_YEAR := 84
 const SEASONS := ["Весна", "Лето", "Осень", "Зима"]
 const WDAY := ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+# доля кадра на счёт дня королевства: обычно, на карте при скорости 3 или когда часы ждут, в догонялке (отстали
+# больше чем на день); при 60 кадрах в секунду это 5, 9 и 13 мс. На медленной машине кадры длиннее — и доля та же,
+# чтобы дни шли с той же скоростью, пусть и при меньшем числе кадров (но не больше 0,25 с счёта за кадр).
+const SHARE := 0.3
+const SHARE_MAP3 := 0.55
+const SHARE_CATCH := 0.8
 var seed := 777
 var day := 0
 var frac := 0.0          # доля суток; 0 — 5:00 утра, как в HTML (hourAbs = 5 + frac·24)
 var speed := 1
+var last_speed := 1      # к ней возвращает Пробел после паузы (UI.lastSpeed)
+var sim_run := true      # дни королевства идут сами (самопроверка без экрана считает их сама)
+var map_frame := -10     # кадр, в котором карта последний раз двигала часы
+var lag_max := 0         # для проверок: наибольшее отставание королевства от часов, дней
+var dt_avg := 1.0 / 60.0 # средняя длина кадра, с
 var font: Font
 
 func _ready() -> void:
 	font = load("res://slovo_serif.woff") if ResourceLoader.exists("res://slovo_serif.woff") else ThemeDB.fallback_font
 
-func advance(dt: float) -> void:
+## скорость (setSpeed): 0 — пауза
+func set_speed(i: int) -> void:
+	speed = clampi(i, 0, 3)
+	if speed > 0:
+		last_speed = speed
+
+func toggle_pause() -> void:
+	set_speed(0 if speed > 0 else last_speed)
+
+## ход часов: при дворе — сутки за DAY_SEC[speed] секунд, на карте — за MAP_SPD[speed] (кадр не длиннее 0,1 с, как в HTML)
+func advance(dt: float, on_map := false) -> void:
+	if on_map:
+		map_frame = Engine.get_process_frames()
 	if speed <= 0:
 		return
-	frac += dt / DAY_SEC[speed]
+	frac += minf(dt, 0.1) / MAP_SPD[speed] if on_map else dt / DAY_SEC[speed]
 	while frac >= 1.0:
+		if sim_behind():
+			frac = 0.9999
+			return
 		frac -= 1.0
 		day += 1
+
+## королевство ещё не досчитало текущий день
+func sim_behind() -> bool:
+	return sim_run and not Sim.G.is_empty() and (SimDay.busy or Sim.G.day < day)
+
+## дни королевства: следующий — когда предыдущий досчитан, не раньше следующего кадра; доля кадра на счёт — каждый кадр заново
+func _process(dt: float) -> void:
+	dt_avg = lerpf(dt_avg, clampf(dt, 0.001, 1.0), 0.1)
+	if not sim_run or Sim.G.is_empty():
+		return
+	var f := Engine.get_process_frames()
+	var lag := day - int(Sim.G.day)          # пока день считается, Sim.G.day — уже он
+	var sh := SHARE
+	if lag > (0 if SimDay.busy else 1):
+		sh = SHARE_CATCH
+	elif (f - map_frame <= 2 and speed >= 3) or frac >= 0.9999:
+		sh = SHARE_MAP3
+	var b := int(clampf(sh * dt_avg * 1e6, 3000.0, 250000.0))
+	if SimDay.busy:
+		SimDay.budget_us = b
+		return
+	if lag <= 0 or SimDay.done_frame == f:
+		return
+	lag_max = maxi(lag_max, lag)
+	SimDay.dailyTick(b)
 
 func hour_abs() -> float:
 	return 5.0 + frac * 24.0

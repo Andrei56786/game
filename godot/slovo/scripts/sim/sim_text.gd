@@ -27,15 +27,7 @@ static func fmt(n: float) -> String:
 
 
 static func plural(n: float, a: String, b: String, c: String) -> String:
-	n = fmod(absf(n), 100.0)
-	var n1 := fmod(n, 10.0)
-	if n > 10 and n < 20:
-		return c
-	if n1 > 1 and n1 < 5:
-		return b
-	if n1 == 1:
-		return a
-	return c
+	return Sim.plural(n, a, b, c)
 
 
 static func kmTxt(km: float) -> String:
@@ -70,7 +62,7 @@ static func voin(n: float) -> String:
 
 
 static func realmName(r: Variant) -> String:
-	return String(Sim.REALM_DEF[clampi(int(r), 0, Sim.REALM_DEF.size() - 1)].name)
+	return Sim.realmName(r)
 
 
 ## подпись войска (armyLabel)

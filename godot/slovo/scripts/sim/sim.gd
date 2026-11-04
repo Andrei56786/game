@@ -41,6 +41,7 @@ static var TINFO: Array
 static var SEAT_K := 1.0
 static var FEMRX: RegEx
 static var MALERX: RegEx
+const POOL_BASE := {"village": 30.0, "castle": 60.0, "town": 90.0, "capital": 140.0}
 const DAYS_SEASON := 21.0
 const DAYS_YEAR := 84.0
 
@@ -50,6 +51,7 @@ static var R := JS.Rng.new(0)
 static var ECON: Dictionary = {"inc": null, "incDay": -1.0, "ms": 0.0}
 static var SIGNS: Array = []
 static var fog_dirty := 1
+static var pol_dirty := 0            # MAPDIRTY.pol: владельцы провинций сменились — перекрасить карту
 static var feed: Array = []          # UI.onLog: свежие записи летописи для экрана
 static var wat := PackedByteArray()  # WD._wat: вода ли клетка
 static var wat_w: WorldData = null
@@ -58,6 +60,8 @@ static var rw_g: Dictionary = {}
 static var ms := {}                  # время частей новой игры, мс
 static var s_at := PackedInt32Array() # WD._sAt: поселение в клетке (−1 — нет)
 static var s_at_w: WorldData = null
+static var pr_cache: Array = []      # poolRatesC: [владелец, народ, ставки] по номеру поселения
+static var pr_g: Dictionary = {}
 
 
 ## Таблицы игры из HTML (tools/sim_export.mjs): войска, черты, имена, державы, дома, места совета, товары, погода…
@@ -182,6 +186,21 @@ static func charOf(id: Variant) -> Variant:
 
 static func ownerOfProv(p: int) -> float:
 	return G.setts[W.provs[p].seat].owner
+
+static func realmName(r: Variant) -> String:
+	return String(REALM_DEF[clampi(int(r), 0, REALM_DEF.size() - 1)].name)
+
+## plural (engine.js): форма слова по числу — 1 воин, 2 воина, 5 воинов
+static func plural(n: float, a: String, b: String, c: String) -> String:
+	n = fmod(absf(n), 100.0)
+	var n1 := fmod(n, 10.0)
+	if n > 10 and n < 20:
+		return c
+	if n1 > 1 and n1 < 5:
+		return b
+	if n1 == 1:
+		return a
+	return c
 
 static func charName(c: Dictionary) -> String:
 	return String(c.title) + " " + String(c.name) if JS.t(c.title) else String(c.name)
@@ -493,16 +512,40 @@ static func poolCap(S: Dictionary, u: String) -> float:
 	var t: String = W.setts[int(S.id)].type
 	var cul: float = S.cul if S.has("cul") else S.owner
 	var CK: Dictionary = CUL_UNIT[int(cul)] if cul >= 0 and cul < CUL_UNIT.size() else {}
-	var base: float = {"village": 30.0, "castle": 60.0, "town": 90.0, "capital": 140.0}[t]
+	var base: float = POOL_BASE[t]
 	return base * (0.5 + S.prosp / 100.0) * float(POOL_K[u]) * maxf(0.5, float(CK[u]) if CK.has(u) else 1.0)
+
+## poolRates, запомненные по поселению: зависят только от типа, богатств (S.res — с начала игры), народа и владельца
+static func poolRatesC(S: Dictionary) -> Dictionary:
+	if not is_same(pr_g, G):
+		pr_g = G
+		pr_cache = []
+	var id := int(S.id)
+	if pr_cache.size() <= id:
+		pr_cache.resize(G.setts.size())
+	var e: Variant = pr_cache[id]
+	if e == null or e[0] != S.owner or e[1] != S.get("cul"):
+		e = [S.owner, S.get("cul"), poolRates(S)]
+		pr_cache[id] = e
+	return e[2]
 
 static func refillPool(S: Dictionary, days: float) -> void:
 	if S.owner == 6.0:
 		return
-	var rate := poolRates(S)
-	var dev: float = G.provs[W.setts[int(S.id)].prov].dev
+	var rate := poolRatesC(S)
+	if rate.is_empty():
+		return
+	# то же, что poolCap для каждого рода войск, но без лишних словарей: день королевства зовёт это ~1000 раз
+	var ws: Dictionary = W.setts[int(S.id)]
+	var dev: float = G.provs[ws.prov].dev
+	var cul: float = S.cul if S.has("cul") else S.owner
+	var CK: Dictionary = CUL_UNIT[int(cul)] if cul >= 0 and cul < CUL_UNIT.size() else {}
+	var pk: float = 0.5 + S.prosp / 100.0
+	var base: float = float(POOL_BASE[ws.type]) * pk
+	var pool: Dictionary = S.pool
 	for u in rate:
-		S.pool[u] = minf(poolCap(S, u), JS.n(S.pool.get(u)) + rate[u] * days * (0.5 + S.prosp / 100.0) * (1.0 - dev))
+		var cap: float = base * float(POOL_K[u]) * maxf(0.5, float(CK[u]) if CK.has(u) else 1.0)
+		pool[u] = minf(cap, JS.n(pool.get(u)) + rate[u] * days * pk * (1.0 - dev))
 
 # ---------- войска ----------
 static func mkArmy(realm: float, kind: String, gen: float, tx: float, ty: float, u: Dictionary) -> Dictionary:
@@ -519,13 +562,17 @@ static func mkArmy(realm: float, kind: String, gen: float, tx: float, ty: float,
 
 ## логово разбойников номер k (WD.lairs[k] — [x, y, клетка, провинция])
 static func spawnBandits(k: int, rng: JS.Rng = null) -> Dictionary:
+	var L: Array = W.lairs[k]
+	return spawnBanditsAt(L[0], L[1], float(k), rng)
+
+## разбойники в клетке (x, y): у логова (lair — его номер) или мятежники после бунта (lair −1, как WD.lairs.indexOf в HTML)
+static func spawnBanditsAt(x: float, y: float, lair: float, rng: JS.Rng = null) -> Dictionary:
 	if rng == null:
 		rng = R
-	var L: Array = W.lairs[k]
 	var n := rng.i(25, 70)
 	var c := mkChar(6, "B", "bandit", rng, {"title": "Атаман"})
-	var a := mkArmy(6, "bandit", c.id, L[0], L[1], {"levy": JS.rnd(n * 0.6), "spear": JS.rnd(n * 0.1), "sword": 0.0, "archer": JS.rnd(n * 0.25), "horse": JS.rnd(n * 0.05)})
-	assign(a, {"food": n * 6, "water": 4.0, "arrows": rangedN(a.u) * 20, "lair": float(k)})
+	var a := mkArmy(6, "bandit", c.id, x, y, {"levy": JS.rnd(n * 0.6), "spear": JS.rnd(n * 0.1), "sword": 0.0, "archer": JS.rnd(n * 0.25), "horse": JS.rnd(n * 0.05)})
+	assign(a, {"food": n * 6, "water": 4.0, "arrows": rangedN(a.u) * 20, "lair": lair})
 	a.ai = {"task": "lurk", "t": 0.0}
 	a.morale = 55.0
 	return a

@@ -1,7 +1,8 @@
 extends Node
-# Корень: заставка → двор ↔ карта королевства (Tab). Без экрана: -- --selftest (двор живёт двое суток, проверки, выход с кодом).
-# В веб-сборке — window.slovo('команда') для скриншот-тестов: court, title, map, help, time 21, day 30, speed 2, goto 0, talk, next,
-# close, walk 1 0 0.5, state; на карте — cam x y z, zoom 1, mode pol, sett Имя, hover x y, dump over, lum, state.
+# Корень: заставка → двор ↔ карта королевства (Tab). Без экрана: -- --selftest (двор живёт сутки, королевство — восемь дней,
+# проверки, выход с кодом). В веб-сборке — window.slovo('команда') для скриншот-тестов: court, title, map, help, time 21,
+# day 30 (вперёд; королевство догонит), days 3, speed 2, goto 0, talk, next, close, walk 1 0 0.5, state; на карте — cam x y z,
+# zoom 1, mode pol, sett Имя, army lord, hover x y, reveal, dump over, lum, state.
 const Title = preload("res://scripts/title.gd")
 const Court = preload("res://scripts/court.gd")
 const MapView = preload("res://scripts/world/map_view.gd")
@@ -95,19 +96,24 @@ func _js_cmd(a: Array) -> void:
 		"time":
 			Game.set_hour(float(p[1]))
 		"speed":
-			Game.speed = clampi(int(p[1]), 0, 3)
+			Game.set_speed(int(p[1]))
 		"day":
-			Game.day = maxi(0, int(p[1]))
+			# календарь не уходит назад от дня королевства: вперёд — королевство догонит, день за днём
+			Game.day = maxi(maxi(0, int(p[1])), -1 if Sim.G.is_empty() else int(Sim.G.day))
+		"days":
+			Game.day += maxi(0, int(p[1]))
 		_:
 			if cur and cur.has_method("cmd"):
 				cur.cmd(p)
 
 func _selftest() -> void:
+	Game.sim_run = false      # дни королевства здесь считаются явно
 	var c: Node = Court.new()
 	add_child(c)
 	await get_tree().process_frame
 	var ok: bool = c.selftest()
-	ok = _sim_selftest() and ok
+	var sok: bool = await _sim_selftest()
+	ok = sok and ok
 	print("SELFTEST OK" if ok else "SELFTEST FAIL")
 	get_tree().quit(0 if ok else 1)
 
@@ -144,4 +150,24 @@ func _sim_selftest() -> bool:
 	ok = ok and absf(bv.gold - dg) < 1.0 and absf(bv.net - float(D.get("net", 0.0))) < 0.01
 	if not ok:
 		print("SIM: проверка королевства не прошла")
-	return ok
+	# время: неделя королевства сразу (как догонялка), восьмой день — по кадрам с малым бюджетом, как при игре
+	var g0: float = G.realms[0].gold
+	var log0: int = G.log.size()
+	var wk := {}
+	var tu := Time.get_ticks_usec()
+	for i in 7:
+		await SimDay.dailyTick(0)
+		wk[String(G.weather.k)] = true
+	var ms7 := (Time.get_ticks_usec() - tu) / 7000.0
+	SimDay.dailyTick(3000)
+	var fr := 0
+	while SimDay.busy and fr < 1000:
+		await get_tree().process_frame
+		fr += 1
+	var g1: float = G.realms[0].gold
+	print("SIM: 8 дней — %.1f мс на день, восьмой день за %d кадров (%.1f мс счёта), казна %.1f → %.1f, погода %s, записей летописи +%d" % [ms7,
+		SimDay.frames, SimDay.ms_day, g0, g1, ",".join(wk.keys()), G.log.size() - log0])
+	var tok: bool = G.day == 8.0 and not SimDay.busy and SimDay.frames > 1 and absf(g1 - g0) > 0.01 and G.weather.has("k")
+	if not tok:
+		print("SIM: дни королевства не идут как надо")
+	return ok and tok

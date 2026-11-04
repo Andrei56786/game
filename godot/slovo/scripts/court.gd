@@ -1017,10 +1017,14 @@ func _walk_to(w: Vector2, then: Callable, near: float) -> void:
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseButton and e.pressed:
 		if e.button_index == MOUSE_BUTTON_LEFT:
-			if hud.dlg_open():
+			var mp: Vector2 = hud.get_local_mouse_position()
+			var si: int = hud.speed_hit(hud.SPD_X, mp)
+			if si >= 0:
+				Game.set_speed(si)
+			elif hud.dlg_open():
 				hud.advance()
 			else:
-				click(hud.get_local_mouse_position())
+				click(mp)
 		elif e.button_index == MOUSE_BUTTON_RIGHT:
 			path = []
 		elif e.button_index == MOUSE_BUTTON_WHEEL_UP and not hud.dlg_open():
@@ -1045,11 +1049,11 @@ func _unhandled_input(e: InputEvent) -> void:
 			elif king["sit"] != null:
 				stand_up()
 		KEY_SPACE:
-			Game.speed = 0 if Game.speed > 0 else 1
-		KEY_0:
-			Game.speed = 0
-		KEY_1, KEY_2, KEY_3:
-			Game.speed = k - KEY_0
+			Game.toggle_pause()
+		KEY_0, KEY_1, KEY_2, KEY_3:
+			Game.set_speed(k - KEY_0)
+		KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3:
+			Game.set_speed(k - KEY_KP_0)
 		KEY_Z:
 			Z = 1 if Z == 2 else 2
 			snap_cam()
