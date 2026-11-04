@@ -58,15 +58,15 @@ class Rng:
 
 ## Истинность по правилам JS: пустые массив и объект — истина (в GDScript — ложь!), 0, NaN, "" и null — ложь.
 static func t(v: Variant) -> bool:
+	if v is bool:                      # частые случаи — сразу (вызовов много: каждый кадр дня — десятки тысяч)
+		return v
+	if v is float:
+		return v != 0.0 and v == v
 	match typeof(v):
 		TYPE_NIL:
 			return false
-		TYPE_BOOL:
-			return v
 		TYPE_INT:
 			return v != 0
-		TYPE_FLOAT:
-			return v != 0.0 and not is_nan(v)
 		TYPE_STRING, TYPE_STRING_NAME:
 			return v != ""
 	return true
@@ -74,9 +74,9 @@ static func t(v: Variant) -> bool:
 
 ## «v || 0» для чисел: null, false, 0 и NaN → 0
 static func n(v: Variant) -> float:
+	if v is float:
+		return v if v == v else 0.0
 	match typeof(v):
-		TYPE_FLOAT:
-			return 0.0 if is_nan(v) else v
 		TYPE_INT:
 			return float(v)
 		TYPE_BOOL:
