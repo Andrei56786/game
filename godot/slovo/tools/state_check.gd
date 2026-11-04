@@ -1,13 +1,14 @@
 extends SceneTree
 ## Сверка симуляции Godot с HTML-версией: godot --headless --path godot/slovo --script tools/state_check.gd
-## Эталон — art/sim_ref.bin (tools/sim_export.mjs): состояние HTML после newGame и после newGame3 + обзора по зерну мира.
+## Эталон — art/sim_ref.bin (tools/sim_export.mjs): состояние HTML после newGame и после newGame3 + обзора по зерну мира,
+## затем дни королевства (pageDay в HTML, SimDay.dailyTick здесь): сводка каждого дня и полные снимки на нескольких днях.
 ## Сравнивается всё: ключи и их порядок, типы (в G только float, как числа JS), числа — точно, генератор R, доход, знаки.
 
 const MAXP := 40
 var nd := 0
 
 
-func _init() -> void:
+func _initialize() -> void:
 	var W := WorldData.load_export("res://art")
 	var raw := FileAccess.get_file_as_bytes("res://art/sim_ref.bin")
 	if W == null or raw.size() < 12 or not Sim.load_tables():
@@ -15,11 +16,18 @@ func _init() -> void:
 		quit(1)
 		return
 	Sim.W = W
+	# куски эталона: newGame, newGame3, сводка дней, снимки дней
 	var seed := raw.decode_u32(0)
-	var l1 := raw.decode_u32(4)
-	var l2 := raw.decode_u32(8)
-	var ref1: Dictionary = bytes_to_var(raw.slice(12, 12 + l1))
-	var ref2: Dictionary = bytes_to_var(raw.slice(12 + l1, 12 + l1 + l2))
+	var np := raw.decode_u32(4)
+	var parts := []
+	var off := 8 + 4 * np
+	for i in np:
+		var l := raw.decode_u32(8 + 4 * i)
+		parts.append(raw.slice(off, off + l))
+		off += l
+	var ref1: Dictionary = bytes_to_var(parts[0])
+	var ref2: Dictionary = bytes_to_var(parts[1])
+	var meta: Dictionary = bytes_to_var(parts[2]) if np > 2 else {"days": 0, "snaps": [], "dig": []}
 	var opt := {"diff": 1.0, "tut": false, "mapOpen": false}
 	var t0 := Time.get_ticks_usec()
 	Sim.newGame(seed, opt)
@@ -34,8 +42,43 @@ func _init() -> void:
 	var ms3 := (Time.get_ticks_usec() - t0) / 1000.0
 	var n2 := check("newGame3", ref2)
 	print("зерно %d: людей %d, войск %d, поселений %d; newGame %.0f мс, newGame3 %.0f мс (%s), обзор %.1f мс" % [seed, Sim.G.chars.size(), Sim.G.armies.size(), Sim.G.setts.size(), ms1, ms2, str(Sim.ms), ms3])
-	print("STATE CHECK ", "OK" if n1 + n2 == 0 else "FAIL (newGame %d, newGame3 %d)" % [n1, n2])
-	quit(0 if n1 + n2 == 0 else 1)
+	# дни королевства (SimDay.dailyTick, без пауз): сводка — каждый день, всё состояние — на днях снимков
+	var n3 := 0
+	var days := int(meta.days)
+	var snaps: Array = meta.snaps
+	var dig: Array = meta.dig
+	var ms_days := 0.0
+	var ms_max := 0.0
+	var bad_day := -1
+	for d in range(1, days + 1):
+		t0 = Time.get_ticks_usec()
+		await SimDay.dailyTick(0)
+		var ms := (Time.get_ticks_usec() - t0) / 1000.0
+		ms_days += ms
+		ms_max = maxf(ms_max, ms)
+		var G := Sim.G
+		var golds := []
+		for r in G.realms:
+			golds.append(r.gold)
+		var me := {"day": G.day, "R": float(Sim.R.st), "gold": golds, "armies": float(G.armies.size()), "log": float(G.log.size()), "w": G.weather.k, "mud": JS.n(G.get("mud")), "chars": float(G.chars.size())}
+		nd = 0
+		var rd: Dictionary = dig[d - 1]
+		for k in rd:
+			cmp(me[k], rd[k], "день %d: %s" % [d, k])
+		var nds := nd
+		n3 += nds
+		if nds > 0 and bad_day < 0:
+			bad_day = d
+		var si := snaps.find(float(d))
+		if si >= 0:
+			n3 += check("день %d" % d, bytes_to_var(parts[3 + si]))
+			if bad_day > 0:
+				break
+	if days > 0:
+		print("дней %d: %.1f мс на день в среднем, самый долгий %.1f мс (в HTML %.1f мс на день)" % [days, ms_days / maxf(1, days), ms_max, float(meta.get("ms", 0.0)) / maxf(1, days)])
+	var ok := n1 + n2 + n3 == 0
+	print("STATE CHECK ", "OK" if ok else "FAIL (newGame %d, newGame3 %d, дни %d%s)" % [n1, n2, n3, ", первый день расхождения %d" % bad_day if bad_day > 0 else ""])
+	quit(0 if ok else 1)
 
 
 func check(name: String, ref: Dictionary) -> int:
