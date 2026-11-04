@@ -519,14 +519,14 @@ static func aiArmy(a: Dictionary) -> void:
 					a.ai.feint = null
 			else:
 				a.ai.t = maxf(JS.n(a.ai.get("t")), 3.0)
-	_aiArmy(a)
+	await _aiArmy(a)
 
 
 static func _aiArmy(a: Dictionary) -> void:
 	var G := Sim.G
 	var W := Sim.W
 	if a.realm == G.player.realm and a.kind == "lord" and JS.t(G.get("court")):
-		SimCmd.cmdArmyTick(a)
+		await SimCmd.cmdArmyTick(a)
 		return
 	if not JS.t(a.get("ai")):
 		a.ai = {"task": "idle", "t": 0.0}
@@ -664,7 +664,7 @@ static func _aiArmy(a: Dictionary) -> void:
 				best = S
 		if best != null and JS.hypot(W.setts[int(best.id)].x + 0.5 - a.x, W.setts[int(best.id)].y + 0.5 - a.y) < 1.5:
 			a.ai.target = best.id
-			aiArriveSett(a, int(best.id))
+			await aiArriveSett(a, int(best.id))
 			a.ai.t = 3.0
 			return
 		if best != null:
@@ -695,7 +695,7 @@ static func aiArriveSett(a: Dictionary, sid: int) -> void:
 		return
 	var ws: Dictionary = Sim.W.setts[sid]
 	if ws.type == "village" or Sim.menOf(S.gar) == 0:
-		var res := SimArmy.autoBattleGarrison(a, S)
+		var res: Dictionary = await SimCapt.autoBattleGarrison(a, S)
 		if JS.t(res.win):
 			SimArmy.captureSett(a, S)
 		return
@@ -714,7 +714,7 @@ static func aiSiegeDecision(a: Dictionary, S: Dictionary) -> void:
 			SimArmy.captureSett(a, S, "сдались")
 			return
 	if sg.works >= sg.need and SimDay.powerU(a.u, a.xp) > SimDay.powerU(S.gar, null) * (1.4 + S.walls * 0.25):
-		var res := SimArmy.autoBattleGarrison(a, S, true)
+		var res: Dictionary = await SimCapt.autoBattleGarrison(a, S, true)
 		if JS.t(res.win):
 			SimArmy.captureSett(a, S, "штурм")
 		elif Sim.armyMen(a) < 60:
