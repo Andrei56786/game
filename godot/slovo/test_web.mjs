@@ -1,5 +1,6 @@
 // Проверка веб-сборки Godot в Chromium без окна: заставка, тронный зал и двор днём, в сумерках и ночью, разговор, ходьба, масштаб;
-// карта королевства: вся, державы, куски у столицы, лето, зима и осень.
+// карта королевства: вся, державы, куски у столицы, лето, осень и зима; время на карте: королевство догоняет календарь,
+// на скорости 3 дни идут, казна меняется, весна в летописи, пауза.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -68,7 +69,7 @@ try {
     check(s && s.king[0] < x0 - 10, 'король идёт влево');
     await cmd('zoom 1'); await wait(800); await shot('yard_zoom1'); await cmd('zoom 2');
     // карта королевства (Tab во дворе): вся карта, державы, куски полной детализации, вид года
-    await cmd('day 0', 'map');
+    await cmd('day 0', 'speed 0', 'map');
     const mr = await until(/^MAP READY /, 150000);
     check(!!mr, 'карта королевства готова: ' + (mr || 'нет MAP READY за 2,5 минуты'));
     if (mr) {
@@ -93,14 +94,28 @@ try {
       await cmd('hover -1 -1', 'army lord', 'zoom 1'); m = await settle(); await shot('map_army');
       check(m && m.cam[2] === 2 && m.realm.drawn >= 1, 'войско вблизи (' + (m && JSON.stringify(m.cam)) + ', нарисовано ' + (m && m.realm.drawn) + ')');
       await cmd('cam 4380 3046 0.25'); await wait(1500); await shot('map_fog');
-      // середина королевства (тепло 0,54): лето → зима → осень, куски перекрашиваются
+      // середина королевства (тепло 0,54): лето → осень → зима, куски перекрашиваются (королевство тем временем догоняет календарь)
       await cmd('cam 4224 2688 1', 'day 30'); m = await settle(); const l0 = await lum(); await shot('map_summer');
-      await cmd('day 70'); m = await settle(); const l1 = await lum(); await shot('map_winter');
-      check(m && m.sea.join() === '6,6,7' && l1 > l0 + 0.08 && m.nsea > 0, 'зима: снег (яркость ' + l0 + ' → ' + l1 + ', перекрашено кусков ' + (m && m.nsea) + '), на юге мягкая зима (' + (m && m.sea) + ')');
       await cmd('day 50'); m = await settle(); await shot('map_autumn');
       check(m && m.sea.join() === '4,4,3', 'осень: золотая на севере и в середине, ранняя на юге (' + (m && m.sea) + ')');
       await cmd('zoom -1', 'zoom -1'); await wait(2000); await shot('map_autumn_far');
-      await cmd('day 0', 'court'); await wait(1500);
+      await cmd('zoom 1', 'zoom 1', 'day 70'); m = await settle(); const l1 = await lum(); await shot('map_winter');
+      check(m && m.sea.join() === '6,6,7' && l1 > l0 + 0.08 && m.nsea > 0, 'зима: снег (яркость ' + l0 + ' → ' + l1 + ', перекрашено кусков ' + (m && m.nsea) + '), на юге мягкая зима (' + (m && m.sea) + ')');
+      // 0.5: время на карте — королевство догоняет календарь день за днём, на скорости 3 дни идут сами, весна — в летописи
+      const tm = async (pred, ms = 150000) => { const t = Date.now(); let q = null; while (Date.now() - t < ms) { q = await mst(); if (q && pred(q.time)) break; await wait(400); } return q; };
+      await cmd('day 83'); m = await tm(t => t.sim === 83 && !t.busy);
+      const T0 = m && m.time;
+      check(T0 && T0.sim === 83 && T0.n >= 83, 'королевство догнало календарь: день ' + (T0 && T0.sim) + ', посчитано дней ' + (T0 && T0.n) + ', в среднем ' + (T0 && T0.avg) + ' мс на день (худший ' + (T0 && T0.max) + '), кадров в секунду ' + (T0 && T0.fps));
+      const g0 = m && m.realm.gold; let lag = 0;
+      await cmd('speed 3');
+      m = await tm(t => { lag = Math.max(lag, t.day - t.sim); return t.sim >= 85 && !t.busy; });
+      await shot('map_time');
+      const T1 = m && m.time;
+      check(T1 && T1.sim >= 85 && lag <= 1 && m.realm.gold !== g0, 'скорость 3: дни идут (день ' + (T1 && T1.day) + ', ' + (T1 && T1.clock) + '), королевство отстаёт не больше чем на день (' + lag + '), казна ' + g0 + ' → ' + (m && m.realm.gold) + ', погода ' + (m && m.realm.weather) + (T1 && T1.mudOn ? ', распутица' : ''));
+      check(T1 && T1.feed >= 1 && T1.last.some(x => /весна/.test(x)), 'летопись: ' + (T1 && T1.last.join(' | ')));
+      await cmd('speed 0'); await wait(1200); const T2 = (await mst()).time; await wait(2500); m = await mst(); await shot('map_pause');
+      check(m && m.time.speed === 0 && m.time.day === T2.day && m.time.clock === T2.clock, 'пауза: часы стоят (' + (m && m.time.clock) + ')');
+      await cmd('speed 1', 'court'); await wait(1500);
       s = await state();
       check(s && s.loc === 'yard', 'назад ко двору: ' + (s && s.loc));
     }
