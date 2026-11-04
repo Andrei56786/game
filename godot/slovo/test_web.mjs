@@ -25,7 +25,8 @@ const logs = [], errs = [];
 page.on('console', m => { logs.push(m.text()); if (m.type() === 'error') errs.push(m.text()); });
 page.on('pageerror', e => errs.push(String(e)));
 const fails = [];
-const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (!ok) fails.push(what); };
+const lines = []; // строки проверок — и в build/shots/test_web.txt (вместе с консолью игры), чтобы провал в CI был виден в снимках
+const check = (ok, what) => { const l = (ok ? 'ok   ' : 'FAIL ') + what; console.log(l); lines.push(l); if (!ok) { fails.push(what); if (process.env.GITHUB_ACTIONS) console.log('::error::' + what.replace(/%/g, '%25').replace(/\r?\n/g, '%0A').slice(0, 2000)); } };
 const wait = ms => page.waitForTimeout(ms);
 const until = async (re, ms = 60000) => { const t = Date.now(); while (Date.now() - t < ms) { const l = logs.find(x => re.test(x)); if (l) return l; await wait(200); } return null; };
 const cmd = (...c) => page.evaluate(c => c.forEach(x => window.slovo(x)), c);
@@ -157,6 +158,7 @@ try {
   }
 } catch (e) { check(false, 'исключение: ' + e); }
 check(errs.length === 0, 'ошибок в консоли нет' + (errs.length ? ': ' + errs.slice(0, 5).join(' | ') : ''));
+try { fs.writeFileSync(path.join(out, 'test_web.txt'), lines.join('\n') + '\n\n--- ошибки консоли ---\n' + errs.join('\n') + '\n\n--- консоль игры ---\n' + logs.map(x => x.length > 2000 ? x.slice(0, 2000) + '…' : x).join('\n') + '\n'); } catch (e) { console.log('не записан test_web.txt: ' + e); }
 await browser.close(); srv.close();
 console.log(fails.length ? `Godot-веб: ${fails.length} провал(ов)` : 'Godot-веб: всё в порядке');
 process.exit(fails.length ? 1 : 0);
