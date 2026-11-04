@@ -162,14 +162,24 @@ static func upkeepU(u: Dictionary) -> float:
 		s += JS.n(u.get(t)) * float(UNIT[t].upk)
 	return s
 
+## Σ (u[t] || 0) по видам войск, с округлением; JS.n — на месте (вызовов тысячи за день)
 static func menOf(u: Dictionary) -> float:
 	var s := 0.0
 	for t in UT:
-		s += JS.n(u.get(t))
+		var v: Variant = u.get(t, 0.0)
+		if v is float:
+			s += v if v == v else 0.0
+		else:
+			s += JS.n(v)
 	return JS.rnd(s)
 
 static func mountedN(u: Dictionary) -> float:
-	return JS.n(u.get("horse")) + JS.n(u.get("harch")) + JS.n(u.get("knight"))
+	var a: Variant = u.get("horse", 0.0)
+	var b: Variant = u.get("harch", 0.0)
+	var c: Variant = u.get("knight", 0.0)
+	if a is float and b is float and c is float:
+		return (a if a == a else 0.0) + (b if b == b else 0.0) + (c if c == c else 0.0)
+	return JS.n(a) + JS.n(b) + JS.n(c)
 
 static func rangedN(u: Dictionary) -> float:
 	return JS.n(u.get("archer")) + JS.n(u.get("xbow")) + JS.n(u.get("harch"))
