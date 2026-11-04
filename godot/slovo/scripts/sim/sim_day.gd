@@ -1,7 +1,8 @@
 class_name SimDay
-## День королевства — перенос dailyTick (events.js) без того, что Godot ещё не считает: замыслов держав (aiRealm),
-## походов ИИ (aiArmy), жизни двора (совет, династия, науки, DAILY_EXT — кроме распутицы из march.js), собора, случайных
-## событий. Войска (army.js: dailyArmy с обёрткой march.js — мороз и служба ополчения), поселения (dailySett), смена сезона,
+## День королевства — перенос dailyTick (events.js) без того, что Godot ещё не считает: жизни двора (совет, династия, науки,
+## DAILY_EXT — кроме распутицы из march.js), собора, случайных событий. Замыслы держав (SimAI.aiRealm: войны, мир, походы,
+## вера и обман — SimBel) и походы ИИ (SimAI.aiArmy: осады, купцы, разбойники, приказы короля — SimCmd) — с 0.6.
+## Войска (army.js: dailyArmy с обёрткой march.js — мороз и служба ополчения), поселения (dailySett), смена сезона,
 ## недельная дипломатия (diplo.js), разбойники у пустых логовищ, пленники, гонцы, падение держав и победа — как в HTML.
 ## Эталон — pageDay в tools/sim_export.mjs: тот же день в HTML; tools/state_check.gd сверяет состояние каждый день.
 ## День можно растянуть на несколько кадров: dailyTick(бюджет в мкс) — корутина, между частями ждёт следующего кадра;
@@ -47,7 +48,7 @@ static func pause() -> void:
 
 
 # ---------- день ----------
-## dailyTick (events.js) без ИИ и двора; budget — мкс счёта на кадр (0 — весь день сразу)
+## dailyTick (events.js) без двора; budget — мкс счёта на кадр (0 — весь день сразу)
 static func dailyTick(budget := 0) -> void:
 	busy = true
 	budget_us = budget
@@ -80,6 +81,16 @@ static func dailyTick(budget := 0) -> void:
 		dailySett(S)
 		i += 1
 		if (i & 63) == 0 and due():
+			await pause()
+	# замыслы держав и походы ИИ (ai.js с обёртками belief.js и command.js)
+	for r in 5:
+		SimAI.aiRealm(r)
+		if due():
+			await pause()
+	for a in G.armies.duplicate():
+		if JS.t(a.alive) and a.kind != "player":
+			SimAI.aiArmy(a)
+		if due():
 			await pause()
 	if fmod(G.day, 7.0) == 0.0:
 		diploWeekly()
@@ -974,7 +985,7 @@ static func _dailyArmy(a: Dictionary) -> void:
 		if isP and lost > 0:
 			Sim.glog("Дезертирство: " + _voinLost(lost, "ушёл ", "ушли ") + ". Боевой дух слишком низок.", "bad")
 	if a.mode == "siege":
-		push_error("SimDay: осада (siegeDaily) ещё не перенесена")
+		SimArmy.siegeDaily(a)
 	if Sim.armyMen(a) <= 0 and JS.t(a.alive):
 		destroyArmy(a, "погибло")
 
