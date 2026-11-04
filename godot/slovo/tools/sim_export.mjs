@@ -42,7 +42,7 @@ function pageStep(dd) {
   for (const a of G.armies) if (a.alive) advanceArmy(a, dd);
   aiContacts();
 }
-// день королевства без двора (срез 0.6): то, что Godot уже считает сам, — тот же порядок, что в dailyTick (events.js)
+// день королевства (dailyTick из events.js без экрана: обучения, двора на экране и сохранения) — тот же порядок, что в SimDay.dailyTick
 function pageDay() {
   if (G.day % 2 === 0) revealWater();
   G.day++;
@@ -62,9 +62,10 @@ function pageDay() {
   for (const m of G.msgs) if (!m.done && m.until < G.day) { m.done = 1; if (m.kind === 'call') declineCall(m); }
   G.msgs = G.msgs.filter(m => !m.done || G.day - m.day < 2);
   G.armies = G.armies.filter(a => a.alive);
-  if (G.court) { const mud = DAILY_EXT.find(f => String(f).includes('G.mudOn'));
-    for (const f of [councilDaily, dynastyDaily, researchDaily, courtExileCheck, mud]) { try { f(); } catch (e) { (window.__errs = window.__errs || []).push('день ' + G.day + ': ' + (e && e.stack || e)); } } }
+  if (G.court) { for (const f of [councilDaily, dynastyDaily, researchDaily, courtExileCheck].concat(DAILY_EXT)) { try { f(); } catch (e) { (window.__errs = window.__errs || []).push('день ' + G.day + ': ' + (e && e.stack || e)); } } }
   checkRealms(); checkVictory();
+  if (dayOfYear(G.day) === DAYS_SEASON * 3 && G.day > 0) holdCouncil();
+  if (G.day > 6 && R.f() < 0.055 && !G.over) randomEvent();
   computeVision(); updateSigns();
 }
 // поручения короля по дням (только для зерна 777: люди и цели — по номерам этого мира): [день, 'order', место, поручение, Приказ/Замысел, цель]
@@ -110,6 +111,8 @@ const ACTS = SEED !== 777 || process.env.SIM_ACTS === '0' ? [] : [
   [56, 'order', 'eye', 'rum_str', 'intent', 2], [56, 'order', 'magister', 'school', 'intent', null], [57, 'order', 'chancellor', 'improve_rel', 'order', 2],
   [64, 'order', 'eye', 'icp', 'intent', 1], [64, 'order', 'magister', 'chronicle', 'order', null],
   [72, 'order', 'eye', 'rum_weak', 'order', 3], [72, 'order', 'magister', 'research', 'order', 'drill'], [73, 'order', 'treasurer', 'tax_extra', 'intent', null],
+  // король в отъезде: прошения копятся, судья решает тяжбы, просятся ко двору молодые (и подосланные)
+  [48, 'away', 1], [66, 'away', 0],
 ];
 const DAYS = +(process.env.SIM_DAYS || 84), STEPS = +(process.env.SIM_STEPS || 24), SNAPS = process.env.SIM_SNAPS === 'all' ? [...Array(DAYS)].map((_, i) => i + 1) : [1, 2, 7, 21, 28, 84].filter(d => d <= DAYS);
 const ref = await page.evaluate(([src, lib, seed, days, snaps, steps, acts]) => window.T.ev(lib + '\n;(' + src + ')(' + seed + ',' + days + ',' + JSON.stringify(snaps) + ',' + steps + ',' + JSON.stringify(acts) + ')'), [pageRef.toString(), [pageStep, pageDay, pageAct].map(f => f.toString()).join('\n'), SEED, DAYS, SNAPS, STEPS, ACTS]);

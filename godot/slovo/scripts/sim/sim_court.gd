@@ -80,7 +80,9 @@ static func orderEff(c: Variant, seatK: String, mode: String) -> float:
 		e *= 0.75
 	elif loy > 80:
 		e *= 1.05
-	return JS.clp(e, 0.3, 1.9)
+	var v := JS.clp(e, 0.3, 1.9)
+	# тайный шпион в совете работает спустя рукава (birds.js)
+	return v * 0.75 if SimBirds.isHiddenSpy(c) else v
 
 static func effWord(e: float) -> String:
 	return "блестяще" if e >= 1.35 else ("хорошо" if e >= 1.1 else ("сносно" if e >= 0.9 else ("слабо" if e >= 0.7 else "плохо")))
@@ -399,7 +401,8 @@ static func treasurerDaily() -> void:
 	var r: Dictionary = G.realms[0]
 	if c == null:
 		return
-	var greedy: bool = c.traits.has("greedy")
+	# казначей, что служит ради золота, крадёт, как жадный (birds.js)
+	var greedy: bool = c.traits.has("greedy") or (JS.t(c.get("motive")) and c.motive.k == "gold")
 	var hon: float = c.hon if c.has("hon") else 60.0
 	if (hon >= 45 and not greedy) or JS.n(C.get("thiefScared")) > G.day:
 		return
@@ -440,7 +443,14 @@ static func auditTreasury(judge: Variant, e: float) -> String:
 	return "Проверка нашла недостачу ≈" + Sim.zol(C.hidden) + "! Книги казначея лгут."
 
 # ---------- места совета ----------
+## снять с места; жаждущий власти обижается вдвойне (birds.js)
 static func dismissSeat(k: String, why := "") -> void:
+	var c: Variant = Sim.charOf(Sim.G.court.seats[k])
+	_dismissSeat(k, why)
+	if c != null and JS.t(c.get("motive")) and c.motive.k == "power":
+		c.loy = JS.clp(float(JS.o(c.get("loy"), 50.0)) - 10, 0, 100)
+
+static func _dismissSeat(k: String, why := "") -> void:
 	var G := Sim.G
 	var C: Dictionary = G.court
 	var id: float = C.seats[k]
@@ -458,7 +468,17 @@ static func dismissSeat(k: String, why := "") -> void:
 			SimPlayer.houseLoy(G.houses[int(c.house)], -8)
 	seats_rev += 1
 
+## назначить: пташки заводят дело, жаждущий власти рад месту (birds.js)
 static func appointSeat(k: String, id: float) -> void:
+	var c: Variant = Sim.charOf(id)
+	if c != null:
+		SimBirds.birdRec(c)
+	var was: bool = c != null and JS.t(c.get("seat"))
+	_appointSeat(k, id)
+	if c != null and not was and SimBirds.motiveOf(c).k == "power":
+		c.loy = JS.clp(float(JS.o(c.get("loy"), 50.0)) + 6, 0, 100)
+
+static func _appointSeat(k: String, id: float) -> void:
 	var G := Sim.G
 	var C: Dictionary = G.court
 	var c: Dictionary = Sim.charOf(id)
@@ -489,13 +509,13 @@ static func candidatesFor(k: String) -> Array:
 	var L: Array = (G.chars as Array).filter(func(c): return JS.t(c.alive) and c.prison < 0 and c.realm == 0.0 \
 		and (c.role == "courtier" or c.role == "council" or c.role == "knight" or c.role == "lord" or c.role == "scholar") and c.age >= 16 \
 		and (JS.t(c.get("atCourt")) or c.role == "lord") and not JS.t(c.get("withKing")) and c.id != G.player.char and SimPlayer.armyOfGen(c.id) == null)
-	return JS.sort(L, func(a, b): return skillOf(b, sk) - skillOf(a, sk))
+	return JS.sort(L, func(a, b): return SimBirds.skSeen(b, sk).v - SimBirds.skSeen(a, sk).v)
 
 ## день совета (councilDaily): поручения, казначей, тайны, письма, прошения
 static func councilDaily() -> void:
 	if not Sim.G.has("court"):
 		return
-	ordersDaily()
+	SimSick.ordersDaily()
 	treasurerDaily()
 	secretsDaily()
 	lettersDaily()
@@ -1199,10 +1219,22 @@ static func petMk(k: String) -> Variant:
 			if H.is_empty():
 				return null
 			var h: Dictionary = Sim.R.pick(H)
+			var foes: Array = JS.sort([1, 2, 3, 4].filter(func(t): return SimDay.alive(t)), func(a, b): return SimDay.opinionOf(a, 0) - SimDay.opinionOf(b, 0))
+			var spy := 0.0
+			if not foes.is_empty() and Sim.R.chance(0.14):
+				spy = float(foes[int(Sim.R.i(0, mini(1, foes.size() - 1)))])
 			var fem := 1.0 if Sim.R.chance(0.3) else 0.0
 			var c := SimDyn.mkHouseMember(h, fem, Sim.R.i(17, 24))
 			c.atCourt = 0.0
-			return {"h": h.id, "c": c.id, "text": "Я " + String(c.name) + " из дома " + String(h.name) + ". Прошу места при вашем дворе, государь. Я умею " + String(Sim.T.SKD[bestSkill(c)]) + "."}
+			if spy != 0.0:
+				c.intr = maxf(JS.n(c.get("intr")), Sim.R.i(12, 17))
+				c.claim = Sim.R.pick(["stew", "lrn", "dip"])
+				c.motive = {"k": "foe", "realm": spy, "cover": Sim.R.pick(["gold", "power", "lore"])}
+				c.hon = minf(float(JS.o(c.get("hon"), 50.0)), 40)
+			else:
+				c.claim = bestSkill(c)
+			JS.oset(SimBirds.birdsOf(), JS.s(c.id), {"lv": 0.0, "p": 0.0, "err": 2.0, "d0": G.day})
+			return {"h": h.id, "c": c.id, "spy": spy, "text": "Я " + String(c.name) + " из дома " + String(h.name) + ". Прошу места при вашем дворе, государь. " + String(SimBirds.SKC[c.claim])}
 		"accuse":
 			var S: Variant = rndOwn()
 			return {"s": S.id, "text": "Сборщик податей в " + String(W.setts[int(S.id)].name) + " берёт втрое против положенного, а разницу кладёт в карман! Защитите, государь!"} if S != null else null
@@ -1239,7 +1271,11 @@ static func petChoices(p: Dictionary) -> Array:
 			ch.call("Дать 25 золотых", 2)
 			ch.call("Отказать", 0)
 		"young":
+			# подсказка «первое впечатление» (birds.js): Око хмурится или нет — решается раз на прошение
+			var c: Variant = Sim.charOf(p.c)
 			ch.call("Принять ко двору", 2)
+			if c != null:
+				L[0].tip = SimBirds.impTip(c, p)
 			ch.call("Отказать", 0)
 		"accuse":
 			ch.call("Повесить сборщика", 1)
@@ -1306,10 +1342,15 @@ static func petFx(p: Dictionary, i: int) -> void:
 			r0.gold -= 25
 			SimTech.techProgress(8)
 		"young0":
-			var c: Dictionary = Sim.charOf(p.c)
+			var c: Variant = Sim.charOf(p.c)
+			if c == null:
+				return
 			c.atCourt = 1.0
 			SimPlayer.houseLoy(G.houses[int(p.h)], 4)
-			Sim.glog(String(c.name) + " принят ко двору.", "good")
+			Sim.glog(String(c.name) + (" принята" if JS.t(c.get("fem")) else " принят") + " ко двору.", "good")
+			SimBirds.birdRec(c).nw = 1.0
+			if JS.t(p.get("spy")):
+				addSecret("spy", [c.id], {"realm": p.spy, "pet": 1.0})
 		"young1":
 			SimPlayer.houseLoy(G.houses[int(p.h)], -2)
 		"accuse0":
@@ -1323,6 +1364,15 @@ static func petFx(p: Dictionary, i: int) -> void:
 
 ## прошение без короля решает судья (или регент, или писцы): мудрый судья выбирает лучшее
 static func judgeResolve(p: Dictionary) -> Variant:
+	var j0: Variant = SimDyn.seatChar("justice")
+	if p.k == "young" and JS.t(p.get("spy")) and j0 != null and Sim.R.chance(JS.clp(j0.lrn / 25, 0.2, 0.8)):
+		SimPlayer.houseLoy(Sim.G.houses[int(p.h)], -2)
+		p.done = 1.0
+		noteVerdict(p, {"t": "Отказать", "good": 2.0}, [{"good": 2.0}], "judge", j0)
+		return "Отказать"
+	return _judgeResolve(p)
+
+static func _judgeResolve(p: Dictionary) -> Variant:
 	var G := Sim.G
 	var j: Variant = SimDyn.seatChar("justice")
 	if j == null and G.court.regent >= 0:
