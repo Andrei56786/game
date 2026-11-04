@@ -635,7 +635,7 @@ static func onPlayerArmyLost(a: Dictionary, _why: String) -> void:
 	var W := Sim.W
 	var cap: float = G.realms[int(G.player.realm)].capital
 	if G.has("court") and cap >= 0 and G.setts[int(cap)].ctrl == G.player.realm and not JS.t(G.get("atCourt")):
-		push_error("SimDay: король в поле — бегство ко двору ещё не перенесено")
+		SimPlayer.fleeHome()
 		return
 	var S: Variant = null
 	for s in G.setts:
