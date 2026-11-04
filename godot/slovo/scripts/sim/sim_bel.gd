@@ -363,7 +363,7 @@ static func feintTick(a: Dictionary) -> void:
 		a.cmd = {"o": "hold", "mode": o.get("mode"), "day": G.day, "x": a.x, "y": a.y}
 		if ws != null:
 			SimCmd.cmdNote(a, "feint0", "Ложный марш на " + ws.name + " потерял смысл: крепость не вражеская. Стою и жду приказа.", true)
-		SimCmd._cmdTick(a)
+		await SimCmd._cmdTick(a)
 		return
 	if not o.has("st"):
 		o.st = float(feintStage(a, ot))
@@ -386,11 +386,11 @@ static func feintTick(a: Dictionary) -> void:
 		a.cmd = {"o": "hold", "mode": o.get("mode"), "day": G.day, "x": a.x, "y": a.y}
 		SimCmd.cmdNote(a, "feint2", "Шесть дней мы пугали " + ws.name + ". " + ("Враг стянул сюда " + nArm(n) + "." if JS.t(n) else "Враг так и не тронулся с места.") + " Гасим лишние костры и ждём приказа.", true)
 		dlog("Ложный марш у " + ws.name + " окончен: " + ("враг стянул туда " + nArm(n) + "." if JS.t(n) else "враг не поверил или не успел."), "good" if JS.t(n) else "info")
-		SimCmd._cmdTick(a)
+		await SimCmd._cmdTick(a)
 		return
 	var save: Dictionary = a.cmd
 	a.cmd = {"o": "hold", "mode": save.get("mode"), "day": save.get("day"), "x": sx, "y": sy}
-	SimCmd._cmdTick(a)
+	await SimCmd._cmdTick(a)
 	a.cmd = save
 	if JS.t(a.get("ai")) and a.ai.task == "flee":
 		feintEnd(a)

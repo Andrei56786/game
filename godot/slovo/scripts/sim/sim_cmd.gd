@@ -86,11 +86,11 @@ static func cmdHunt(a: Dictionary, radius: float, kMax: float) -> bool:
 static func cmdArmyTick(a: Dictionary) -> void:
 	var o: Variant = a.get("cmd")
 	if JS.t(o) and o.o == "feint":
-		SimBel.feintTick(a)
+		await SimBel.feintTick(a)
 		return
 	if JS.t(a.get("feint")):
 		SimBel.feintEnd(a)
-	_cmdTick(a)
+	await _cmdTick(a)
 
 
 ## ядро cmdArmyTick (command.js): опасность, вода, отдых, гнев, затем приказ (стоять, защищать, охранять, наступать, соединиться, домой)
@@ -248,7 +248,7 @@ static func _cmdTick(a: Dictionary) -> void:
 			var w2: Dictionary = W.setts[tgt]
 			var d := JS.hypot(w2.x + 0.5 - a.x, w2.y + 0.5 - a.y)
 			if d < 1.5:
-				SimAI.aiArriveSett(a, tgt)
+				await SimAI.aiArriveSett(a, tgt)
 				a.ai.t = 2.0
 				return
 			if not JS.t(a.get("path")) or a.ai.task != "siege":
