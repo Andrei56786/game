@@ -269,13 +269,13 @@ func say(n: Dictionary, s: String, dur: float) -> void:
 # Прежние записи людей сохраняются по ключу (где стоят, куда идут); заселение заново — когда сменились места совета
 # (SimCourt.seats_rev) или люди (SimDyn.pop_rev: рождения, смерти, годы, браки, воспитанники).
 var pop_g = null           # Sim.G при последнем заселении
-var revs := [-1, -1]
+var revs := [-1, -1, -1]
 
 ## заселить заново, если королевство есть и места или люди сменились
 func pop_check() -> bool:
 	if Sim.G.is_empty() or not Sim.G.has("court"):
 		return false
-	if pop_g != null and is_same(pop_g, Sim.G) and revs[0] == SimCourt.seats_rev and revs[1] == SimDyn.pop_rev:
+	if pop_g != null and is_same(pop_g, Sim.G) and revs[0] == SimCourt.seats_rev and revs[1] == SimDyn.pop_rev and revs[2] == SimExt.proj_rev:
 		return false
 	populate()
 	return true
@@ -401,6 +401,7 @@ func populate() -> void:
 		var sp := "cell" + str(i % 6) + ("b" if i >= 6 else "")
 		var n := mk(out, old, "pris" + JS.s(P[i].id), P[i], {"pris": 1, "post": sp, "sub0": "Узник короны", "talkR": 52.0})
 		n.lines = [prisoner_line(P[i])]
+	c.wrk.crew(out, old)      # мастера стройки (projNpcs)
 	assign_beds(out)
 	# гости (просители) — как были; ушедших — с экрана
 	for n in c.npcs:
@@ -412,7 +413,7 @@ func populate() -> void:
 			n.node = null
 	c.npcs = out
 	pop_g = G
-	revs = [SimCourt.seats_rev, SimDyn.pop_rev]
+	revs = [SimCourt.seats_rev, SimDyn.pop_rev, SimExt.proj_rev]
 	snap(true)
 
 ## постели (assignBeds, src/castle2.js): советникам — свои, королеве — своя, детям и воспитанникам — детские (старшему — гостевая)

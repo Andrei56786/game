@@ -36,6 +36,15 @@ func _ready() -> void:
 	if "--chapel" in OS.get_cmdline_user_args():    # только часовня, книги и темница (быстро): -- --chapel
 		_chapel_only.call_deferred()
 		return
+	if "--feast" in OS.get_cmdline_user_args():     # только пир (быстро): -- --feast
+		_feast_only.call_deferred()
+		return
+	if "--works" in OS.get_cmdline_user_args():     # только стол зодчего (быстро): -- --works
+		_works_only.call_deferred()
+		return
+	if "--tour" in OS.get_cmdline_user_args():      # только турнир и раны (быстро): -- --tour
+		_tour_only.call_deferred()
+		return
 	_hooks()
 	show_title()
 	if OS.has_feature("web"):
@@ -421,6 +430,10 @@ func _js_cmd(a: Array) -> void:
 				u._m_load()
 			elif p[1] == "exit":
 				u._m_exit()
+		"gold":
+			# казна (для проверок): gold 1000
+			if not Sim.G.is_empty() and p.size() > 1:
+				Sim.G.realms[0].gold = float(p[1])
 		"save":
 			_js_save()
 		"savestat":
@@ -461,6 +474,12 @@ func _selftest() -> void:
 	ok = cok and ok
 	var hok: bool = await _chapel_selftest()
 	ok = hok and ok
+	var fok: bool = await _feast_selftest()
+	ok = fok and ok
+	var wok: bool = await _works_selftest()
+	ok = wok and ok
+	var tok: bool = await _tour_selftest()
+	ok = tok and ok
 	var nok: bool = await _snd_selftest()
 	ok = nok and ok
 	var vok: bool = await _save_selftest()
@@ -485,6 +504,58 @@ func _chapel_only() -> void:
 	var ok := SimPlayer.ensure_sim() and await _chapel_selftest()
 	print("CHAPEL OK" if ok else "CHAPEL FAIL")
 	get_tree().quit(0 if ok else 1)
+
+func _feast_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _feast_selftest()
+	print("FEAST OK" if ok else "FEAST FAIL")
+	get_tree().quit(0 if ok else 1)
+
+func _works_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _works_selftest()
+	print("WORKS OK" if ok else "WORKS FAIL")
+	await get_tree().create_timer(1.0).timeout   # звуки окна и монет доиграют — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+func _tour_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _tour_selftest()
+	print("TOUR OK" if ok else "TOUR FAIL")
+	await get_tree().create_timer(1.0).timeout   # фанфары и крики трибун доиграют — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+## турнир на ристалище и раны короля (court_tour.gd, court_hurt.gd): трибуны, зрители и герольд, поединки, выход короля
+## к барьеру, награда, конец турнира; носилки, постель и дни лечения
+func _tour_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.trn.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## стол зодчего (court_works.gd): окно, заложить и свернуть, клетки под стройкой, мастера и пиво, леса по ходу работ,
+## готовый розарий, звездочётная и труба
+func _works_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.wrk.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## пир в пиршественном зале (court_feast.gd): гости и места, король во главе стола, три дела, гость и менестрель, конец пира
+func _feast_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.fst.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
 
 ## часовня, книги и темница (court_chapel.gd): молитва, чтение, воскресная обедня, узники и тюремщик
 func _chapel_selftest() -> bool:

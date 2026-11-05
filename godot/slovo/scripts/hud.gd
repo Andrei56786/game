@@ -261,6 +261,9 @@ func court_layer() -> void:
 	if C.fade > 0.0:
 		var a: float = C.fade if C.fade < 1.0 else 2.0 - C.fade
 		box(0, 0, W, H, Color8(8, 6, 10, int(255 * clampf(a, 0.0, 1.0))))
+	if C.heal.on:             # лечение (hurt.js): вместо строки двора — полосы кино, подпись, дни в постели
+		C.heal.draw_hud(self)
+		return
 	_top()
 	if C.room != "" and now - C.room_t < 3.2:
 		var a := clampf(minf((now - C.room_t) * 3.0, (3.2 - (now - C.room_t)) * 2.0), 0.0, 1.0)
@@ -273,10 +276,12 @@ func court_layer() -> void:
 	if dlg == null and not C.blocked():
 		var tg: Dictionary = C.nearest_target()
 		var s := ""
-		if tg.has("n"):
+		if tg.has("e"):
+			s = String(tg.e.label)
+		elif tg.has("n"):
 			s = "Поговорить: " + String(tg["n"]["name"])
 		elif tg.has("a"):
-			s = C.chp.label(tg["a"])
+			s = C.act_label(tg["a"])
 			if tg["a"]["id"] == "council" and C.king["sit"] != null and C.king["sit"] == C.spots.get("seat_king"):
 				s = "Совет: ждать или начать" if C.meet.meeting_open() else "Совет: созвать или раздать дела"
 		elif C.king["sit"] != null:
@@ -292,6 +297,8 @@ func court_layer() -> void:
 			txt(s, x + 20, y + 5, Color8(244, 236, 216))
 			prompt_r = Rect2(x, y, w, 16)
 			prompt_tg = tg
+	C.trn.draw_hud(self)      # HUD_EXT: панель турнира и прицел
+	C.heal.badge(self)        # значок раны (healBadge)
 	if Game.speed == 0 and dlg == null:
 		pause_mark(now)
 	if help_auto and now > 40.0:
@@ -425,8 +432,8 @@ func _bubble(s: String, sx: float, sy: float, col: Color, occ: Array) -> void:
 	var h := ls.size() * 8.0 + 5.0
 	var x := clampf(sx - w / 2.0, 2.0, W - w - 2.0)
 	var y := sy - h - 6.0
-	for r in occ:
-		if x < r.x + r.size.x + 2 and r.x < x + w + 2 and y < r.y + r.size.y + 2 and r.y < y + h + 2:
+	for r: Rect2 in occ:
+		if x < r.position.x + r.size.x + 2 and r.position.x < x + w + 2 and y < r.position.y + r.size.y + 2 and r.position.y < y + h + 2:
 			return
 	occ.append(Rect2(x, y, w, h))
 	box(x, y, w, h, PO)

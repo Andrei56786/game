@@ -143,6 +143,16 @@ func advance(dt: float, on_map := false) -> void:
 		frac -= 1.0
 		day += 1
 
+## часы вперёд на dd суток (worldAdvance в HTML: дни в постели после раны) — новый день, только когда королевство досчитало прежний
+func advance_days(dd: float) -> void:
+	frac += dd
+	while frac >= 1.0:
+		if sim_behind():
+			frac = 0.9999
+			return
+		frac -= 1.0
+		day += 1
+
 ## королевство ещё не досчитало текущий день
 func sim_behind() -> bool:
 	return sim_run and not Sim.G.is_empty() and (SimDay.busy or Sim.G.day < day)
