@@ -205,12 +205,18 @@ func _man(i: int, role: String, age: int, nm: String) -> Dictionary:
 func litter() -> void:
 	c.fade_to(func():
 		var P: Dictionary = c.king
-		var in_y: bool = c.loc_id == "yard"
+		var hu: Variant = o.get("HU")        # с охоты (hunt3.js): ловчие несут из леса
+		var in_y: bool = hu == null and c.loc_id == "yard"
 		if c.loc_id != "yard":
 			c.go_loc("yard")
 		P.sit = null
 		P.lie = false
 		P.hide = true
+		P.downT = 0.0
+		if hu != null:
+			c.hnt.release()
+			c.hnt.HU = null
+			c.hnt.fauna("")
 		c.parts.clear()
 		var Y: Dictionary = c.D.locs.yard
 		var dk: Variant = null
@@ -292,6 +298,7 @@ func end_(dead: bool) -> void:
 	vis = []
 	men = []
 	P.hide = false
+	P.downT = 0.0
 	print("HEAL END ", dead)
 	if dead:
 		return
@@ -306,6 +313,8 @@ func end_(dead: bool) -> void:
 	k.wound = _day() + rest
 	c.hud.toast("Король встаёт на ноги. Ещё " + SimExt.dn(rest) + " беречься: ходить медленно, без меча и охоты.")
 	Sim.glog("Король поднялся с постели после " + SimExt.dn(bed) + " в покоях.", "info")
+	if o.get("from") == "hunt" and o.get("HU") != null:
+		c.hnt.summary(o.HU, "wound")
 
 func skip() -> void:
 	if sh == "litter":
@@ -491,7 +500,7 @@ func draw_hud(u: Variant) -> void:
 
 ## значок раны (healBadge): справа под верхней строкой, с подсказкой
 func badge(u: Variant) -> void:
-	if Sim.G.is_empty() or on:
+	if Sim.G.is_empty() or on or c.hnt.HU != null:
 		return
 	var k: Dictionary = _k()
 	if not hurt(k):

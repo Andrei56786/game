@@ -336,6 +336,8 @@ func _resolve0() -> String:
 	if screen == "court" and court != null and court.loc_id != "":
 		var id: String = court.loc_id
 		var sv := _sv()
+		if court.get("hnt") != null and court.hnt.HU != null:
+			return "hunt"
 		if court.get("trn") != null and court.trn.on:
 			return "tourney"
 		if id == "dungeon":

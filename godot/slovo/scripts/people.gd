@@ -44,7 +44,7 @@ func place(n: Dictionary, sp: Dictionary) -> void:
 func sched_target(n: Dictionary) -> String:
 	# лежачий больной (sick2.js) — в своей постели, а нет её — у себя (кроме гостей и стоящих на посту)
 	var ch: Variant = real(n)
-	if ch != null and ch.get("ill") is Dictionary and JS.t(ch.ill.get("bed")) and not n.get("visitor", false) and not n.has("post"):
+	if ch != null and ch.get("ill") is Dictionary and JS.t(ch.ill.get("bed")) and not JS.t(n.get("follow")) and not n.get("visitor", false) and not n.has("post"):
 		return String(n.bed) if n.has("bed") and not spot_of(n.bed).is_empty() else (String(n.home) if String(n.get("home", "")) != "" else "stairs")
 	if not n.has("sched"):
 		return ""
@@ -233,6 +233,8 @@ func snap(only_fresh: bool) -> void:
 		if only_fresh and not n["fresh"]:
 			continue
 		n["fresh"] = false
+		if JS.t(n.get("follow")):      # на охоте — за королём (folUpd)
+			continue
 		if n.has("post"):
 			var ps := spot_of(n["post"])
 			if not ps.is_empty():

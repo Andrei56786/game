@@ -8,7 +8,6 @@ signal ride_out(a)        # король выезжает из замка: a —
 const CT := 16
 const DIRS := ["down", "left", "right", "up"]
 const NPC_SPDK := [1.0, 1.0, 1.4, 2.2]
-const ANISP := {"horse": 12.0, "dog": 44.0, "cat": 20.0, "hen": 11.0, "pigeon": 9.0}
 const Hud = preload("res://scripts/court_ui.gd")
 const People = preload("res://scripts/people.gd")
 const Council = preload("res://scripts/court_council.gd")
@@ -21,6 +20,7 @@ const Tour = preload("res://scripts/court_tour.gd")
 const Hurt = preload("res://scripts/court_hurt.gd")
 const Acts = preload("res://scripts/court_acts.gd")
 const Sick = preload("res://scripts/court_sick.gd")
+const HuntM = preload("res://scripts/court_hunt.gd")
 
 var D: Dictionary
 var Z := 2
@@ -59,6 +59,7 @@ var trn: RefCounted           # турнир на ристалище: зрите
 var heal: RefCounted          # раны короля: носилки, постель, дни лечения; значок раны (court_hurt.gd)
 var acts: RefCounted          # простые дела: постель и сон, колыбель, амбар, лавка, чучело, фонтан; вид двора (court_acts.gd)
 var sck: RefCounted           # больные при дворе: лекарь, обход, у постели, король занемог; значок болезни (court_sick.gd)
+var hnt: RefCounted           # королевская охота и дичь леса (court_hunt.gd)
 var xn := {}                  # узлы рисунка среди людей (SPR_EXT): ключ → Node2D (xnode)
 var conds: Array = []         # предметы по условию: [спрайт, условие] — блюда пира, постройки стола зодчего
 var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
@@ -111,6 +112,7 @@ func _ready() -> void:
 	heal = Hurt.new(self)
 	acts = Acts.new(self)
 	sck = Sick.new(self)
+	hnt = HuntM.new(self)
 	var K: Dictionary = D["king"]
 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
 	var sp0: Dictionary = spots["throne_front"]
@@ -121,8 +123,11 @@ func _ready() -> void:
 	for p in D["people"]:
 		npcs.append(people.make(p))
 	for a in D["animals"]:
-		var r: Array = a["r"]
-		ani.append({"kind": a["kind"], "loc": a["loc"], "r": r, "x": float(a["x"]), "y": float(a["y"]), "f": a["f"], "tx": 0.0, "ty": 0.0, "t": randf() * 3.0, "flip": randf() < 0.5, "moving": false, "run": false, "fly": 0.0, "h": 0.0, "vx": 0.0, "vy": 0.0, "fc": 0.0, "peck": false, "node": null})
+		var e := mk_ani(String(a["kind"]), String(a["loc"]), a["r"], float(a["x"]), float(a["y"]), "" if a.get("col") == null else String(a["col"]))
+		e["c"] = "" if a.get("c") == null else String(a["c"])
+		e["fr"] = a.get("f", [])
+		ani.append(e)
+	hnt.fauna("")             # дичь леса — тихий набор (homeAnimals → huntFauna(''))
 	cam.anchor_mode = Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT
 	add_child(cam)
 	cam.make_current()
@@ -292,7 +297,7 @@ func go_loc(id: String) -> void:
 		if e.has("when"):
 			conds.append([s, String(e["when"])])
 	fx0 = Node2D.new()
-	fx0.draw.connect(_draw_parts.bind(0))
+	fx0.draw.connect(_draw_parts.bind(0, fx0))
 	layer.add_child(fx0)
 	world = Node2D.new()
 	world.y_sort_enabled = true
@@ -352,7 +357,7 @@ func go_loc(id: String) -> void:
 		king_light = null
 	fx1 = Node2D.new()
 	fx1.material = add_mat
-	fx1.draw.connect(_draw_parts.bind(1))
+	fx1.draw.connect(_draw_parts.bind(1, fx1))
 	glow.add_child(fx1)
 	_sync_nodes()
 	room = ""
@@ -435,33 +440,144 @@ func _update_walker(n: Dictionary) -> void:
 	body.modulate.a = 0.75 if (n == king and sneak and moving) else 1.0
 	nd.visible = not JS.t(n.get("hide"))
 
+## зверь (запись COURT.ani): kind, loc, r — где бродит, col — масть по замыслу (doe, hart, snow, гончие), c — масть в мире (faCol),
+## f — счётчик шага, game: 0 — двор, 1 — дичь леса, 2 — гончая на охоте; st — что делает дичь (graze, alert, flee, bay, charge, fly, lie, dead)
+func mk_ani(kind: String, loc: String, r: Array, x: float, y: float, col: String) -> Dictionary:
+	return {"kind": kind, "loc": loc, "r": r, "x": x, "y": y, "tx": 0.0, "ty": 0.0, "t": randf() * 3.0, "flip": randf() < 0.5, "col": col, "c": col, "fr": [],
+		"f": 0.0, "moving": false, "run": false, "fly": 0.0, "h": 0.0, "vx": 0.0, "vy": 0.0, "peck": false, "game": 0, "st": "", "node": null}
+
+# ---------- как звери выглядят (fauna2.js: faCol, faFrame, faDraw); кони — по-старому, два кадра ----------
+const FA_DEAD := 10
+const FA_STEP := {"deer": 4.0, "boar": 3.0, "wolf": 4.0, "fox": 3.0, "bear": 4.0, "dog": 3.0, "hound": 3.5, "cat": 2.5, "hare": 3.0, "rat": 2.0, "hen": 2.5, "pigeon": 2.0, "duck": 2.5, "pheasant": 3.0, "falcon": 3.0}
+const FA_RUNV := {"deer": 60.0, "boar": 50.0, "wolf": 60.0, "fox": 50.0, "bear": 45.0, "dog": 60.0, "hound": 90.0, "cat": 35.0, "hare": 50.0, "rat": 30.0}
+const FA_BIRD := ["hen", "pigeon", "duck", "pheasant", "falcon"]
+const FA_SIT := ["dog", "hound", "cat"]
+
+## отростки на рогах оленя (faPts): чаще 8–12, королевский — 14, императорский — 16
+func fa_pts(a: Dictionary) -> int:
+	if not a.has("pts"):
+		var r := randf()
+		a["pts"] = 6 if r < 0.12 else 8 if r < 0.36 else 10 if r < 0.62 else 12 if r < 0.84 else 14 if r < 0.96 else 16
+	return int(a["pts"])
+
+func ter_at(id: String, tx: int, ty: int) -> int:
+	var Ld: Dictionary = D["locs"][id]
+	var w: int = Ld["w"]
+	var s: String = Ld.get("ter", "")
+	var i := ty * w + tx
+	if tx < 0 or ty < 0 or tx >= w or ty >= int(Ld["h"]) or i >= s.length():
+		return 0
+	return ("0x" + s[i]).hex_to_int()
+
+func fa_col(a: Dictionary) -> String:
+	var k: String = a["kind"]
+	if k == "deer":
+		if a["col"] == "hart":
+			return "hart" + str(fa_pts(a))
+		var w := "w" if Game.season() == 3 else ""
+		return w + "doe" if a["col"] == "doe" else w + "stag" + str(fa_pts(a))
+	if k == "duck":
+		var c0: String = a["c"]
+		if not (float(a["h"]) > 0.0) and a["st"] != "dead" and ter_at(a["loc"], floori(float(a["x"]) / CT), floori(float(a["y"]) / CT)) == 7:
+			return c0 + "_swim"
+		return c0
+	return a["c"]
+
+func fa_frame(a: Dictionary) -> int:
+	var k: String = a["kind"]
+	if a["st"] == "dead":
+		return FA_DEAD
+	var dt0: float = t - float(a.get("_t", t))
+	var mv := 0.0 if not a.has("_x") else Vector2(float(a["x"]) - float(a["_x"]), float(a["y"]) - float(a["_y"])).length()
+	if dt0 > 0.0 and dt0 < 0.5:
+		a["_v"] = float(a.get("_v", 0.0)) * 0.75 + (mv / dt0) * 0.25
+	elif dt0 >= 0.5:
+		a["_v"] = 0.0
+	a["_x"] = a["x"]
+	a["_y"] = a["y"]
+	a["_t"] = t
+	if not a.has("vs"):
+		a["vs"] = randf() * 20.0
+	var v: float = a.get("_v", 0.0)
+	var f: float = a["f"]
+	if k in FA_BIRD:
+		if float(a["fly"]) > 0.0 or float(a["h"]) > 0.0 or a["st"] == "fly":
+			return 6 + int(floorf(f / 3.0)) % 4
+		if a["moving"]:
+			return int(floorf(f / float(FA_STEP[k]))) % 4
+		return 5 if a["peck"] else 4
+	if a["st"] == "lie":
+		return FA_DEAD
+	if a["moving"] or v > 6.0:
+		var run: bool = v > float(FA_RUNV.get(k, 50.0)) or a["st"] == "flee" or a["st"] == "charge"
+		return (6 if run else 0) + int(floorf(f / (float(FA_STEP.get(k, 3.0)) * (1.7 if run else 1.0)))) % 4
+	if a["st"] in ["alert", "bay", "charge", "heel"]:
+		return 4
+	if k in FA_SIT:
+		return 5 if sin(t * 0.21 + float(a["vs"])) > -0.3 else 4
+	if k == "rat":
+		return 5 if sin(t * 1.3 + float(a["vs"])) > 0.6 else 4
+	return 5 if sin(t * 0.45 + float(a["vs"])) > -0.2 else 4
+
+## лист кадров зверя (fauna) или null — кони и прочие по-старому
+func fa_sheet(a: Dictionary) -> Variant:
+	return D["fauna"].get(String(a["kind"]) + "|" + fa_col(a)) if D.has("fauna") else null
+
+## рамка зверя по кадру 0 и замыслу масти (animalSprite(kind, 0, flip, col)): [ширина, высота]
+func fa_box(a: Dictionary) -> Vector2:
+	var b: Variant = D["faBox"].get(String(a["kind"]) + "|" + String(a["col"]), D["faBox"].get(String(a["kind"]) + "|")) if D.has("faBox") else null
+	if b == null:
+		var sh: Variant = fa_sheet(a)
+		return Art.size(sh[0]) if sh != null else Vector2(16, 12)
+	return Vector2(float(b[0]), float(b[1]))
+
 func _animal(a: Dictionary) -> void:
 	var nd := Node2D.new()
-	var big := Art.size(a["f"][0]).x > 20.0
-	var sh := Art.sprite(D["shadowBig"] if big else D["shadowSmall"])
-	sh.position = Vector2(-11.0 if big else -4.5, -2.0)
+	var sh := Art.sprite(D["shadowSmall"])
 	nd.add_child(sh)
-	var body := Art.sprite(a["f"][0])
+	var blood := Node2D.new()      # мёртвый зверь на земле — кровь вместо тени (faDraw)
+	blood.draw.connect(func() -> void:
+		blood.draw_rect(Rect2(-5, -1, 10, 2), Color8(90, 16, 16, 140))
+		blood.draw_rect(Rect2(-3, 1, 6, 1), Color8(90, 16, 16, 140)))
+	nd.add_child(blood)
+	var body := Art.sprite(D["shadowSmall"])
 	nd.add_child(body)
 	world.add_child(nd)
 	a["node"] = nd
 	a["body"] = body
+	a["shs"] = sh
+	a["blood"] = blood
 
 func _update_animal(a: Dictionary) -> void:
 	var nd: Node2D = a["node"]
 	var body: Sprite2D = a["body"]
-	var moving: bool = a["moving"] or a["fly"] > 0.0 or a["h"] > 0.0
-	var fr := 0
-	if moving:
-		fr = int(a["fc"] / (3.0 if a["kind"] == "pigeon" else 5.0)) % 2
-	elif a["peck"]:
-		fr = 1
-	var i: int = a["f"][fr]
+	var sh: Sprite2D = a["shs"]
+	var sheet: Variant = fa_sheet(a)
+	var i := 0
+	var dead_f := false
+	if sheet != null:
+		var fi := fa_frame(a)
+		i = sheet[fi]
+		dead_f = fi == FA_DEAD and a["st"] == "dead"
+	else:
+		var moving: bool = a["moving"] or float(a["fly"]) > 0.0 or float(a["h"]) > 0.0
+		var fr := 0
+		if moving:
+			fr = int(float(a["f"]) / (3.0 if a["kind"] == "pigeon" else 5.0)) % 2
+		elif a["peck"]:
+			fr = 1
+		i = a["fr"][fr]
 	Art.set_frame(body, i)
 	var sz := Art.size(i)
+	var big := sz.x > 20.0
 	body.flip_h = a["flip"]
 	nd.position = Vector2(roundf(a["x"]), roundf(a["y"]))
-	body.position = Vector2(-floorf(sz.x / 2.0), -sz.y - roundf(a["h"]))
+	body.position = Vector2(roundf(float(a["x"]) - sz.x / 2.0) - nd.position.x, roundf(float(a["y"]) - sz.y - float(a["h"])) - nd.position.y)
+	sh.visible = not dead_f
+	(a["blood"] as Node2D).visible = dead_f and float(a["h"]) == 0.0
+	if sh.visible:
+		Art.set_frame(sh, D["shadowBig"] if big else D["shadowSmall"])
+		sh.position = Vector2(roundf(float(a["x"]) - (11.0 if big else 4.5)) - nd.position.x, -2.0)
 
 func _sync_nodes() -> void:
 	for n in npcs:
@@ -481,6 +597,9 @@ func _sync_nodes() -> void:
 			if a["node"] == null:
 				_animal(a)
 			_update_animal(a)
+		elif a["node"] != null:       # гончие ушли в лес или вернулись, дичь расселили заново
+			(a["node"] as Node).queue_free()
+			a["node"] = null
 
 ## узел рисунка среди людей (SPR_EXT): k — ключ, y — глубина (по ней — за людьми или перед ними), f(nd) — рисунок
 ## в координатах мира; z = 1 — поверх всех (CRENDER2). Каждый кадр — заново
@@ -524,7 +643,7 @@ func _exit_tree() -> void:
 
 # ---------- ход времени ----------
 func blocked() -> bool:
-	return hud.is_open() or fade > 0.0 or heal.on
+	return hud.is_open() or fade > 0.0 or heal.on or float(king.get("downT", 0.0)) > t
 
 func _process(d: float) -> void:
 	_tick(minf(d, 0.05))
@@ -563,10 +682,14 @@ func _tick(dt: float) -> void:
 		trn.update(dt)
 		heal.update(dt)
 		sck.update(dt)
+		hnt.update(dt)            # охота (UPD_EXT hunt → hunt2 → hurt → hunt3): дичь, гончие, спутники, стрелы, свой лук
 		if trn.kj != null or heal.on:
 			king["moving"] = false   # на ристалище и на носилках королём правит сцена (courtBlocked)
+		elif float(king.get("downT", 0.0)) > t:
+			king["moving"] = false   # сбит с ног на охоте (hurt.js): лежит, пока не встанет
 		else:
-			_player_update(dt)
+			_player_update(dt * (0.45 if hnt.drawing() else 1.0))   # hunt3.js: с натянутым луком — шагом
+			hnt.face_aim()
 	else:
 		king["moving"] = false
 	if fade == 0.0:
@@ -584,6 +707,7 @@ func _tick(dt: float) -> void:
 	_sync_nodes()
 	trn.sync()
 	heal.sync()
+	hnt.sync()
 	for p in conds:
 		(p[0] as Sprite2D).visible = cond_ok(p[1])
 	wrk.update_sites()
@@ -640,7 +764,8 @@ func _light() -> void:
 	lm.canvas_transform = Transform2D(0.0, -org)
 	lm_amb.position = org
 	lm_amb.size = Vector2(vw, vh)
-	lm_amb.color = Color(minf(255.0, amb.x) / 255.0, minf(255.0, amb.y) / 255.0, minf(255.0, amb.z) / 255.0)
+	var flk := 1.8 if t - hnt.flash < 0.25 else 1.0    # вспышка: удар зверя, падение (COURT.flash)
+	lm_amb.color = Color(minf(255.0, amb.x * flk) / 255.0, minf(255.0, amb.y * flk) / 255.0, minf(255.0, amb.z * flk) / 255.0)
 	lm_view.position = org
 	var dark := clampf(1.0 - minf(amb.x, minf(amb.y, amb.z)) / 255.0, 0.0, 1.0)
 	var dk := Game.day_k()
@@ -777,6 +902,8 @@ func _room_check() -> void:
 func go_through(d: Dictionary) -> void:
 	if fade > 0.0:
 		return
+	if hnt.door(d):           # DOOR_EXT: ворота леса на охоте — «Уже домой, государь?»
+		return
 	path = []
 	fade_to(func() -> void:
 		king["x"] = float(d["ax"])
@@ -855,7 +982,7 @@ func _line_free(x0: float, y0: float, x1: float, y1: float) -> bool:
 func _ani_update(dt: float) -> void:
 	var P := king
 	for a in ani:
-		if a["loc"] != loc_id:
+		if a["loc"] != loc_id or int(a["game"]) != 0:
 			continue
 		var pd := Vector2(float(P["x"]) - a["x"], float(P["y"]) - a["y"]).length()
 		var r: Array = a["r"]
@@ -865,11 +992,11 @@ func _ani_update(dt: float) -> void:
 				a["x"] += a["vx"] * dt
 				a["y"] += a["vy"] * dt
 				a["h"] = minf(34.0, a["h"] + 46.0 * dt)
-				a["fc"] += dt * 40.0
+				a["f"] += dt * 40.0
 				continue
 			if a["h"] > 0.0:
 				a["h"] = maxf(0.0, a["h"] - 24.0 * dt)
-				a["fc"] += dt * 40.0
+				a["f"] += dt * 40.0
 				a["x"] = clampf(a["x"], r[0] * CT, (r[2] + 1) * CT)
 				a["y"] = clampf(a["y"], r[1] * CT, (r[3] + 1) * CT)
 				if a["h"] > 0.0:
@@ -885,7 +1012,7 @@ func _ani_update(dt: float) -> void:
 				continue
 		if a["moving"]:
 			var dxy := Vector2(a["tx"] - a["x"], a["ty"] - a["y"])
-			var sp: float = ANISP[a["kind"]] * (2.3 if a["run"] else 1.0) * dt
+			var sp: float = float(D["anisp"].get(a["kind"], 20.0)) * (2.3 if a["run"] else 1.0) * dt
 			if dxy.length() <= sp:
 				a["x"] = a["tx"]
 				a["y"] = a["ty"]
@@ -897,7 +1024,7 @@ func _ani_update(dt: float) -> void:
 				a["y"] += dxy.y / dxy.length() * sp
 				if absf(dxy.x) > 0.5:
 					a["flip"] = dxy.x > 0.0
-				a["fc"] += sp
+				a["f"] += sp
 			continue
 		a["t"] -= dt
 		a["peck"] = (a["kind"] == "hen" or a["kind"] == "pigeon") and sin(t * 6.0 + a["x"] * 0.7) > 0.7
@@ -984,8 +1111,8 @@ func _parts_update(dt: float) -> void:
 	if parts.size() > 400:
 		parts = parts.slice(parts.size() - 400)
 
-func _draw_parts(layer_i: int) -> void:
-	var n: Node2D = fx0 if layer_i == 0 else fx1
+## n — тот слой, что рисуется (после смены локации старый слой ещё может дорисоваться до удаления)
+func _draw_parts(layer_i: int, n: Node2D) -> void:
 	for p in parts:
 		var a: float = 1.0 - p["t"] / p["life"]
 		var x := roundf(p["x"])
@@ -1066,6 +1193,9 @@ func nearest_target() -> Dictionary:
 	var e: Dictionary = trn.target()      # TARGET_EXT: на ристалище — удар копьём (d = −1: всегда он)
 	if not e.is_empty():
 		best = {"e": e}
+	var he: Dictionary = hnt.target()     # на охоте — зверь в прицеле ловчего (меньшее d — его)
+	if not he.is_empty() and float(he.d) < bd:
+		best = {"e": he}
 	return best
 
 func interact(tg: Dictionary) -> void:
@@ -1092,6 +1222,10 @@ func talk_to0(n: Dictionary) -> void:
 	# свои разговоры (n.talk в HTML): выпущенный узник, узник в камере, тюремщик, капеллан
 	if n.has("talk_line"):
 		hud.say(n, String(n.talk_line))
+		print("TALK ", n["name"])
+		return
+	if n.key == "srv_hunter" and SimPlayer.ensure_sim():
+		hnt.hunter_talk(n)    # n2talk: без охоты — псарня (huntAct), на охоте — дальше, разделиться, отбой
 		print("TALK ", n["name"])
 		return
 	if n.key == "srv_doc" and SimPlayer.ensure_sim():
@@ -1183,6 +1317,9 @@ func do_act(a: Dictionary) -> void:
 				meet.barracks()
 		"gate":
 			gate_act()
+		"kennel":
+			if SimPlayer.ensure_sim():
+				hnt.act()     # ACTS_EXT.kennel: выехать на охоту
 		"stable":
 			gate_act("Конюх выводит осёдланного гнедого. «Куда поедем, государь?» В стойлах фыркают кони свиты.")
 		_:
@@ -1233,12 +1370,18 @@ func later(sec: float, f: Callable) -> void:
 
 # щелчок мышью: идти туда; по человеку или предмету — подойти и заговорить/сделать
 func click(sp: Vector2) -> void:
+	if hnt.click_hook(0):     # hunt3.js: натянутый лук — выстрел; щелчок сразу после выстрела — съесть
+		return
 	if blocked():
 		return
 	if trn.kj != null:        # PICK_EXT: на ристалище любой щелчок — удар копьём
 		trn.kj_press()
 		return
 	var w := cam_tl + sp / Z
+	var pe: Dictionary = hnt.pick(w.x, w.y)   # PICK_EXT: зверь под мышью на охоте
+	if not pe.is_empty():
+		(pe.go as Callable).call()
+		return
 	for n in npcs:
 		if n["loc"] != loc_id or n["away"] or (n["lines"] as Array).is_empty():
 			continue
@@ -1276,10 +1419,11 @@ func _unhandled_input(e: InputEvent) -> void:
 		if e.pressed:
 			if b == MOUSE_BUTTON_LEFT:
 				down_at = {"at": mp, "ui": hud.capture(mp)}
+				hnt.press(not down_at.ui)     # input.down[0]: зажать над лесом — натянуть свой лук
 			elif b == MOUSE_BUTTON_RIGHT:
 				if hud.is_open():
 					hud.click({"x": mp.x, "y": mp.y, "ux": mp.x, "uy": mp.y, "b": 2, "drag": false})
-				else:
+				elif not hnt.click_hook(2):   # ПКМ при натяге — ослабить тетиву
 					path = []
 			elif b == MOUSE_BUTTON_WHEEL_UP or b == MOUSE_BUTTON_WHEEL_DOWN:
 				if hud.is_open():
@@ -1289,6 +1433,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		elif b == MOUSE_BUTTON_LEFT and down_at != null:
 			var d: Dictionary = down_at
 			down_at = null
+			hnt.up()
 			if d.ui or hud.is_open():
 				hud.click({"x": d.at.x, "y": d.at.y, "ux": mp.x, "uy": mp.y, "b": 0, "drag": (d.at as Vector2).distance_to(mp) > 3.0})
 			else:
@@ -1319,6 +1464,8 @@ func key(k: int) -> void:
 	if heal.on:               # CKEY_EXT (hurt.js): Пробел и Enter — дальше, прочие клавиши — мимо
 		if k == KEY_SPACE or k == KEY_ENTER:
 			heal.skip()
+		return
+	if hnt.key(k):            # CKEY_EXT (hunt2.js, hunt3.js): Q — оружие, G — ловчий
 		return
 	match k:
 		KEY_E, KEY_ENTER, KEY_KP_ENTER:
@@ -1519,6 +1666,11 @@ func cmd(p: PackedStringArray) -> void:
 		"zoom":
 			Z = clampi(int(p[1]), 1, 2)
 			snap_cam()
+		"hunt":
+			# королевская охота (court_hunt.gd: cmd): hunt start deer [ключ спутника] — сразу в лес; kill, end, hart, near вид,
+			# shoot, split, draw / loose — свой лук, auto 0|1 — прицел, fall — сбит с ног
+			if p.size() > 1 and SimPlayer.ensure_sim():
+				hnt.cmd(p)
 		"state":
 			print("STATE ", JSON.stringify(state()))
 
@@ -1551,7 +1703,7 @@ func state() -> Dictionary:
 		"conds": conds.filter(func(p): return (p[0] as Sprite2D).visible).size(),
 		"proj": wrk.state(), "crew": npcs.filter(func(n): return n.has("pjk")).size(),
 		"dlg": String(hud.dlg.name) if hud.dlg != null else "", "ch": (hud.dlg.choices as Array).map(func(x): return String(x.get("t", ""))) if hud.dlg != null else [],
-		"tour": trn.state(), "heal": heal.state(), "acts": acts.state(), "sick": sck.state(), "hide": JS.t(king.get("hide")), "xn": xn.size(), "mus": Snd.resolve(),
+		"tour": trn.state(), "heal": heal.state(), "acts": acts.state(), "sick": sck.state(), "hunt": hnt.state(), "hide": JS.t(king.get("hide")), "xn": xn.size(), "mus": Snd.resolve(),
 		"toast": hud.toast_s if hud.toast_t > t else ""}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается

@@ -94,7 +94,7 @@ func _rounds(dn: Dictionary) -> void:
 				pc.ill.seen = float(Game.day)
 				print("DOC VISIT ", pt.key)
 		return
-	if win == 0 or JS.t(dn.get("hidH")):
+	if win == 0 or JS.t(dn.get("hidH")) or JS.t(dn.get("follow")):
 		return
 	var tag := Game.day * 3 + win
 	if rd == null or int(rd.tag) != tag:
@@ -220,7 +220,7 @@ func ill_free() -> bool:
 	var G := Sim.G
 	var ov: Variant = G.get("over")
 	return not c.heal.on and not c.hud.is_open() and c.fade == 0.0 and c.acts.sleep_t <= 0.0 and JS.t(G.get("atCourt")) \
-		and not (ov is Dictionary and not JS.t(ov.get("ack"))) and c.trn.kj == null
+		and not (ov is Dictionary and not JS.t(ov.get("ack"))) and c.trn.kj == null and c.hnt.HU == null
 
 ## лекарь велит лечь (kingIllPrompt): тяжёлая болезнь — только в постель; лёгкая — можно перемогаться на ногах (дольше и опаснее)
 func ill_prompt() -> void:
@@ -257,7 +257,7 @@ func _badge_s() -> String:
 ## значок болезни (sickBadge): справа под верхней строкой (под значком раны), с подсказкой; король на ногах с постельной
 ## хворью — нажать, чтобы лечь
 func badge(u: Variant) -> void:
-	if c.heal.on:
+	if c.heal.on or c.hnt.HU != null:
 		return
 	var s := _badge_s()
 	if s == "":

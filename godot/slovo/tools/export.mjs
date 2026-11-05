@@ -95,6 +95,7 @@ function pageExport() {
     o.acts = L.acts.map(a => { const w = whenOf(a); if (w === null && !a.show()) return null; const q = { id: a.id, x: a.x, y: a.y, r: a.r, label: a.label || '', auto: a.auto ? 1 : 0 };
       if (w) q.when = w; return q; }).filter(Boolean);
     o.rooms = L.rooms;
+    if (L.clearings) o.clearings = L.clearings;   // поляны леса (huntFauna): [cx, cy, rx, ry]; имена — в rooms
     if (L.seats) o.seats = L.seats;     // места за столами пиршественного зала (feastSeats), в порядке HTML
     res.locs[id] = o;
   }
@@ -126,12 +127,24 @@ function pageExport() {
   // 0.9: стол зодчего — мастера стройки (projNpcs: pseudoChar(70 + i + 2·номер работы)), что они делают (PJPH), их слова
   res.proj = PROJ.map(d => d.k); res.pjph = PJPH; res.pjlines = STAFF_LINES.builder.slice(); res.pcrew = {};
   PROJ.forEach((d, j) => (d.crew || []).forEach((w, i) => { const c = pseudoChar(70 + i + j * 2, w[0], w[1], w[2], w[3]); res.pcrew['pjw_' + d.k + i] = [sheet(c), port(c)]; }));
-  // животные двора
-  const AK = { horse: 1, dog: 1, cat: 1, hen: 1, pigeon: 1 };
-  res.animals = COURT.ani.filter(a => AK[a.kind]).map(a => ({ kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), f: [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))] }));
+  // животные двора (fauna.js, fauna2.js: кадры 0–3 — шаг, 4 — стоит, 5 — пасётся, сидит, клюёт, 6–9 — бег или полёт, 10 — лежит;
+  // масть — faCol в порядке COURT.ani; кони — по-старому, два кадра). Дичь леса Godot расселяет сам (huntFauna) — здесь только её листы
+  res.fauna = {}; res.faBox = {};
+  // кадра, которого у зверя нет (лежащий пёс, кот…), HTML не рисует — вместо него стоящий (4)
+  const faAdd = (k, c) => { const key = k + '|' + (c || ''); if (!res.fauna[key]) { const fs = Array.from({ length: FA_N }, (_, f) => { try { return add(animalSprite(k, f, false, c || null)); } catch (e) { return null; } });
+    res.fauna[key] = fs.map(v => v === null ? fs[4] : v); } return key; };
+  res.animals = COURT.ani.filter(a => !(a.loc === 'forest' && a.game === 1)).map(a => { const o = { kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), col: a.col || null };
+    if (FAUNA[a.kind]) { o.c = faCol(a) || null; faAdd(a.kind, o.c); } else o.f = [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))];
+    return o; });
+  for (const p of [6, 8, 10, 12, 14, 16]) { faAdd('deer', 'stag' + p); faAdd('deer', 'wstag' + p); }
+  for (const c of ['doe', 'wdoe', 'hart12', 'hart14', 'hart16']) faAdd('deer', c);
+  for (const k of ['boar', 'bear', 'wolf', 'fox', 'hare', 'pheasant', 'falcon']) faAdd(k, null);
+  faAdd('hare', 'snow'); for (const c of ['drake', 'hen', 'drake_swim', 'hen_swim']) faAdd('duck', c);
+  // рамка зверя (aBox, PICK_EXT): по кадру 0 и a.col, как в HTML
+  for (const [k, c] of [['deer'], ['deer', 'doe'], ['deer', 'hart'], ['boar'], ['bear'], ['wolf'], ['fox'], ['hare'], ['hare', 'snow'], ['pheasant'], ['duck'], ['falcon']]) { const s = animalSprite(k, 0, false, c || null); res.faBox[k + '|' + (c || '')] = [s.width, s.height]; }
   res.anisp = ANISP;
   res.shadow = add(shadowSpr(12));
-  res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9));
+  res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9)); res.shadowMid = add(shadowSpr(14));   // лежащий король (hurt.js)
   // 0.9: турнир (feast.js: drawRider) — гнедой конь под попоной (кадры шага, морда влево; вправо — зеркально), цвета попон и щитов
   res.tourHorse = [add(animalSprite('horse', 0, false, 'dwood')), add(animalSprite('horse', 1, false, 'dwood'))];
   res.ramp = RAMP;

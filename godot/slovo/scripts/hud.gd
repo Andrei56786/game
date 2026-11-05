@@ -299,6 +299,7 @@ func court_layer() -> void:
 			prompt_r = Rect2(x, y, w, 16)
 			prompt_tg = tg
 	C.trn.draw_hud(self)      # HUD_EXT: панель турнира и прицел
+	C.hnt.draw_hud(self)      # HUD_EXT: прицел ловчего, панель охоты, нижняя строка, стрелка к ловчему
 	C.heal.badge(self)        # значок раны (healBadge)
 	C.sck.badge(self)         # значок болезни (sickBadge)
 	if Game.speed == 0 and dlg == null:
@@ -306,7 +307,7 @@ func court_layer() -> void:
 	if help_auto and now > 40.0:
 		help = false
 		help_auto = false
-	if help and not C.blocked():
+	if help and not C.blocked() and not (C.hnt.HU != null and C.loc_id == "forest"):   # в лесу на охоте — своя строка
 		var hs := "WASD или мышь — идти · E — говорить · K — совет · L — письма · Z — масштаб · Пробел — пауза · 1–3 — скорость · Tab — карта · H — подсказка · Esc — меню"
 		var w := tw(hs, "s") + 10.0
 		box(8, H - 14, w, 11, Color8(20, 14, 12, 204))

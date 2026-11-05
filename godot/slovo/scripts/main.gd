@@ -51,6 +51,9 @@ func _ready() -> void:
 	if "--sick" in OS.get_cmdline_user_args():      # только больные при дворе и лекарь (быстро): -- --sick
 		_sick_only.call_deferred()
 		return
+	if "--hunt" in OS.get_cmdline_user_args():      # только королевская охота (быстро): -- --hunt
+		_hunt_only.call_deferred()
+		return
 	_hooks()
 	show_title()
 	if OS.has_feature("web"):
@@ -329,6 +332,7 @@ func _to_court(spot: String) -> void:
 	mapv.ui.target = null
 	SimPlayer.modal = false
 	back_to_court()
+	court.hnt.abort()         # ENTER_EXT (hunt.js): въехал в замок — охоты больше нет
 	court.cmd(PackedStringArray(["spot", spot]))
 	print("TO COURT ", spot)
 
@@ -490,6 +494,8 @@ func _selftest() -> void:
 	ok = aok and ok
 	var iok: bool = await _sick_selftest()
 	ok = iok and ok
+	var uok: bool = await _hunt_selftest()
+	ok = uok and ok
 	var nok: bool = await _snd_selftest()
 	ok = nok and ok
 	var vok: bool = await _save_selftest()
@@ -552,6 +558,25 @@ func _sick_only() -> void:
 	Snd.stop_all()
 	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
 	get_tree().quit(0 if ok else 1)
+
+func _hunt_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _hunt_selftest()
+	print("HUNT OK" if ok else "HUNT FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+## королевская охота (court_hunt.gd): лес без охоты, псарня, свита и гончие, свой лук и прицел ловчего, сулицы, кровь
+## и стрелы в туше, добыча, ловчий уходит с гончими, сбит с ног, отбой и итоги
+func _hunt_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = await c.hnt.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
 
 ## больные при дворе (court_sick.gd): лекарь, больной в постели, у постели, лечение, обход, завеса, разговор с лекарем,
 ## король занемог, постель и дни болезни, выздоровевший встаёт

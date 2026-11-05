@@ -5,9 +5,9 @@
 // 0.8: двор на данных королевства — окна совета (K) и писем (L), срочный сбор: советники сходятся, король во главе стола, доклады;
 // люди двора из королевства, приём прошений у трона. 0.9: жизнь замка — молитва и обедня в часовне, темница, пир в зале, стол
 // зодчего и стройка, чучело и фонтан, сон в королевской постели (часы бегут до утра), турнир на ристалище (поединок короля),
-// рана и лечение; меню (Esc) и окно «Звук»; сохранение из меню и по команде, страница
-// заново — «Продолжить правление»: то же королевство до знака (отпечаток), тот же день и казна; выход в главное меню; новая игра
-// (тяжёлая, без тумана войны) — двор у трона; автосохранение на седьмой день.
+// рана и лечение, больные при дворе и лекарь, королевская охота (лес, ловчий и гончие, лук, добыча, итоги); меню (Esc) и окно
+// «Звук»; сохранение из меню и по команде, страница заново — «Продолжить правление»: то же королевство до знака (отпечаток),
+// тот же день и казна; выход в главное меню; новая игра (тяжёлая, без тумана войны) — двор у трона; автосохранение на седьмой день.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
 import http from 'http';
 import fs from 'fs';
@@ -356,6 +356,27 @@ try {
       check(hd && hd.sh === 'days' && !!he2 && s && s.heal && !s.heal.on && s.sick && !s.sick.dhid && /^(Слабость|Лихорадка) · \d+ дн\.$/.test(s.sick.badge)
         && /^Король встаёт/.test(s.toast), 'дни болезни (' + (hd && hd.sh) + ') — ' + he2 + ', «' + (s && s.toast) + '», значок «' + (s && s.sick && s.sick.badge) + '»');
       await cmd('speed 0', 'close', 'ill nodeath 0'); await wait(300);
+      // 0.9: королевская охота (hunt.js…hunt3.js): выезд — лес, ловчий и гончие у ноги, музыка охоты; натяг лука и выстрел; сражён —
+      // в добыче; сбит с ног — лежит и встаёт; отбой рогом — двор, «Итоги охоты»
+      const hj = l => { try { return l ? JSON.parse(l.slice(l.indexOf('→ ') + 2)) : null; } catch (e) { return null; } };
+      await cmd('time 9', 'speed 1'); await wait(300);
+      n1 = logs.length; await cmd('hunt start deer'); const hu0 = await after(n1, /^HUNT START deer/, 5000); await wait(3500); s = await state(); await shot('forest_hunt');
+      const h1 = s && s.hunt;
+      check(!!hu0 && s && s.loc === 'forest' && h1 && h1.on && h1.kind === 'deer' && h1.hounds >= 1 && h1.follow >= 1 && h1.arrows === 15 && s.mus === 'hunt',
+        'выезд на охоту: ' + hu0 + ', ' + JSON.stringify(h1) + ', музыка «' + (s && s.mus) + '»');
+      n1 = logs.length; await cmd('hunt near doe', 'hunt draw doe'); const hd1 = hj(await after(n1, /^HUNT draw /, 5000)); await wait(800); await shot('forest_hunt_draw');
+      n1 = logs.length; await cmd('hunt loose'); const hl1 = hj(await after(n1, /^HUNT loose /, 5000)); await wait(150); await shot('forest_hunt_arrow');
+      check(hd1 && hd1.draw && hl1 && !hl1.draw && hl1.arrows === 14 && hl1.ar >= 1, 'свой лук: натяг ' + JSON.stringify(hd1 && { draw: hd1.draw, wpn: hd1.wpn })
+        + ', выстрел — стрел ' + (hl1 && hl1.arrows) + ', в полёте ' + (hl1 && hl1.ar));
+      n1 = logs.length; await cmd('hunt kill'); const hk1 = hj(await after(n1, /^HUNT kill /, 5000)); await wait(500); await shot('forest_hunt_kill');
+      check(hk1 && hk1.nbag >= 1 && hk1.bag !== '', 'сражён — в добыче: ' + JSON.stringify(hk1 && { bag: hk1.bag, nbag: hk1.nbag }));
+      await cmd('hunt fall'); await wait(300); s = await state(); await shot('forest_hunt_fall'); const hdown = s && s.hide;
+      await wait(5000); s = await state();
+      check(hdown && s && !s.hide && s.loc === 'forest' && s.hunt && s.hunt.on, 'сбит с ног — лежит (' + hdown + '), встал (' + (s && !s.hide) + ')');
+      await cmd('close'); n1 = logs.length; await cmd('hunt end'); const he1 = await after(n1, /^HUNT SUM \d+ horn/, 8000); await wait(3000); s = await state(); await shot('yard_hunt_sum');
+      check(!!he1 && s && s.loc === 'yard' && s.dlg === 'Итоги охоты' && s.hunt && !s.hunt.on && s.hunt.hounds === 0 && s.mus !== 'hunt',
+        'отбой: ' + he1 + ', ' + (s && s.loc) + ', «' + (s && s.dlg) + '», ' + JSON.stringify(s && s.hunt) + ', музыка «' + (s && s.mus) + '»');
+      await cmd('speed 0', 'close'); await wait(300);
       // 0.9: меню и звук; сохранение — страница заново — «Продолжить правление»
       await cmd('speed 0', 'close'); await wait(400); await cmd('menu'); await wait(700); s = await state(); await shot('court_menu');
       check(s && s.win === 'menu', 'меню (Esc): ' + (s && s.win));
