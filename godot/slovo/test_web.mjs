@@ -329,7 +329,8 @@ try {
       await cmd('speed 0', 'close'); await wait(300);
       // 0.9: больные при дворе (sick2.js): советник занемог лихорадкой — в постели, «болен: лихорадка»; у постели — четыре дела,
       // «Прислать лекаря» — лечение; лекарь — доклад и дела; король занемог — лекарь велит лечь, постель (щупает пульс), дни болезни,
-      // встаёт — значок болезни или слабости. Без смертей от болезней (ill nodeath) — исход не зависит от случая
+      // встаёт — значок болезни или слабости (если королевство, догоняя дни, уже вылечило — «Король поправился»). Без смертей от
+      // болезней (ill nodeath) — исход не зависит от случая
       await cmd('ill nodeath', 'time 12'); await wait(300);
       n1 = logs.length; await cmd('ill adv fever'); const il = await after(n1, /^ILL seat_\w+ fever bed=true/, 5000);
       const ak = il ? il.split(' ')[1] : '';
@@ -354,7 +355,7 @@ try {
       n1 = logs.length; await cmd('heal skip'); await wait(2500); s = await state(); await shot('keep_sickdays'); const hd = s && s.heal;
       await cmd('heal skip'); const he2 = await after(n1, /^HEAL END false/, 180000); await wait(1500); s = await state(); await shot('keep_sick_up');
       check(hd && hd.sh === 'days' && !!he2 && s && s.heal && !s.heal.on && s.sick && !s.sick.dhid && /^(Слабость|Лихорадка) · \d+ дн\.$/.test(s.sick.badge)
-        && /^Король встаёт/.test(s.toast), 'дни болезни (' + (hd && hd.sh) + ') — ' + he2 + ', «' + (s && s.toast) + '», значок «' + (s && s.sick && s.sick.badge) + '»');
+        && /^Король (встаёт|поправился)/.test(s.toast), 'дни болезни (' + (hd && hd.sh) + ') — ' + he2 + ', «' + (s && s.toast) + '», значок «' + (s && s.sick && s.sick.badge) + '»');
       await cmd('speed 0', 'close', 'ill nodeath 0'); await wait(300);
       // 0.9: королевская охота (hunt.js…hunt3.js): выезд — лес, ловчий и гончие у ноги, музыка охоты; натяг лука и выстрел; сражён —
       // в добыче; сбит с ног — лежит и встаёт; отбой рогом — двор, «Итоги охоты»
