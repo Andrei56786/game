@@ -6,7 +6,8 @@ extends "res://scripts/world/court_wins.gd"
 
 const CSPD_TIP := ["Пауза (Пробел)", "Скорость 1", "Скорость 2", "Скорость 3"]
 ## кнопки верхней строки (B в drawCourtUI): значок, подсказка, окно ("" — карта королевства)
-const TB := [["i_seal", "Малый совет (K)", "council"], ["i_raven", "Письма (L)", "letters"], ["i_map", "Карта королевства (Tab)", ""]]
+const TB := [["i_seal", "Малый совет (K)", "council"], ["i_raven", "Письма (L)", "letters"], ["i_map", "Карта королевства (Tab)", ""],
+	["i_snd", "Звук (M — без звука)", "sound"], ["i_scroll", "Меню (Esc)", "menu"]]
 
 ## новый советник (appointSeat при дворе): сразу заселить — и он благодарит короля
 func appointed(k: String) -> void:
@@ -14,6 +15,15 @@ func appointed(k: String) -> void:
 	var n: Dictionary = court.npc_by("seat_" + k)
 	if not n.is_empty():
 		court.people.say(n, "Благодарю, государь! Служу короне.", 4.0)
+
+## окна только двора: «Замыслы и стройки» у стола зодчего (court_works.gd); прочие — общие (court_wins.gd)
+func _court_win(w: Dictionary) -> bool:
+	if String(w.k) == "proj":
+		if Sim.G.is_empty() or not Sim.G.has("court") or court == null:
+			return false
+		court.wrk.draw_win(self, w)
+		return true
+	return super(w)
 
 func _held() -> bool:
 	return Game.speed > 0 and is_open()
@@ -36,7 +46,8 @@ func _draw() -> void:
 	begin_hits()
 	n_draw += 1
 	court_layer()
-	_top_hits()
+	if not court.heal.on:
+		_top_hits()
 	if win != null and not _court_win(win):
 		win = null
 	if not modals.is_empty() and not _court_modal(modals[0]):
@@ -69,7 +80,8 @@ func _top_hits() -> void:
 		var tip: String = e[1]
 		if k == "letters" and un > 0:
 			tip += " — непрочитанных: " + str(un)
-		btn("ctb" + str(i), bx + i * 16, 2, 15, 14, {"ic": e[0], "style": "dark", "tip": tip, "active": k != "" and win != null and String(win.k) == k, "on": func(_c): _tb(k)})
+		var ik: String = "i_mute" if k == "sound" and Snd.muted() else e[0]
+		btn("ctb" + str(i), bx + i * 16, 2, 15, 14, {"ic": ik, "style": "dark", "tip": tip, "active": k != "" and win != null and String(win.k) == k, "on": func(_c): _tb(k)})
 		if k == "letters" and un > 0:
 			rect(bx + i * 16 + 10, 1, 6, 6, PO)
 			rect(bx + i * 16 + 11, 2, 4, 4, "#e04030")

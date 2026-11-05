@@ -6,6 +6,8 @@
 // движения (pageStep — worldAdvance без короля: походы войск и встречи) и сам день (pageDay — как SimDay.dailyTick в Godot,
 // с замыслами держав и походами ИИ). Бои — настоящие, на поле без экрана (autoBattle, runHeadless из captains.js; в Godot —
 // SimCapt). Сводка каждого дня и полные снимки на днях 1, 2, 7, 21, 28, 84 (SIM_SNAPS=all — на каждом).
+// Сохранение: в конце дня 28 (SIM_SAVE_DAY) — saveGame; в новой странице — loadGame, обзор и знаки и 7 дней (SIM_LOAD_DAYS) после
+// неё: снимок сразу после загрузки и на последнем дне (SIM_LOAD=0 — без этого).
 // Числа — float64 без потерь.
 import { chromium } from 'playwright';
 import fs from 'fs';
@@ -74,25 +76,44 @@ function pageAct(a) {
   if (kind === 'order') giveOrder(x[0], x[1], x[2], x[3] === null ? undefined : x[3]);
   else if (kind === 'away') G.atCourt = x[0] ? 0 : 1;
 }
-function pageRef(seed, days, snaps, steps, acts) {
+// снимок для сверки: всё G, генератор R, доход и знаки
+function refSnap() { return { G, R: R.get() >>> 0, ECON: { inc: ECON.inc, incDay: ECON.incDay, incoming: ECON.incoming || null }, SIGNS: SIGNS.map(s => Object.assign({}, s)) }; }
+function refB64(a) { let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); }
+// день эталона: дела короля, шаги движения, сам день — и сводка дня
+function refDay(d, steps, acts) {
+  for (const a of acts) if (a[0] === d) pageAct(a);
+  for (let k = 0; k < steps; k++) pageStep(1 / steps);
+  const pos = G.armies.reduce((s, a) => s + a.x * 7 + a.y * 13, 0);
+  pageDay();
+  return { day: G.day, R: R.get() >>> 0, gold: G.realms.map(r => r.gold), armies: G.armies.length, log: G.log.length, w: G.weather.k, mud: G.mud || 0, chars: G.chars.length, pos };
+}
+function pageRef(seed, days, snaps, steps, acts, saveD) {
   const opt = { diff: 1, tut: false, mapOpen: false };
-  const snap = () => ({ G, R: R.get() >>> 0, ECON: { inc: ECON.inc, incDay: ECON.incDay, incoming: ECON.incoming || null }, SIGNS: SIGNS.map(s => Object.assign({}, s)) });
-  const b64 = a => { let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
-  newGame(seed, opt); const parts = [b64(window.__gdv(snap()))];
-  newGame3(seed, opt); computeVision(); updateSigns(); parts.push(b64(window.__gdv(snap())));
-  // дни: сводка каждого дня (генератор, казна держав, войска, летопись, погода, распутица) и полные снимки в days
-  const dig = [], shot = [], t0 = performance.now();
+  newGame(seed, opt); const parts = [refB64(window.__gdv(refSnap()))];
+  newGame3(seed, opt); computeVision(); updateSigns(); parts.push(refB64(window.__gdv(refSnap())));
+  // дни: сводка каждого дня (генератор, казна держав, войска, летопись, погода, распутица) и полные снимки в days;
+  // в конце дня saveD — сохранение (saveGame, как в игре раз в неделю): его загрузит pageLoad в новой странице
+  const dig = [], shot = [], t0 = performance.now(); let save = null;
   for (let d = 1; d <= days; d++) {
-    for (const a of acts) if (a[0] === d) pageAct(a);
-    for (let k = 0; k < steps; k++) pageStep(1 / steps);
-    const pos = G.armies.reduce((s, a) => s + a.x * 7 + a.y * 13, 0);
-    pageDay();
-    dig.push({ day: G.day, R: R.get() >>> 0, gold: G.realms.map(r => r.gold), armies: G.armies.length, log: G.log.length, w: G.weather.k, mud: G.mud || 0, chars: G.chars.length, pos });
-    if (snaps.includes(d)) { shot.push(d); parts.push(b64(window.__gdv(snap()))); }
+    dig.push(refDay(d, steps, acts));
+    if (snaps.includes(d)) { shot.push(d); parts.push(refB64(window.__gdv(refSnap()))); }
+    if (d === saveD) { if (!saveGame('_ref')) throw new Error('saveGame не удалось'); save = localStorage.getItem('sk3_save_ref'); localStorage.removeItem('sk3_save_ref'); }
   }
   const ms = performance.now() - t0;
-  parts.splice(2, 0, b64(window.__gdv({ seed, days, steps, snaps: shot, dig, ms, acts })));
-  return { parts, chars: G.chars.length, armies: G.armies.length, ms, errs: window.__errs || [] };
+  parts.splice(2, 0, refB64(window.__gdv({ seed, days, steps, snaps: shot, dig, ms, acts })));
+  return { parts, chars: G.chars.length, armies: G.armies.length, ms, save, errs: window.__errs || [] };
+}
+// загрузка (loadGame из state.js и обзор со знаками — как worldSteps при «Продолжить правление») в новой странице, где ещё ничего
+// не считалось, и n дней после неё: сводка, снимок сразу после загрузки и на последнем дне
+function pageLoad(save, d0, n, steps, acts) {
+  localStorage.setItem('sk3_save_ref', save);
+  const okL = loadGame('_ref'); localStorage.removeItem('sk3_save_ref'); if (!okL) throw new Error('loadGame не удалось');
+  computeVision(); updateSigns();
+  const parts = [refB64(window.__gdv(refSnap()))], dig = [];
+  for (let d = d0 + 1; d <= d0 + n; d++) dig.push(refDay(d, steps, acts));
+  parts.push(refB64(window.__gdv(refSnap())));
+  parts.unshift(refB64(window.__gdv({ d0, n, dig, len: save.length })));
+  return { parts, errs: window.__errs || [] };
 }
 const t0 = Date.now();
 const tab = await page.evaluate(src => window.T.ev('(' + src + ')()'), pageTables.toString());
@@ -115,15 +136,32 @@ const ACTS = SEED !== 777 || process.env.SIM_ACTS === '0' ? [] : [
   [48, 'away', 1], [66, 'away', 0],
 ];
 const DAYS = +(process.env.SIM_DAYS || 84), STEPS = +(process.env.SIM_STEPS || 24), SNAPS = process.env.SIM_SNAPS === 'all' ? [...Array(DAYS)].map((_, i) => i + 1) : [1, 2, 7, 21, 28, 84].filter(d => d <= DAYS);
-const ref = await page.evaluate(([src, lib, seed, days, snaps, steps, acts]) => window.T.ev(lib + '\n;(' + src + ')(' + seed + ',' + days + ',' + JSON.stringify(snaps) + ',' + steps + ',' + JSON.stringify(acts) + ')'), [pageRef.toString(), [pageStep, pageDay, pageAct].map(f => f.toString()).join('\n'), SEED, DAYS, SNAPS, STEPS, ACTS]);
+const LIB = [pageStep, pageDay, pageAct, refSnap, refB64, refDay].map(f => f.toString()).join('\n');
+const SAVE_D = SEED !== 777 || process.env.SIM_LOAD === '0' ? 0 : +(process.env.SIM_SAVE_DAY || 28), LOAD_N = +(process.env.SIM_LOAD_DAYS || 7);
+const ref = await page.evaluate(([src, lib, seed, days, snaps, steps, acts, saveD]) => window.T.ev(lib + '\n;(' + src + ')(' + seed + ',' + days + ',' + JSON.stringify(snaps) + ',' + steps + ',' + JSON.stringify(acts) + ',' + saveD + ')'),
+  [pageRef.toString(), LIB, SEED, DAYS, SNAPS, STEPS, ACTS, SAVE_D <= DAYS ? SAVE_D : 0]);
+// сохранение дня SAVE_D — в новую страницу (чистую, как после перезапуска игры): загрузка и LOAD_N дней после неё
+let load = null;
+if (ref.save) {
+  const p2 = await browser.newPage({ viewport: { width: 640, height: 360 } });
+  p2.on('pageerror', e => errs.push(e.message));
+  await p2.goto('file://' + html);
+  await p2.waitForFunction(() => window.T && window.T.ev, null, { timeout: 120000, polling: 300 });
+  await p2.evaluate(() => { window.requestAnimationFrame = () => 0; });
+  await p2.evaluate(src => { window.__gdv = new Function(src + '\nreturn encodeVariant;')(); }, enc);
+  load = await p2.evaluate(([src, lib, save, d0, n, steps, acts]) => { window.__save = save; return window.T.ev(lib + '\n;(' + src + ')(window.__save,' + d0 + ',' + n + ',' + steps + ',' + JSON.stringify(acts) + ')'); },
+    [pageLoad.toString(), LIB, ref.save, SAVE_D, LOAD_N, STEPS, ACTS]);
+  ref.errs.push(...load.errs);
+}
 await browser.close();
 if (errs.length || ref.errs.length) { console.error('ошибки страницы:\n' + errs.concat(ref.errs).join('\n')); process.exit(1); }
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'sim_tables.bin'), Buffer.from(tab, 'base64'));
-// эталон: зерно, число кусков, длины, затем куски — newGame, newGame3, сводка дней, снимки дней (каждый — отдельный Variant)
-const parts = ref.parts.map(b => Buffer.from(b, 'base64')), hd = Buffer.alloc(8 + 4 * parts.length);
+// эталон: зерно, число кусков, длины, затем куски — newGame, newGame3, сводка дней, снимки дней (каждый — отдельный Variant);
+// затем загрузка: сводка дней после неё, снимок сразу после загрузки, снимок последнего дня
+const parts = ref.parts.concat(load ? load.parts : []).map(b => Buffer.from(b, 'base64')), hd = Buffer.alloc(8 + 4 * parts.length);
 hd.writeUInt32LE(SEED, 0); hd.writeUInt32LE(parts.length, 4); parts.forEach((p, i) => hd.writeUInt32LE(p.length, 8 + 4 * i));
 fs.writeFileSync(path.join(out, 'sim_ref.bin'), Buffer.concat([hd, ...parts]));
 const tot = parts.reduce((s, p) => s + p.length, 0);
-console.log(`SIM EXPORT OK: таблицы ${Buffer.from(tab, 'base64').length} Б, эталон зерна ${SEED}: людей ${ref.chars}, войск ${ref.armies}, дней ${DAYS} по ${STEPS} шагов (${Math.round(ref.ms)} мс в HTML), снимков ${parts.length - 3}, ${(tot / 1048576).toFixed(1)} МБ, ${Date.now() - t0} мс`);
+console.log(`SIM EXPORT OK: таблицы ${Buffer.from(tab, 'base64').length} Б, эталон зерна ${SEED}: людей ${ref.chars}, войск ${ref.armies}, дней ${DAYS} по ${STEPS} шагов (${Math.round(ref.ms)} мс в HTML), снимков ${ref.parts.length - 3}${load ? `, загрузка дня ${SAVE_D} (сохранение ${(ref.save.length / 1048576).toFixed(1)} МБ) и ${LOAD_N} дней после неё` : ''}, ${(tot / 1048576).toFixed(1)} МБ, ${Date.now() - t0} мс`);
 process.exit(0);

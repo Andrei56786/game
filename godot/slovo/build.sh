@@ -7,19 +7,23 @@
 set -e
 cd "$(dirname "$0")"
 G=${GODOT:-/data/tools/godot/Godot_v4.7.2-stable_linux.x86_64}
-(cd ../.. && python3 tools/build.py >/dev/null && node godot/slovo/tools/export.mjs && node godot/slovo/tools/sim_export.mjs && node godot/slovo/tools/snd_export.mjs)
+# в CI — строки провала в заметки прогона (annotations: видны и без входа на GitHub, журналы — нет)
+ci_err() { [ -n "$GITHUB_ACTIONS" ] || return 0; { grep -E "$2" "$1" | grep -v "^HEAL END" | head -6; tail -2 "$1"; } | sed 's/^/::error::/'; }
+(cd ../.. && python3 tools/build.py >/dev/null && node godot/slovo/tools/export.mjs && node godot/slovo/tools/sim_export.mjs && node godot/slovo/tools/snd_export.mjs) ||
+  { [ -n "$GITHUB_ACTIONS" ] && echo "::error::выгрузка из HTML (build.py, export.mjs, sim_export.mjs, snd_export.mjs) не прошла"; exit 1; }
 node -e "const f=require('fs'),s=f.readFileSync('../../src/fontdata.js','utf8');f.writeFileSync('slovo_serif.woff',Buffer.from(s.match(/VF_DATA = '([^']+)'/)[1],'base64'))"
 mkdir -p build/web build/win && touch build/.gdignore
 "$G" --headless --import --path . >/dev/null 2>&1 || true
 # самопроверка без экрана: двор живёт сутки, люди ходят, разговоры открываются; любая ошибка скрипта — провал
-timeout 300 "$G" --headless --path . -- --selftest 2>&1 | tee build/selftest.log
-grep -q "SELFTEST OK" build/selftest.log && ! grep -q "SCRIPT ERROR\|Parse Error\|ERROR:" build/selftest.log || { echo "самопроверка не прошла"; exit 1; }
+timeout 420 "$G" --headless --path . -- --selftest 2>&1 | tee build/selftest.log
+grep -q "SELFTEST OK" build/selftest.log && ! grep -q "SCRIPT ERROR\|Parse Error\|ERROR:" build/selftest.log ||
+  { echo "самопроверка не прошла"; ci_err build/selftest.log "FAIL| false$|SCRIPT ERROR|Parse Error|ERROR:|^ +\[0\] "; exit 1; }
 # генератор мира на GDScript против HTML: по тому же зерну — тот же мир (высоты, реки, провинции, поселения, дороги…)
 timeout 900 "$G" --headless --path . --script tools/world_check.gd 2>&1 | tee build/world_check.log
-grep -q "WORLD CHECK OK" build/world_check.log || { echo "генератор мира разошёлся с HTML"; exit 1; }
+grep -q "WORLD CHECK OK" build/world_check.log || { echo "генератор мира разошёлся с HTML"; ci_err build/world_check.log "FAIL|ERROR"; exit 1; }
 # королевство на GDScript против HTML: newGame и newGame3 + обзор по тому же зерну — то же состояние G до последнего знака
 timeout 600 "$G" --headless --path . --script tools/state_check.gd 2>&1 | tee build/state_check.log
-grep -q "STATE CHECK OK" build/state_check.log || { echo "королевство разошлось с HTML"; exit 1; }
+grep -q "STATE CHECK OK" build/state_check.log || { echo "королевство разошлось с HTML"; ci_err build/state_check.log "FAIL|ERROR"; exit 1; }
 [ "$1" = "test" ] && exit 0
 "$G" --headless --path . --export-release "Web" build/web/index.html
 "$G" --headless --path . --export-release "Windows" build/win/slovo.exe

@@ -45,9 +45,75 @@ var step_ms := 0.0
 var b_ms := 0.0          # для проверок: доля кадра на счёт королевства в последнем кадре и сколько ушло, мс
 var work_ms := 0.0
 var font: Font
+# сохранение (saveGame / loadGame в HTML): один слот, как sk3_save; королевство (SimSave) и эти часы
+const SAVE := "user://save.sav"
+var save_path := SAVE    # самопроверка пишет в свой файл
+var autosave := true     # раз в 7 дней, в конце дня королевства (как в HTML)
+var saved_day := -1      # для проверок: день королевства последнего сохранения, время записи и размер
+var save_ms := 0.0
+var save_kb := 0
 
 func _ready() -> void:
 	font = load("res://slovo_serif.woff") if ResourceLoader.exists("res://slovo_serif.woff") else ThemeDB.fallback_font
+	SimDay.on_day = _day_done
+
+## конец дня королевства (конец dailyTick): каждый седьмой день — сохранение, если игра не окончена
+func _day_done() -> void:
+	if autosave and sim_run and not Sim.G.is_empty() and int(Sim.G.day) % 7 == 0 and not JS.t(Sim.G.get("over")):
+		save_game()
+
+## часы в сохранении: календарь (день и доля суток), скорость, шаги движения текущего дня королевства
+func clocks() -> Dictionary:
+	return {"day": day, "frac": frac, "speed": speed, "last_speed": last_speed, "steps": steps, "step_at": step_at}
+
+## часы из сохранения (или новой игры — пустой словарь: день 0, утро — двор поставит 7:30)
+func set_clocks(c: Dictionary) -> void:
+	day = int(c.get("day", 0))
+	frac = float(c.get("frac", 0.0))
+	speed = int(c.get("speed", 1))
+	last_speed = maxi(1, int(c.get("last_speed", 1)))
+	steps = int(c.get("steps", 0))
+	step_at = float(c.get("step_at", 0.0))
+	pos0.clear()
+	stepping = false
+	step_done = -1
+	hold = false
+	lag_max = 0
+
+## сохранить (saveGame): королевство и часы — только между шагами движения и днями (иначе false — см. save_safe)
+func save_game() -> bool:
+	if Sim.G.is_empty() or SimDay.busy or stepping:
+		return false
+	var t0 := Time.get_ticks_usec()
+	var o := SimSave.save_data()
+	o["gd"] = clocks()
+	var ok := SimSave.write(save_path, o)
+	save_ms = (Time.get_ticks_usec() - t0) / 1000.0
+	if ok:
+		saved_day = int(Sim.G.day)
+		save_kb = int(SimSave.size / 1024)
+		if OS.has_feature("web"):
+			JavaScriptBridge.force_fs_sync()    # файл — в IndexedDB как можно скорее (копия в localStorage уже записана)
+	print("SAVED " if ok else "SAVE FAIL ", int(Sim.G.day), " ", snappedf(save_ms, 0.1), " мс ", save_kb, " КБ")
+	if ok and save_kb > 400:
+		var st := SimSave.stat(o)
+		print("SAVE BIG ", JSON.stringify(st), " ", JSON.stringify(SimSave.stat_in(o.get(st[0][1]))), " шаг ", stepping, " ", steps, " busy ", SimDay.busy)
+	return ok
+
+## сохранить, когда шаг движения или день досчитаются (меню, выход): ждёт кадры, не дольше 10 с
+func save_safe() -> bool:
+	var t0 := Time.get_ticks_msec()
+	while (SimDay.busy or stepping) and Time.get_ticks_msec() - t0 < 10000:
+		await get_tree().process_frame
+	return save_game()
+
+func has_save() -> bool:
+	return SimSave.exists(save_path)
+
+## сохранение годится (saveOk): наше и для мира той же версии
+func save_ok() -> bool:
+	var h := SimSave.head(save_path)
+	return not h.is_empty() and float(h.wv) == SimSave.WORLD_V
 
 ## скорость (setSpeed): 0 — пауза
 func set_speed(i: int) -> void:
@@ -70,6 +136,16 @@ func advance(dt: float, on_map := false) -> void:
 	if speed <= 0:
 		return
 	frac += minf(dt, 0.1) / MAP_SPD[speed] if on_map else dt / DAY_SEC[speed]
+	while frac >= 1.0:
+		if sim_behind():
+			frac = 0.9999
+			return
+		frac -= 1.0
+		day += 1
+
+## часы вперёд на dd суток (worldAdvance в HTML: дни в постели после раны) — новый день, только когда королевство досчитало прежний
+func advance_days(dd: float) -> void:
+	frac += dd
 	while frac >= 1.0:
 		if sim_behind():
 			frac = 0.9999

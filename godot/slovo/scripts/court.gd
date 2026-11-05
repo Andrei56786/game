@@ -8,12 +8,19 @@ signal ride_out(a)        # король выезжает из замка: a —
 const CT := 16
 const DIRS := ["down", "left", "right", "up"]
 const NPC_SPDK := [1.0, 1.0, 1.4, 2.2]
-const ANISP := {"horse": 12.0, "dog": 44.0, "cat": 20.0, "hen": 11.0, "pigeon": 9.0}
 const Hud = preload("res://scripts/court_ui.gd")
 const People = preload("res://scripts/people.gd")
 const Council = preload("res://scripts/court_council.gd")
 const Family = preload("res://scripts/court_family.gd")
 const Audience = preload("res://scripts/court_audience.gd")
+const Chapel = preload("res://scripts/court_chapel.gd")
+const Feast = preload("res://scripts/court_feast.gd")
+const Works = preload("res://scripts/court_works.gd")
+const Tour = preload("res://scripts/court_tour.gd")
+const Hurt = preload("res://scripts/court_hurt.gd")
+const Acts = preload("res://scripts/court_acts.gd")
+const Sick = preload("res://scripts/court_sick.gd")
+const HuntM = preload("res://scripts/court_hunt.gd")
 
 var D: Dictionary
 var Z := 2
@@ -39,13 +46,22 @@ var cam_tl := Vector2.ZERO
 var sneak := false
 var path: Array = []            # путь короля по щелчку мыши
 var on_arrive: Callable
-var practice_t := -10.0
 var trees: Array = []
 var forge := Vector2.ZERO
 var people: RefCounted
 var meet: RefCounted          # Малый совет: заседания, сбор, разговор с советником (court_council.gd)
 var fam: RefCounted           # семья короля и воспитанники: разговоры с выбором (court_family.gd)
 var aud: RefCounted           # приём прошений у трона (court_audience.gd)
+var chp: RefCounted           # часовня, книги и темница: молитва, обедня, чтение, узники (court_chapel.gd)
+var fst: RefCounted           # пир в пиршественном зале: гости, менестрель, король во главе стола (court_feast.gd)
+var wrk: RefCounted           # стол зодчего: стройки, леса, мастера, клетки под постройками (court_works.gd)
+var trn: RefCounted           # турнир на ристалище: зрители, герольд, поединки, выход короля к барьеру (court_tour.gd)
+var heal: RefCounted          # раны короля: носилки, постель, дни лечения; значок раны (court_hurt.gd)
+var acts: RefCounted          # простые дела: постель и сон, колыбель, амбар, лавка, чучело, фонтан; вид двора (court_acts.gd)
+var sck: RefCounted           # больные при дворе: лекарь, обход, у постели, король занемог; значок болезни (court_sick.gd)
+var hnt: RefCounted           # королевская охота и дичь леса (court_hunt.gd)
+var xn := {}                  # узлы рисунка среди людей (SPR_EXT): ключ → Node2D (xnode)
+var conds: Array = []         # предметы по условию: [спрайт, условие] — блюда пира, постройки стола зодчего
 var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
 
 var layer: Node2D
@@ -89,6 +105,14 @@ func _ready() -> void:
 	meet = Council.new(self)
 	fam = Family.new(self)
 	aud = Audience.new(self)
+	chp = Chapel.new(self)
+	fst = Feast.new(self)
+	wrk = Works.new(self)
+	trn = Tour.new(self)
+	heal = Hurt.new(self)
+	acts = Acts.new(self)
+	sck = Sick.new(self)
+	hnt = HuntM.new(self)
 	var K: Dictionary = D["king"]
 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
 	var sp0: Dictionary = spots["throne_front"]
@@ -99,8 +123,11 @@ func _ready() -> void:
 	for p in D["people"]:
 		npcs.append(people.make(p))
 	for a in D["animals"]:
-		var r: Array = a["r"]
-		ani.append({"kind": a["kind"], "loc": a["loc"], "r": r, "x": float(a["x"]), "y": float(a["y"]), "f": a["f"], "tx": 0.0, "ty": 0.0, "t": randf() * 3.0, "flip": randf() < 0.5, "moving": false, "run": false, "fly": 0.0, "h": 0.0, "vx": 0.0, "vy": 0.0, "fc": 0.0, "peck": false, "node": null})
+		var e := mk_ani(String(a["kind"]), String(a["loc"]), a["r"], float(a["x"]), float(a["y"]), "" if a.get("col") == null else String(a["col"]))
+		e["c"] = "" if a.get("c") == null else String(a["c"])
+		e["fr"] = a.get("f", [])
+		ani.append(e)
+	hnt.fauna("")             # дичь леса — тихий набор (homeAnimals → huntFauna(''))
 	cam.anchor_mode = Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT
 	add_child(cam)
 	cam.make_current()
@@ -120,7 +147,7 @@ func _ready() -> void:
 	add_child(ui)
 	vig = TextureRect.new()
 	vig.texture = _vignette()
-	vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vig.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)   # ночная виньетка — на весь экран
 	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vig.modulate.a = 0.0
 	ui.add_child(vig)
@@ -134,6 +161,8 @@ func _ready() -> void:
 		Game.set_hour(7.5)
 	people.pop_check()        # королевство уже есть — семья, совет и узники из него (courtPopulate)
 	people.snap(true)
+	wrk.apply()               # клетки под стройками (projApply)
+	acts.sync_visual()        # золото в казне, мешки в амбаре, колыбель (courtSyncVisual)
 	last_ha = Game.day * 24.0 + Game.hour_abs()
 	go_loc(king["loc"])
 	snap_cam()
@@ -233,6 +262,9 @@ func go_loc(id: String) -> void:
 	king["node"] = null
 	deco.clear()
 	objs.clear()
+	conds.clear()
+	xn.clear()
+	wrk.sites.clear()
 	lights.clear()
 	wins.clear()
 	glows.clear()
@@ -249,6 +281,7 @@ func go_loc(id: String) -> void:
 	add_child(layer)
 	move_child(layer, 0)
 	var back := ColorRect.new()
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE   # фон места — не окно: иначе он забирает щелчки и мышь при дворе не работает
 	back.color = Color8(26, 36, 24) if L["out"] else Color8(12, 10, 16)
 	back.position = Vector2(-1000, -1000)
 	back.size = Vector2(int(L["w"]) * CT + 2000, int(L["h"]) * CT + 2000)
@@ -262,8 +295,10 @@ func go_loc(id: String) -> void:
 		s.position = Vector2(e["x"], e["y"])
 		layer.add_child(s)
 		deco.append([s, e])
+		if e.has("when"):
+			conds.append([s, String(e["when"])])
 	fx0 = Node2D.new()
-	fx0.draw.connect(_draw_parts.bind(0))
+	fx0.draw.connect(_draw_parts.bind(0, fx0))
 	layer.add_child(fx0)
 	world = Node2D.new()
 	world.y_sort_enabled = true
@@ -275,6 +310,10 @@ func go_loc(id: String) -> void:
 		world.add_child(s)
 		if (e["f"] as Array).size() > 1:
 			objs.append([s, e])
+		if e.has("when"):
+			conds.append([s, String(e["when"])])
+		if e.has("site"):
+			wrk.add_site(s, e)
 		if e.has("tree"):
 			var sz := Art.size(e["f"][0])
 			trees.append(Vector3(float(e["x"]) + sz.x / 2.0, float(e["y"]) + sz.y * 0.35, sz.x * 0.4))
@@ -319,7 +358,7 @@ func go_loc(id: String) -> void:
 		king_light = null
 	fx1 = Node2D.new()
 	fx1.material = add_mat
-	fx1.draw.connect(_draw_parts.bind(1))
+	fx1.draw.connect(_draw_parts.bind(1, fx1))
 	glow.add_child(fx1)
 	_sync_nodes()
 	room = ""
@@ -400,34 +439,146 @@ func _update_walker(n: Dictionary) -> void:
 		sh.visible = true
 		sh.position = Vector2(x + 2.0, ry - 2.0) - np
 	body.modulate.a = 0.75 if (n == king and sneak and moving) else 1.0
+	nd.visible = not JS.t(n.get("hide"))
+
+## зверь (запись COURT.ani): kind, loc, r — где бродит, col — масть по замыслу (doe, hart, snow, гончие), c — масть в мире (faCol),
+## f — счётчик шага, game: 0 — двор, 1 — дичь леса, 2 — гончая на охоте; st — что делает дичь (graze, alert, flee, bay, charge, fly, lie, dead)
+func mk_ani(kind: String, loc: String, r: Array, x: float, y: float, col: String) -> Dictionary:
+	return {"kind": kind, "loc": loc, "r": r, "x": x, "y": y, "tx": 0.0, "ty": 0.0, "t": randf() * 3.0, "flip": randf() < 0.5, "col": col, "c": col, "fr": [],
+		"f": 0.0, "moving": false, "run": false, "fly": 0.0, "h": 0.0, "vx": 0.0, "vy": 0.0, "peck": false, "game": 0, "st": "", "node": null}
+
+# ---------- как звери выглядят (fauna2.js: faCol, faFrame, faDraw); кони — по-старому, два кадра ----------
+const FA_DEAD := 10
+const FA_STEP := {"deer": 4.0, "boar": 3.0, "wolf": 4.0, "fox": 3.0, "bear": 4.0, "dog": 3.0, "hound": 3.5, "cat": 2.5, "hare": 3.0, "rat": 2.0, "hen": 2.5, "pigeon": 2.0, "duck": 2.5, "pheasant": 3.0, "falcon": 3.0}
+const FA_RUNV := {"deer": 60.0, "boar": 50.0, "wolf": 60.0, "fox": 50.0, "bear": 45.0, "dog": 60.0, "hound": 90.0, "cat": 35.0, "hare": 50.0, "rat": 30.0}
+const FA_BIRD := ["hen", "pigeon", "duck", "pheasant", "falcon"]
+const FA_SIT := ["dog", "hound", "cat"]
+
+## отростки на рогах оленя (faPts): чаще 8–12, королевский — 14, императорский — 16
+func fa_pts(a: Dictionary) -> int:
+	if not a.has("pts"):
+		var r := randf()
+		a["pts"] = 6 if r < 0.12 else 8 if r < 0.36 else 10 if r < 0.62 else 12 if r < 0.84 else 14 if r < 0.96 else 16
+	return int(a["pts"])
+
+func ter_at(id: String, tx: int, ty: int) -> int:
+	var Ld: Dictionary = D["locs"][id]
+	var w: int = Ld["w"]
+	var s: String = Ld.get("ter", "")
+	var i := ty * w + tx
+	if tx < 0 or ty < 0 or tx >= w or ty >= int(Ld["h"]) or i >= s.length():
+		return 0
+	return ("0x" + s[i]).hex_to_int()
+
+func fa_col(a: Dictionary) -> String:
+	var k: String = a["kind"]
+	if k == "deer":
+		if a["col"] == "hart":
+			return "hart" + str(fa_pts(a))
+		var w := "w" if Game.season() == 3 else ""
+		return w + "doe" if a["col"] == "doe" else w + "stag" + str(fa_pts(a))
+	if k == "duck":
+		var c0: String = a["c"]
+		if not (float(a["h"]) > 0.0) and a["st"] != "dead" and ter_at(a["loc"], floori(float(a["x"]) / CT), floori(float(a["y"]) / CT)) == 7:
+			return c0 + "_swim"
+		return c0
+	return a["c"]
+
+func fa_frame(a: Dictionary) -> int:
+	var k: String = a["kind"]
+	if a["st"] == "dead":
+		return FA_DEAD
+	var dt0: float = t - float(a.get("_t", t))
+	var mv := 0.0 if not a.has("_x") else Vector2(float(a["x"]) - float(a["_x"]), float(a["y"]) - float(a["_y"])).length()
+	if dt0 > 0.0 and dt0 < 0.5:
+		a["_v"] = float(a.get("_v", 0.0)) * 0.75 + (mv / dt0) * 0.25
+	elif dt0 >= 0.5:
+		a["_v"] = 0.0
+	a["_x"] = a["x"]
+	a["_y"] = a["y"]
+	a["_t"] = t
+	if not a.has("vs"):
+		a["vs"] = randf() * 20.0
+	var v: float = a.get("_v", 0.0)
+	var f: float = a["f"]
+	if k in FA_BIRD:
+		if float(a["fly"]) > 0.0 or float(a["h"]) > 0.0 or a["st"] == "fly":
+			return 6 + int(floorf(f / 3.0)) % 4
+		if a["moving"]:
+			return int(floorf(f / float(FA_STEP[k]))) % 4
+		return 5 if a["peck"] else 4
+	if a["st"] == "lie":
+		return FA_DEAD
+	if a["moving"] or v > 6.0:
+		var run: bool = v > float(FA_RUNV.get(k, 50.0)) or a["st"] == "flee" or a["st"] == "charge"
+		return (6 if run else 0) + int(floorf(f / (float(FA_STEP.get(k, 3.0)) * (1.7 if run else 1.0)))) % 4
+	if a["st"] in ["alert", "bay", "charge", "heel"]:
+		return 4
+	if k in FA_SIT:
+		return 5 if sin(t * 0.21 + float(a["vs"])) > -0.3 else 4
+	if k == "rat":
+		return 5 if sin(t * 1.3 + float(a["vs"])) > 0.6 else 4
+	return 5 if sin(t * 0.45 + float(a["vs"])) > -0.2 else 4
+
+## лист кадров зверя (fauna) или null — кони и прочие по-старому
+func fa_sheet(a: Dictionary) -> Variant:
+	return D["fauna"].get(String(a["kind"]) + "|" + fa_col(a)) if D.has("fauna") else null
+
+## рамка зверя по кадру 0 и замыслу масти (animalSprite(kind, 0, flip, col)): [ширина, высота]
+func fa_box(a: Dictionary) -> Vector2:
+	var b: Variant = D["faBox"].get(String(a["kind"]) + "|" + String(a["col"]), D["faBox"].get(String(a["kind"]) + "|")) if D.has("faBox") else null
+	if b == null:
+		var sh: Variant = fa_sheet(a)
+		return Art.size(sh[0]) if sh != null else Vector2(16, 12)
+	return Vector2(float(b[0]), float(b[1]))
 
 func _animal(a: Dictionary) -> void:
 	var nd := Node2D.new()
-	var big := Art.size(a["f"][0]).x > 20.0
-	var sh := Art.sprite(D["shadowBig"] if big else D["shadowSmall"])
-	sh.position = Vector2(-11.0 if big else -4.5, -2.0)
+	var sh := Art.sprite(D["shadowSmall"])
 	nd.add_child(sh)
-	var body := Art.sprite(a["f"][0])
+	var blood := Node2D.new()      # мёртвый зверь на земле — кровь вместо тени (faDraw)
+	blood.draw.connect(func() -> void:
+		blood.draw_rect(Rect2(-5, -1, 10, 2), Color8(90, 16, 16, 140))
+		blood.draw_rect(Rect2(-3, 1, 6, 1), Color8(90, 16, 16, 140)))
+	nd.add_child(blood)
+	var body := Art.sprite(D["shadowSmall"])
 	nd.add_child(body)
 	world.add_child(nd)
 	a["node"] = nd
 	a["body"] = body
+	a["shs"] = sh
+	a["blood"] = blood
 
 func _update_animal(a: Dictionary) -> void:
 	var nd: Node2D = a["node"]
 	var body: Sprite2D = a["body"]
-	var moving: bool = a["moving"] or a["fly"] > 0.0 or a["h"] > 0.0
-	var fr := 0
-	if moving:
-		fr = int(a["fc"] / (3.0 if a["kind"] == "pigeon" else 5.0)) % 2
-	elif a["peck"]:
-		fr = 1
-	var i: int = a["f"][fr]
+	var sh: Sprite2D = a["shs"]
+	var sheet: Variant = fa_sheet(a)
+	var i := 0
+	var dead_f := false
+	if sheet != null:
+		var fi := fa_frame(a)
+		i = sheet[fi]
+		dead_f = fi == FA_DEAD and a["st"] == "dead"
+	else:
+		var moving: bool = a["moving"] or float(a["fly"]) > 0.0 or float(a["h"]) > 0.0
+		var fr := 0
+		if moving:
+			fr = int(float(a["f"]) / (3.0 if a["kind"] == "pigeon" else 5.0)) % 2
+		elif a["peck"]:
+			fr = 1
+		i = a["fr"][fr]
 	Art.set_frame(body, i)
 	var sz := Art.size(i)
+	var big := sz.x > 20.0
 	body.flip_h = a["flip"]
 	nd.position = Vector2(roundf(a["x"]), roundf(a["y"]))
-	body.position = Vector2(-floorf(sz.x / 2.0), -sz.y - roundf(a["h"]))
+	body.position = Vector2(roundf(float(a["x"]) - sz.x / 2.0) - nd.position.x, roundf(float(a["y"]) - sz.y - float(a["h"])) - nd.position.y)
+	sh.visible = not dead_f
+	(a["blood"] as Node2D).visible = dead_f and float(a["h"]) == 0.0
+	if sh.visible:
+		Art.set_frame(sh, D["shadowBig"] if big else D["shadowSmall"])
+		sh.position = Vector2(roundf(float(a["x"]) - (11.0 if big else 4.5)) - nd.position.x, -2.0)
 
 func _sync_nodes() -> void:
 	for n in npcs:
@@ -447,22 +598,68 @@ func _sync_nodes() -> void:
 			if a["node"] == null:
 				_animal(a)
 			_update_animal(a)
+		elif a["node"] != null:       # гончие ушли в лес или вернулись, дичь расселили заново
+			(a["node"] as Node).queue_free()
+			a["node"] = null
+
+## узел рисунка среди людей (SPR_EXT): k — ключ, y — глубина (по ней — за людьми или перед ними), f(nd) — рисунок
+## в координатах мира; z = 1 — поверх всех (CRENDER2). Каждый кадр — заново
+func xnode(k: String, y: float, f: Callable, z := 0) -> void:
+	var nd: Node2D = xn.get(k)
+	if nd == null or not is_instance_valid(nd):
+		nd = Node2D.new()
+		nd.draw.connect(_xdraw.bind(nd))
+		world.add_child(nd)
+		xn[k] = nd
+	nd.position = Vector2(0, roundf(y))
+	nd.z_index = z
+	nd.set_meta("f", f)
+	nd.queue_redraw()
+
+func _xdraw(nd: Node2D) -> void:
+	nd.draw_set_transform(Vector2(0, -nd.position.y))
+	var f: Callable = nd.get_meta("f")
+	if f.is_valid():
+		f.call(nd)
+
+func xnode_drop(prefix: String) -> void:
+	for k in xn.keys():
+		if String(k).begins_with(prefix):
+			var nd: Node2D = xn[k]
+			if is_instance_valid(nd):
+				nd.queue_free()
+			xn.erase(k)
+
+## во двор — или снова на экране от стола карт (courtEnter, backToCourt): жизнь двора идёт сама — пауза снята;
+## вид двора заново (courtSyncVisual)
+func _enter_tree() -> void:
+	SimSick.court_vis = true       # экран двора виден (SCREEN === 'court'): придворные отзываются на болезни
+	if Game.speed == 0:
+		Game.set_speed(Game.last_speed if Game.last_speed > 0 else 1)
+	if acts != null:
+		acts.sync_visual()
+
+func _exit_tree() -> void:
+	SimSick.court_vis = false
 
 # ---------- ход времени ----------
 func blocked() -> bool:
-	return hud.is_open() or fade > 0.0
+	return hud.is_open() or fade > 0.0 or heal.on or float(king.get("downT", 0.0)) > t
 
 func _process(d: float) -> void:
 	_tick(minf(d, 0.05))
 
 func _tick(dt: float) -> void:
 	t += dt
+	if wrk.stale():
+		wrk.apply()           # заложили, свернули, достроили (proj_rev) — клетки; люди — pop_check
 	people.pop_check()
 	hud.tick()
-	var run: bool = not hud.is_open() and fade == 0.0
+	acts.update()             # вид двора по дням; король спит — часы бегут (drawSleep)
+	var run: bool = not hud.is_open() and fade == 0.0 and Game.speed > 0   # пауза — двор замирает (UI.paused в HTML)
 	if run:
 		var s0 := sea_key
-		Game.advance(dt * meet.time_k())
+		Game.advance(dt * minf(meet.time_k(), minf(trn.time_k(), heal.time_k())))
 		if L["out"] and season_key() != s0:
 			go_loc(loc_id)
 	var ha := Game.day * 24.0 + Game.hour_abs()
@@ -476,12 +673,24 @@ func _tick(dt: float) -> void:
 		meet.half_hour(hh / 2.0)
 	if run:
 		var k: float = NPC_SPDK[Game.speed]
-		for n in npcs:
+		for n in npcs.duplicate():      # дошедший гость может уйти со двора (drop_npc)
 			people.sched_tick(n)
 			people.update(n, dt * k)
 		_ani_update(dt)
 		_parts_update(dt)
-		_player_update(dt)
+		chp.update(dt)
+		fst.update(dt)
+		trn.update(dt)
+		heal.update(dt)
+		sck.update(dt)
+		hnt.update(dt)            # охота (UPD_EXT hunt → hunt2 → hurt → hunt3): дичь, гончие, спутники, стрелы, свой лук
+		if trn.kj != null or heal.on:
+			king["moving"] = false   # на ристалище и на носилках королём правит сцена (courtBlocked)
+		elif float(king.get("downT", 0.0)) > t:
+			king["moving"] = false   # сбит с ног на охоте (hurt.js): лежит, пока не встанет
+		else:
+			_player_update(dt * (0.45 if hnt.drawing() else 1.0))   # hunt3.js: с натянутым луком — шагом
+			hnt.face_aim()
 	else:
 		king["moving"] = false
 	if fade == 0.0:
@@ -497,6 +706,12 @@ func _tick(dt: float) -> void:
 			f.call()
 		fade = 0.0 if ph >= 2.0 else maxf(0.001, ph)
 	_sync_nodes()
+	trn.sync()
+	heal.sync()
+	hnt.sync()
+	for p in conds:
+		(p[0] as Sprite2D).visible = cond_ok(p[1])
+	wrk.update_sites()
 	for p in objs:
 		var s: Sprite2D = p[0]
 		var e: Dictionary = p[1]
@@ -550,7 +765,8 @@ func _light() -> void:
 	lm.canvas_transform = Transform2D(0.0, -org)
 	lm_amb.position = org
 	lm_amb.size = Vector2(vw, vh)
-	lm_amb.color = Color(minf(255.0, amb.x) / 255.0, minf(255.0, amb.y) / 255.0, minf(255.0, amb.z) / 255.0)
+	var flk := 1.8 if t - hnt.flash < 0.25 else 1.0    # вспышка: удар зверя, падение (COURT.flash)
+	lm_amb.color = Color(minf(255.0, amb.x * flk) / 255.0, minf(255.0, amb.y * flk) / 255.0, minf(255.0, amb.z * flk) / 255.0)
 	lm_view.position = org
 	var dark := clampf(1.0 - minf(amb.x, minf(amb.y, amb.z)) / 255.0, 0.0, 1.0)
 	var dk := Game.day_k()
@@ -653,7 +869,7 @@ func move_king(dx: float, dy: float, dt: float) -> void:
 		return
 	if dx != 0.0 or dy != 0.0:
 		var n := Vector2(dx, dy).length()
-		var sp := (34.0 if sneak else 80.0) * dt
+		var sp := (34.0 if sneak else 80.0) * Hurt.walk_k() * dt     # раненый и больной король ходит медленнее
 		var vx := dx / n * sp
 		var vy := dy / n * sp
 		var x0: float = P["x"]
@@ -686,6 +902,8 @@ func _room_check() -> void:
 
 func go_through(d: Dictionary) -> void:
 	if fade > 0.0:
+		return
+	if hnt.door(d):           # DOOR_EXT: ворота леса на охоте — «Уже домой, государь?»
 		return
 	path = []
 	fade_to(func() -> void:
@@ -765,7 +983,7 @@ func _line_free(x0: float, y0: float, x1: float, y1: float) -> bool:
 func _ani_update(dt: float) -> void:
 	var P := king
 	for a in ani:
-		if a["loc"] != loc_id:
+		if a["loc"] != loc_id or int(a["game"]) != 0:
 			continue
 		var pd := Vector2(float(P["x"]) - a["x"], float(P["y"]) - a["y"]).length()
 		var r: Array = a["r"]
@@ -775,11 +993,11 @@ func _ani_update(dt: float) -> void:
 				a["x"] += a["vx"] * dt
 				a["y"] += a["vy"] * dt
 				a["h"] = minf(34.0, a["h"] + 46.0 * dt)
-				a["fc"] += dt * 40.0
+				a["f"] += dt * 40.0
 				continue
 			if a["h"] > 0.0:
 				a["h"] = maxf(0.0, a["h"] - 24.0 * dt)
-				a["fc"] += dt * 40.0
+				a["f"] += dt * 40.0
 				a["x"] = clampf(a["x"], r[0] * CT, (r[2] + 1) * CT)
 				a["y"] = clampf(a["y"], r[1] * CT, (r[3] + 1) * CT)
 				if a["h"] > 0.0:
@@ -795,7 +1013,7 @@ func _ani_update(dt: float) -> void:
 				continue
 		if a["moving"]:
 			var dxy := Vector2(a["tx"] - a["x"], a["ty"] - a["y"])
-			var sp: float = ANISP[a["kind"]] * (2.3 if a["run"] else 1.0) * dt
+			var sp: float = float(D["anisp"].get(a["kind"], 20.0)) * (2.3 if a["run"] else 1.0) * dt
 			if dxy.length() <= sp:
 				a["x"] = a["tx"]
 				a["y"] = a["ty"]
@@ -807,7 +1025,7 @@ func _ani_update(dt: float) -> void:
 				a["y"] += dxy.y / dxy.length() * sp
 				if absf(dxy.x) > 0.5:
 					a["flip"] = dxy.x > 0.0
-				a["fc"] += sp
+				a["f"] += sp
 			continue
 		a["t"] -= dt
 		a["peck"] = (a["kind"] == "hen" or a["kind"] == "pigeon") and sin(t * 6.0 + a["x"] * 0.7) > 0.7
@@ -894,8 +1112,8 @@ func _parts_update(dt: float) -> void:
 	if parts.size() > 400:
 		parts = parts.slice(parts.size() - 400)
 
-func _draw_parts(layer_i: int) -> void:
-	var n: Node2D = fx0 if layer_i == 0 else fx1
+## n — тот слой, что рисуется (после смены локации старый слой ещё может дорисоваться до удаления)
+func _draw_parts(layer_i: int, n: Node2D) -> void:
 	for p in parts:
 		var a: float = 1.0 - p["t"] / p["life"]
 		var x := roundf(p["x"])
@@ -921,6 +1139,36 @@ func _draw_parts(layer_i: int) -> void:
 				n.draw_rect(Rect2(x, y, 1, 1), Color(0.94, 1.0, 0.63, b))
 			elif k == "mote":
 				n.draw_rect(Rect2(x, y, 1, 1), Color(1.0, 0.96, 0.82, 0.5 * minf(1.0, minf(p["t"], a * 2.0))))
+	if layer_i == 1:
+		chp.draw(n)
+		fst.draw(n)
+
+## убрать человека со двора (гость пира ушёл): из списка и с экрана
+func drop_npc(n: Dictionary) -> void:
+	npcs.erase(n)
+	if n.get("node") != null:
+		(n.node as Node).queue_free()
+		n.node = null
+
+## условие показа предмета (o.show в HTML): пир, постройка стола зодчего («!» — пока не построено)
+func cond_ok(w: String) -> bool:
+	if w.begins_with("!"):
+		return not cond_ok(w.substr(1))
+	if w == "feast":
+		return Feast.feast_on()
+	if w.begins_with("proj:"):
+		return Feast.ok() and SimDyn.projDone(w.substr(5))
+	if w.begins_with("cur:"):
+		return Feast.ok() and SimExt.projCur(w.substr(4)) != null
+	return acts.cond_ok(w)
+
+## подпись действия «E — …» (act.label в HTML: у высокого стола, алтаря, скамьи и книг — по дню и часу)
+func act_label(a: Dictionary) -> String:
+	if String(a.get("id", "")) == "hall_king":
+		return Feast.label()
+	if String(a.get("id", "")) == "lists":
+		return Tour.label()
+	return Chapel.label(a)
 
 # ---------- кто рядом: люди и действия (nearestTarget в HTML) ----------
 func nearest_target() -> Dictionary:
@@ -933,34 +1181,82 @@ func nearest_target() -> Dictionary:
 		if n["loc"] != loc_id or n["away"] or (n["lines"] as Array).is_empty():
 			continue
 		var d := Vector2(float(n["x"]) - fx, float(n["y"]) - 6.0 - fy).length()
-		if d < 24.0 and d < bd:
+		if d < float(n.get("talkR", 24.0)) and d < bd:
 			bd = d
 			best = {"n": n}
 	for a in L["acts"]:
-		if a["auto"]:
+		if a["auto"] or (a.has("when") and not cond_ok(String(a["when"]))):
 			continue
 		var d := Vector2(float(a["x"]) - float(P["x"]), float(a["y"]) - float(P["y"]) + 4.0).length()
 		if d < float(a["r"]) and d * 0.9 < bd:
 			bd = d * 0.9
 			best = {"a": a}
+	var e: Dictionary = trn.target()      # TARGET_EXT: на ристалище — удар копьём (d = −1: всегда он)
+	if not e.is_empty():
+		best = {"e": e}
+	var he: Dictionary = hnt.target()     # на охоте — зверь в прицеле ловчего (меньшее d — его)
+	if not he.is_empty() and float(he.d) < bd:
+		best = {"e": he}
 	return best
 
 func interact(tg: Dictionary) -> void:
-	if tg.has("n"):
+	if tg.has("e"):
+		(tg.e.go as Callable).call()
+	elif tg.has("n"):
 		talk_to(tg["n"])
 	elif tg.has("a"):
 		do_act(tg["a"])
 
-## разговор (talkTo): проситель — приём у трона, советник — его доклад и поручения, семья и воспитанники — свои
-## разговоры с выбором, остальные — своими словами
+## разговор (talkTo): хворый в постели — навестить (court_sick.gd); проситель — приём у трона, советник — его доклад
+## и поручения, семья и воспитанники — свои разговоры с выбором, остальные — своими словами
 func talk_to(n: Dictionary) -> void:
+	if sck.talk(n, talk_to0):
+		return
+	talk_to0(n)
+
+func talk_to0(n: Dictionary) -> void:
 	if king["sit"] != null and n.get("seat", "") == "" and not n.has("petition"):
 		stand_up()
 	if n.get("sit") == null and n.get("path") == null:
 		var v := Vector2(float(king["x"]) - n["x"], float(king["y"]) - n["y"])
 		n["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
+	# свои разговоры (n.talk в HTML): выпущенный узник, узник в камере, тюремщик, капеллан
+	if n.has("talk_line"):
+		hud.say(n, String(n.talk_line))
+		print("TALK ", n["name"])
+		return
+	if n.key == "srv_hunter" and SimPlayer.ensure_sim():
+		hnt.hunter_talk(n)    # n2talk: без охоты — псарня (huntAct), на охоте — дальше, разделиться, отбой
+		print("TALK ", n["name"])
+		return
+	if n.key == "srv_doc" and SimPlayer.ensure_sim():
+		sck.doc_talk(n)
+		print("TALK ", n["name"])
+		return
+	if (n.has("pris") or n.key == "srv_jailer" or n.key == "srv_chaplain") and SimPlayer.ensure_sim():
+		if n.has("pris"):
+			var ch: Variant = Sim.charOf(n.cid)
+			if ch != null:
+				chp.prisoner_talk(n, ch)
+		elif n.key == "srv_jailer":
+			chp.jailer_talk(n)
+		else:
+			chp.chaplain_talk(n)
+		print("TALK ", n["name"])
+		return
 	if n.has("petition"):
 		aud.talk(n)
+		print("TALK ", n["name"])
+		return
+	if JS.t(n.get("tguest")) and SimPlayer.ensure_sim():
+		trn.talk(n)
+		print("TALK ", n["name"])
+		return
+	if JS.t(n.get("guest")) and SimPlayer.ensure_sim():
+		fst.talk(n)
+		print("TALK ", n["name"])
+		return
+	if n.has("pjk") and SimPlayer.ensure_sim() and wrk.crew_talk(n):
 		print("TALK ", n["name"])
 		return
 	if String(n.get("seat", "")) != "" and SimPlayer.ensure_sim() and SimDyn.seatChar(n["seat"]) != null:
@@ -979,8 +1275,6 @@ func talk_to(n: Dictionary) -> void:
 	hud.say(n, line)
 	print("TALK ", n["name"])
 
-const KITCHEN := ["Из кухни тянет луком, дымом и свежим хлебом. Повариха гремит котлами.", "На кухне ощипывают кур. Кто-то напевает старую песню о походе на север.", "Поварята при виде короля роняют половник."]
-const WELL := ["Глубокий колодец. Ведро скрипит на вороте.", "Вода в колодце сладкая — замок выдержит долгую осаду."]
 func do_act(a: Dictionary) -> void:
 	match a["id"]:
 		"throne":
@@ -1003,37 +1297,35 @@ func do_act(a: Dictionary) -> void:
 		"treasury":
 			if SimPlayer.ensure_sim():
 				meet.treasury()
+		"pray":
+			chp.pray()
+		"kpew":
+			chp.kpew()
+		"read":
+			chp.read()
+		"hall_king":
+			if SimPlayer.ensure_sim():
+				fst.hall_king()
+		"works":
+			wrk.open()
+		"lists":
+			if SimPlayer.ensure_sim():
+				trn.lists()
+		"stars":
+			wrk.stars()
 		"barracks":
 			if SimPlayer.ensure_sim():
 				meet.barracks()
-		"bed":
-			var h := Game.hour_abs()
-			if h >= 18.5 or h < 6.0:
-				hud.toast("Король ложится спать…")
-				sleep_until(6.5 + (24.0 if h >= 6.0 else 0.0))
-			else:
-				sleep_until(h + 2.0)
-				hud.toast("Король отдыхает пару часов.")
-		"kitchen":
-			hud.say(null, KITCHEN[randi() % KITCHEN.size()])
-		"well":
-			hud.say(null, WELL[randi() % WELL.size()])
-		"smithy":
-			hud.say(null, "Кузнец бьёт молотом по раскалённой полосе. Наконечники копий, подковы, гвозди — кузня работает на войско.")
-		"fountain":
-			hud.say(null, "Вода в фонтане холодная и прозрачная. На дне блестят монеты — придворные бросают их на счастье.")
-		"dummy":
-			if t - practice_t > 1.2:
-				practice_t = t
-				king["dir"] = "up"
-				parts.append({"k": "puff", "x": float(a["x"]), "y": float(a["y"]) - 10.0, "vx": 0.0, "vy": -6.0, "t": 0.0, "life": 0.6})
-				hud.toast("Упражнение с мечом. Солдаты одобрительно гудят.")
 		"gate":
 			gate_act()
+		"kennel":
+			if SimPlayer.ensure_sim():
+				hnt.act()     # ACTS_EXT.kennel: выехать на охоту
 		"stable":
 			gate_act("Конюх выводит осёдланного гнедого. «Куда поедем, государь?» В стойлах фыркают кони свиты.")
 		_:
-			hud.toast(String(a["label"]) + " — пока только в полной игре (HTML).")
+			if not acts.act(a):
+				hud.toast(String(a["label"]) + " — пока только в полной игре (HTML).")
 
 ## ворота замка (gateAct): выехать со свитой, во главе войска у столицы — или остаться. Королевство (Sim.G), если карту
 ## ещё не открывали, начинается здесь.
@@ -1066,25 +1358,36 @@ func advance_hours(h: float) -> void:
 	people.snap(false)
 	last_ha = Game.day * 24.0 + Game.hour_abs()
 
-func sleep_until(ha: float) -> void:
-	fade_to(func() -> void:
-		if ha >= 29.0:
-			Game.day += 1
-			ha -= 24.0
-		Game.frac = clampf((ha - 5.0) / 24.0, 0.0, 0.9999)
-		people.snap(false)
-		last_ha = Game.day * 24.0 + Game.hour_abs())
+## через t секунд (setTimeout): таймер — в узле двора; двор закрыли — не сработает
+func later(sec: float, f: Callable) -> void:
+	var tm := Timer.new()
+	tm.one_shot = true
+	tm.wait_time = sec
+	tm.timeout.connect(func():
+		f.call()
+		tm.queue_free())
+	add_child(tm)
+	tm.start()
 
 # щелчок мышью: идти туда; по человеку или предмету — подойти и заговорить/сделать
 func click(sp: Vector2) -> void:
+	if hnt.click_hook(0):     # hunt3.js: натянутый лук — выстрел; щелчок сразу после выстрела — съесть
+		return
 	if blocked():
 		return
+	if trn.kj != null:        # PICK_EXT: на ристалище любой щелчок — удар копьём
+		trn.kj_press()
+		return
 	var w := cam_tl + sp / Z
+	var pe: Dictionary = hnt.pick(w.x, w.y)   # PICK_EXT: зверь под мышью на охоте
+	if not pe.is_empty():
+		(pe.go as Callable).call()
+		return
 	for n in npcs:
 		if n["loc"] != loc_id or n["away"] or (n["lines"] as Array).is_empty():
 			continue
 		if w.x > float(n["x"]) - 8.0 and w.x < float(n["x"]) + 8.0 and w.y > float(n["y"]) - 30.0 and w.y < float(n["y"]) + 2.0:
-			_walk_to(Vector2(n["x"], n["y"]), func() -> void: talk_to(n), 26.0)
+			_walk_to(Vector2(n["x"], n["y"]), func() -> void: talk_to(n), float(n.get("talkR", 24.0)) + 2.0)
 			return
 	for a in L["acts"]:
 		if not a["auto"] and Vector2(float(a["x"]) - w.x, float(a["y"]) - w.y).length() < maxf(14.0, float(a["r"]) * 0.7):
@@ -1117,10 +1420,11 @@ func _unhandled_input(e: InputEvent) -> void:
 		if e.pressed:
 			if b == MOUSE_BUTTON_LEFT:
 				down_at = {"at": mp, "ui": hud.capture(mp)}
+				hnt.press(not down_at.ui)     # input.down[0]: зажать над лесом — натянуть свой лук
 			elif b == MOUSE_BUTTON_RIGHT:
 				if hud.is_open():
 					hud.click({"x": mp.x, "y": mp.y, "ux": mp.x, "uy": mp.y, "b": 2, "drag": false})
-				else:
+				elif not hnt.click_hook(2):   # ПКМ при натяге — ослабить тетиву
 					path = []
 			elif b == MOUSE_BUTTON_WHEEL_UP or b == MOUSE_BUTTON_WHEEL_DOWN:
 				if hud.is_open():
@@ -1130,6 +1434,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		elif b == MOUSE_BUTTON_LEFT and down_at != null:
 			var d: Dictionary = down_at
 			down_at = null
+			hnt.up()
 			if d.ui or hud.is_open():
 				hud.click({"x": d.at.x, "y": d.at.y, "ux": mp.x, "uy": mp.y, "b": 0, "drag": (d.at as Vector2).distance_to(mp) > 3.0})
 			else:
@@ -1148,7 +1453,7 @@ func key(k: int) -> void:
 		if hud.win != null:
 			hud.win = null
 		elif hud.modals.is_empty():
-			leave.emit()
+			hud.open_menu()
 		return
 	if not hud.modals.is_empty():
 		return
@@ -1156,6 +1461,12 @@ func key(k: int) -> void:
 		hud.toggle_win("council" if k == KEY_K else "letters")
 		return
 	if hud.win != null:
+		return
+	if heal.on:               # CKEY_EXT (hurt.js): Пробел и Enter — дальше, прочие клавиши — мимо
+		if k == KEY_SPACE or k == KEY_ENTER:
+			heal.skip()
+		return
+	if hnt.key(k):            # CKEY_EXT (hunt2.js, hunt3.js): Q — оружие, G — ловчий
 		return
 	match k:
 		KEY_E, KEY_ENTER, KEY_KP_ENTER:
@@ -1199,12 +1510,14 @@ func cmd(p: PackedStringArray) -> void:
 			if n["away"]:
 				n["away"] = false
 			stand_up()
-			for o in [Vector2(0, 14), Vector2(14, 0), Vector2(-14, 0), Vector2(0, -14)]:
-				var q: Vector2 = Vector2(n["x"], n["y"]) + o
-				if can_stand(q.x, q.y):
-					king["x"] = q.x
-					king["y"] = q.y
-					break
+			var placed := false
+			for r in [14.0, 20.0, 26.0]:          # лежачий в постели — стать у постели (сама постель — твёрдая)
+				for o in [Vector2(0, r), Vector2(r, 0), Vector2(-r, 0), Vector2(0, -r)]:
+					var q: Vector2 = Vector2(n["x"], n["y"]) + o
+					if not placed and can_stand(q.x, q.y):
+						king["x"] = q.x
+						king["y"] = q.y
+						placed = true
 			var v := Vector2(n["x"], n["y"]) - Vector2(king["x"], king["y"])
 			king["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
 			snap_cam()
@@ -1224,11 +1537,35 @@ func cmd(p: PackedStringArray) -> void:
 			if tg.has("n"):
 				interact(tg)
 		"act":
-			var tg := nearest_target()
-			if tg.has("a"):
-				interact(tg)
+			# действие рядом (как E); act lists — действие места по имени, где бы ни стоял король
+			if p.size() > 1:
+				for a in L["acts"]:
+					if String(a["id"]) == p[1]:
+						do_act(a)
+						break
+			else:
+				var tg := nearest_target()
+				if tg.has("a"):
+					interact(tg)
 		"next":
 			hud.advance()
+		"proj":
+			# заложить работу (как кнопка «Заложить»): proj k; proj stop — свернуть; proj prog 0.5 — ход работ (доля)
+			if p.size() > 1 and SimPlayer.ensure_sim():
+				if p[1] == "stop":
+					SimExt.projStop()
+				elif p[1] == "prog" and p.size() > 2:
+					var cc: Variant = SimExt.projCur()
+					if cc != null:
+						cc.prog = float(p[2]) * float(cc.need)
+				else:
+					wrk.start(p[1])
+		"dlgall":
+			# весь текст разговора сразу (до выбора), ничего не выбирая — для проверок
+			if hud.dlg != null:
+				hud.dlg["page"] = (hud.dlg["pages"] as Array).size() - 1
+				hud.dlg["shown"] = 1e9
+				hud.dlg["full"] = true
 		"choose":
 			hud.choose(int(p[1]) - 1)
 		"gate":
@@ -1257,6 +1594,64 @@ func cmd(p: PackedStringArray) -> void:
 				hud.win.sc = 0
 		"key":
 			key(OS.find_keycode_from_string(p[1]))
+		"pos":
+			# король — в точку места (для проверок: к высокому столу и т. п.)
+			stand_up()
+			king["x"] = float(p[1])
+			king["y"] = float(p[2])
+			snap_cam()
+		"feast":
+			# сегодня пир (как поручение сенешаля «Устроить пир»): с 17:00 — в пиршественном зале
+			if SimPlayer.ensure_sim():
+				Sim.G.court.feastDay = float(Game.day)
+		"tour":
+			# сегодня турнир на ристалище (трибуны готовы, сенешаль созвал рыцарей): с 10:00 — во дворе
+			if SimPlayer.ensure_sim():
+				SimExt.projState().done["stands"] = {"day": Sim.G.day, "king": Sim.G.player.char}
+				SimExt.proj_rev += 1
+				SimCourt.tourSetup()
+				Sim.G.court.tour.day = float(Game.day)   # день двора (королевство могло ещё не досчитать день — после постели)
+		"kj":
+			# выход короля к барьеру: kj start — сразу; kj press — удар (как E); kj lock q — удар с меткостью q
+			if p.size() > 1:
+				if p[1] == "start":
+					trn.kj_start()
+				elif p[1] == "press":
+					trn.kj_press()
+				elif p[1] == "lock" and trn.kj != null:
+					trn.kj.lock = {"x": 0.0, "y": 0.0}
+					trn.kj.q = float(p[2]) if p.size() > 2 else 1.0
+		"wound":
+			# ранить короля (как падение на турнире): wound 2 — рана, носилки, постель
+			if SimPlayer.ensure_sim():
+				Hurt.wound_king(int(p[1]) if p.size() > 1 else 2, "плечо", "турнир")
+				if JS.n(SimPlayer.kingC().get("woundK")) >= 2:
+					heal.queue({"from": "tourney"})
+		"heal":
+			if p.size() > 1 and p[1] == "skip":
+				heal.skip()
+		"ill":
+			# занемочь (для проверок): ill k fever — король, ill adv fever — советник с постелью, ill <ключ двора> fever — придворный;
+			# ill nodeath — без смертей от болезней (ill nodeath 0 — снова как обычно); ill k none — король здоров
+			if p.size() > 1 and p[1] == "nodeath":
+				SimSick.no_death = p.size() < 3 or p[2] != "0"
+			elif p.size() > 1 and SimPlayer.ensure_sim():
+				var key := p[1]
+				if key == "adv":
+					for n in npcs:
+						var b := String(n.get("bed", ""))
+						if b.begins_with("bed_") and Sick.ADV_ROOMS.has(b.substr(4)) and People.real(n) != null:
+							key = String(n.key)
+							break
+				var ch: Variant = SimPlayer.kingC() if key == "k" else People.real(npc_by(key))
+				if ch != null:
+					var k2 := p[2] if p.size() > 2 else "fever"
+					ch.ill = null
+					if k2 == "none":
+						ch.erase("sickConv")   # ill k none — здоров и не слаб после болезни (случайная простуда не мешает проверкам)
+					else:
+						SimSick.sickStart(ch, k2, "")
+					print("ILL ", key, " ", k2, " bed=", JS.t(ch.ill.get("bed")) if JS.t(ch.get("ill")) else false)
 		"throne":
 			# сесть на трон — приём прошений
 			cmd(PackedStringArray(["spot", "throne_front"]))
@@ -1275,6 +1670,11 @@ func cmd(p: PackedStringArray) -> void:
 		"zoom":
 			Z = clampi(int(p[1]), 1, 2)
 			snap_cam()
+		"hunt":
+			# королевская охота (court_hunt.gd: cmd): hunt start deer [ключ спутника] — сразу в лес; kill, end, hart, near вид,
+			# shoot, split, draw / loose — свой лук, auto 0|1 — прицел, fall — сбит с ног
+			if p.size() > 1 and SimPlayer.ensure_sim():
+				hnt.cmd(p)
 		"state":
 			print("STATE ", JSON.stringify(state()))
 
@@ -1299,7 +1699,16 @@ func state() -> Dictionary:
 	var verd: Array = Sim.G.court.get("verdicts", []) if aud.ok() else []
 	return {"day": Game.day, "hour": snappedf(Game.hour(), 0.01), "loc": loc_id, "room": room, "king": [int(king["x"]), int(king["y"])], "dir": king["dir"], "sit": king["sit"] != null, "talk": hud.dlg_open(), "choosing": hud.dlg_choosing(), "here": here, "asleep": away, "npcs": npcs.size(), "walked": int(walked), "dark": snappedf(hud.dark, 0.01), "zoom": Z, "fade": fade > 0.0, "sea": sea_key,
 		"win": String(hud.win.k) if hud.win != null else "", "modals": hud.modals.size(), "meet": meet.meeting_open(),
-		"fam": cnt.fam, "seats": cnt.seats, "pris": cnt.pris, "pets": cnt.pets, "verd": verd.size(), "by": String(verd[0].by) if not verd.is_empty() else "", "snd": Snd.state()}
+		"fam": cnt.fam, "seats": cnt.seats, "pris": cnt.pris, "pets": cnt.pets, "verd": verd.size(), "by": String(verd[0].by) if not verd.is_empty() else "",
+		"mass": chp.on, "pews": npcs.filter(func(n): return n["loc"] == "chapel" and n["sit"] != null and n.get("override") is Dictionary).size(), "motes": chp.motes.size(),
+		"label": act_label(nearest_target().a) if nearest_target().has("a") else "", "snd": Snd.state(),
+		"feast": fst.on, "guests": npcs.filter(func(n): return JS.t(n.get("guest"))).size(), "minstrel": not npc_by("fs_min").is_empty(),
+		"at_table": npcs.filter(func(n): return n["loc"] == "hall" and n["sit"] != null).size(), "notes": fst.notes.size(),
+		"conds": conds.filter(func(p): return (p[0] as Sprite2D).visible).size(),
+		"proj": wrk.state(), "crew": npcs.filter(func(n): return n.has("pjk")).size(),
+		"dlg": String(hud.dlg.name) if hud.dlg != null else "", "ch": (hud.dlg.choices as Array).map(func(x): return String(x.get("t", ""))) if hud.dlg != null else [],
+		"tour": trn.state(), "heal": heal.state(), "acts": acts.state(), "sick": sck.state(), "hunt": hnt.state(), "hide": JS.t(king.get("hide")), "xn": xn.size(), "mus": Snd.resolve(),
+		"toast": hud.toast_s if hud.toast_t > t else ""}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается
 func selftest() -> bool:

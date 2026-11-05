@@ -1,9 +1,12 @@
 extends Node
-# Корень: заставка → двор ↔ карта королевства (Tab). Без экрана: -- --selftest (двор живёт сутки, королевство — восемь дней
-# с походами ИИ, проверки, выход с кодом). В веб-сборке — window.slovo('команда') для скриншот-тестов: court, title, map, help, time 21,
-# day 30 (вперёд; королевство догонит), days 3, speed 2, goto 0, talk, next, close, walk 1 0 0.5, state; на карте — cam x y z,
-# zoom 1, mode pol, sett Имя, army lord, hover x y, reveal, dump over, lum, state; battle — бой на экране: войско короны против
-# ближайшего врага (на поле — fight, speed 4, ov, sel C, order adv, win, flee, end, cam x y, state).
+# Корень: заставка → двор ↔ карта королевства (Tab). Новая игра и «Продолжить правление» — через экран загрузки по шагам (как
+# runSteps в HTML); сохранение — раз в 7 дней, из меню (Esc), при выходе в главное меню и при закрытии окна. Без экрана:
+# -- --selftest (двор живёт сутки, королевство — восемь дней с походами ИИ, сохранение и загрузка, проверки, выход с кодом).
+# В веб-сборке — window.slovo('команда') для скриншот-тестов: court, title, map, help, time 21, day 30 (вперёд; королевство
+# догонит), days 3, speed 2, goto 0, talk, next, close, walk 1 0 0.5, state; menu, menu save|load|exit, save, kstate; на заставке —
+# newgame [go [сложность [open]]], continue, snd; на карте — cam x y z, zoom 1, mode pol, sett Имя, army lord, hover x y, reveal,
+# dump over, lum, state; battle — бой на экране: войско короны против ближайшего врага (на поле — fight, speed 4, ov, sel C,
+# order adv, win, flee, end, cam x y, state).
 const Title = preload("res://scripts/title.gd")
 const Court = preload("res://scripts/court.gd")
 const MapView = preload("res://scripts/world/map_view.gd")
@@ -15,6 +18,7 @@ var mapv: Node             # экран карты (камера и режим �
 var gpu: MapGPU            # карта на GPU: готовится один раз при первом открытии
 var bview: Node            # экран боя, пока идёт бой
 var js_cb
+var js_hide
 
 func _ready() -> void:
 	if "--selftest" in OS.get_cmdline_user_args():
@@ -26,12 +30,59 @@ func _ready() -> void:
 	if "--snd" in OS.get_cmdline_user_args():       # только звук (быстро): -- --snd
 		_snd_only.call_deferred()
 		return
+	if "--save" in OS.get_cmdline_user_args():      # только сохранение и загрузка (быстро): -- --save
+		_save_only.call_deferred()
+		return
+	if "--chapel" in OS.get_cmdline_user_args():    # только часовня, книги и темница (быстро): -- --chapel
+		_chapel_only.call_deferred()
+		return
+	if "--feast" in OS.get_cmdline_user_args():     # только пир (быстро): -- --feast
+		_feast_only.call_deferred()
+		return
+	if "--works" in OS.get_cmdline_user_args():     # только стол зодчего (быстро): -- --works
+		_works_only.call_deferred()
+		return
+	if "--tour" in OS.get_cmdline_user_args():      # только турнир и раны (быстро): -- --tour
+		_tour_only.call_deferred()
+		return
+	if "--acts" in OS.get_cmdline_user_args():      # только простые дела двора и сон (быстро): -- --acts
+		_acts_only.call_deferred()
+		return
+	if "--sick" in OS.get_cmdline_user_args():      # только больные при дворе и лекарь (быстро): -- --sick
+		_sick_only.call_deferred()
+		return
+	if "--hunt" in OS.get_cmdline_user_args():      # только королевская охота (быстро): -- --hunt
+		_hunt_only.call_deferred()
+		return
 	_hooks()
 	show_title()
 	if OS.has_feature("web"):
 		js_cb = JavaScriptBridge.create_callback(_js_cmd)
 		JavaScriptBridge.get_interface("window").slovo = js_cb
+		# вкладку прячут или закрывают (beforeunload в HTML): сохранить, если можно сразу
+		js_hide = JavaScriptBridge.create_callback(func(_a): _save_on_leave())
+		JavaScriptBridge.get_interface("window").slovo_hide = js_hide
+		JavaScriptBridge.eval("document.addEventListener('visibilitychange', () => { if (document.hidden) window.slovo_hide(); }); window.addEventListener('pagehide', () => window.slovo_hide());")
+	else:
+		get_tree().set_auto_accept_quit(false)    # закрытие окна — сперва сохранить (_notification)
 	print("READY ", Game.VERSION, " · ", Engine.get_version_info().string)
+
+## король при дворе или на карте и игра не окончена — есть что сохранять при уходе
+func _in_game() -> bool:
+	return not Sim.G.is_empty() and not JS.t(Sim.G.get("over")) and cur != null and (cur == court or cur == mapv)
+
+func _save_on_leave() -> void:
+	if _in_game():
+		Game.save_game()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and not OS.has_feature("web"):
+		_quit()
+
+func _quit() -> void:
+	if _in_game():
+		await Game.save_safe()
+	get_tree().quit()
 
 ## окна текущего экрана (двор или карта): разговоры королевства — туда
 func cur_ui() -> Variant:
@@ -111,11 +162,34 @@ func _drop_court() -> void:
 		court.queue_free()
 		court = null
 
+func _drop_map() -> void:
+	if mapv:
+		if mapv.get_parent():
+			mapv.get_parent().remove_child(mapv)
+		mapv.queue_free()
+		mapv = null
+
+## заставка: двор и экран карты закрываются (королевство в памяти; «Продолжить правление» читает сохранение заново, как в HTML)
 func show_title() -> void:
 	var t: Node = Title.new()
-	t.start.connect(show_court)
+	t.act.connect(_title_act)
 	_set_cur(t)
 	_drop_court()
+	_drop_map()
+
+func _title_act(k: String, opt: Dictionary) -> void:
+	if k == "new":
+		new_game(opt)
+	elif k == "load":
+		load_game()
+
+## меню в игре: загрузить сохранение или выйти в главное меню (сохранено — меню сделало)
+func _menu_act(k: String) -> void:
+	if k == "load":
+		load_game()
+	elif k == "exit":
+		show_title()
+		print("TITLE")
 
 func show_court() -> void:
 	var c: Node = Court.new()
@@ -125,7 +199,90 @@ func show_court() -> void:
 	_set_cur(c)
 	_drop_court()
 	court = c
+	c.hud.menu_act.connect(_menu_act)
 	print("COURT")
+
+# ---------- новая игра и загрузка (startNew, startLoad, afterLoad) ----------
+## шаги на экране загрузки: подпись — и что делать (Callable → "" или почему нельзя); каждый — после кадра на экране
+func _run(texts: Array, fns: Array) -> bool:
+	var t: Node = cur if cur != null and cur.get_script() == Title else null
+	if t == null:
+		show_title()
+		t = cur
+	t.begin_load(texts)
+	for i in fns.size():
+		t.ld.i = i
+		await get_tree().process_frame
+		await get_tree().process_frame
+		# день или шаг движения королевства досчитываются — потом его можно заменить
+		while SimDay.busy or Game.stepping:
+			await get_tree().process_frame
+		var e: Variant = (fns[i] as Callable).call()
+		if e is String and e != "":
+			t.ld.err = e
+			print("LOAD FAIL ", e)
+			return false
+	return true
+
+## новая игра (startNew: newGame3 и buildCourt): opt — {diff, open}; король — у трона
+func new_game(opt: Dictionary) -> void:
+	var ok: bool = await _run(["Сотворение мира: горы, реки, озёра…", "Проводим границы держав…", "Возводим замок: зал, покои, двор…"],
+		[_new_kingdom.bind(opt), _prep_paths, _enter_court])
+	if ok:
+		print("NEW GAME ", int(opt.get("diff", 1)), " ", JS.t(opt.get("open")))
+
+func _new_kingdom(opt: Dictionary) -> String:
+	var w: WorldData = Sim.W if Sim.W != null and Sim.W.seed == Game.seed else WorldData.load_export("res://art")
+	if w == null:
+		return "нет данных мира (res://art/world.json)"
+	_drop_court()
+	_drop_map()
+	SimSave.reset_runtime()
+	Sim.G = {}
+	Game.set_clocks({})
+	Sim.start(w, Game.seed, {"diff": float(opt.get("diff", 1)), "tut": false, "mapOpen": JS.t(opt.get("open"))})
+	return ""
+
+func _prep_paths() -> String:
+	SimArmy.prep()
+	return ""
+
+func _enter_court() -> String:
+	show_court()
+	return ""
+
+## «Продолжить правление» и «Загрузить» (startLoad → afterLoad): королевство и часы из сохранения; король при дворе — двор у
+## трона, в поле — карта у войска
+func load_game() -> void:
+	var ok: bool = await _run(["Читаем летопись…", "Проводим границы держав…", "Возводим замок: зал, покои, двор…"], [_load_kingdom, _prep_paths, _after_load])
+	if ok:
+		print("LOADED ", int(Sim.G.day), " ", "court" if cur == court else "map")
+
+func _load_kingdom() -> String:
+	var o: Variant = SimSave.read(Game.save_path)
+	if not (o is Dictionary):
+		return "Нет сохранения" if not Game.has_save() else "Сохранение не читается."
+	if Sim.W == null or Sim.W.seed != Game.seed:
+		Sim.W = WorldData.load_export("res://art")
+		if Sim.W == null:
+			return "нет данных мира (res://art/world.json)"
+	var gd: Dictionary = o.get("gd") if o.get("gd") is Dictionary else {}
+	o.erase("gd")
+	var err := SimSave.load_data(o)
+	if err != "":
+		return err
+	_drop_court()
+	_drop_map()
+	Game.set_clocks(gd)
+	print("LOAD DIG ", SimSave.digest(SimSave.save_data(true)), " ", int(Sim.G.day))
+	return ""
+
+func _after_load() -> String:
+	if JS.t(Sim.G.get("atCourt")) or Sim.playerArmy() == null:
+		show_court()
+	else:
+		show_map()
+	return ""
 
 ## к столу карт (Tab во дворе): двор не закрывается, время при дворе стоит, пока открыта карта
 func show_map() -> void:
@@ -156,6 +313,7 @@ func show_map() -> void:
 	if first:
 		mapv.ui.battle.connect(show_battle)
 		mapv.ui.to_court.connect(_to_court)
+		mapv.ui.menu_act.connect(_menu_act)
 	print("MAP")
 
 ## король выезжает из замка (ворота или конюшня): войско короля — на карте, пауза «укажите путь»
@@ -174,6 +332,7 @@ func _to_court(spot: String) -> void:
 	mapv.ui.target = null
 	SimPlayer.modal = false
 	back_to_court()
+	court.hnt.abort()         # ENTER_EXT (hunt.js): въехал в замок — охоты больше нет
 	court.cmd(PackedStringArray(["spot", spot]))
 	print("TO COURT ", spot)
 
@@ -269,9 +428,43 @@ func _js_cmd(a: Array) -> void:
 		"battle":
 			if bview == null:
 				test_battle()
+		"menu":
+			var u: Variant = cur_ui()
+			if u == null:
+				return
+			if p.size() == 1:
+				u.open_menu()
+			elif p[1] == "save":
+				u._m_save()
+			elif p[1] == "load":
+				u._m_load()
+			elif p[1] == "exit":
+				u._m_exit()
+		"gold":
+			# казна (для проверок): gold 1000
+			if not Sim.G.is_empty() and p.size() > 1:
+				Sim.G.realms[0].gold = float(p[1])
+		"save":
+			_js_save()
+		"savestat":
+			# что сколько весит в сохранении (сжатое, КБ): самые тяжёлые части
+			if not Sim.G.is_empty():
+				var o := SimSave.save_data()
+				print("SAVESTAT ", snappedf(SimSave.pack(o).size() / 1024.0, 0.1), " ", JSON.stringify(SimSave.stat(o)))
+		"kstate":
+			var G := Sim.G
+			print("KSTATE ", JSON.stringify({"screen": "court" if cur == court and court != null else ("map" if cur == mapv and mapv != null else "other"),
+				"day": int(G.get("day", -1)), "gday": Game.day, "frac": snappedf(Game.frac, 0.0001), "speed": Game.speed, "steps": Game.steps,
+				"gold": snappedf(float(G.realms[0].gold), 0.01) if not G.is_empty() else 0.0, "atCourt": JS.t(G.get("atCourt")), "diff": G.get("diff", -1), "mapOpen": JS.t(G.get("mapOpen")),
+				"save": SimSave.head(Game.save_path), "saved": Game.saved_day, "save_ms": Game.save_ms, "save_kb": Game.save_kb}))
 		_:
 			if cur and cur.has_method("cmd"):
 				cur.cmd(p)
+
+## сохранить по команде (для проверок): записано — и отпечаток записанного
+func _js_save() -> void:
+	var ok := SimPlayer.ensure_sim() and await Game.save_safe()
+	print("SAVE DIG ", SimSave.file_digest(Game.save_path) if ok else "-", " ", int(Sim.G.get("day", -1)))
 
 func _selftest() -> void:
 	Game.sim_run = false      # дни королевства здесь считаются явно
@@ -289,8 +482,24 @@ func _selftest() -> void:
 	ok = bok and ok
 	var cok: bool = await _council_selftest()
 	ok = cok and ok
+	var hok: bool = await _chapel_selftest()
+	ok = hok and ok
+	var fok: bool = await _feast_selftest()
+	ok = fok and ok
+	var wok: bool = await _works_selftest()
+	ok = wok and ok
+	var tok: bool = await _tour_selftest()
+	ok = tok and ok
+	var aok: bool = await _acts_selftest()
+	ok = aok and ok
+	var iok: bool = await _sick_selftest()
+	ok = iok and ok
+	var uok: bool = await _hunt_selftest()
+	ok = uok and ok
 	var nok: bool = await _snd_selftest()
 	ok = nok and ok
+	var vok: bool = await _save_selftest()
+	ok = vok and ok
 	print("SELFTEST OK" if ok else "SELFTEST FAIL")
 	get_tree().quit(0 if ok else 1)
 
@@ -299,6 +508,140 @@ func _snd_only() -> void:
 	var ok := SimPlayer.ensure_sim() and await _snd_selftest()
 	print("SND OK" if ok else "SND FAIL")
 	get_tree().quit(0 if ok else 1)
+
+func _save_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _save_selftest()
+	print("SAVE OK" if ok else "SAVE FAIL")
+	get_tree().quit(0 if ok else 1)
+
+func _chapel_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _chapel_selftest()
+	print("CHAPEL OK" if ok else "CHAPEL FAIL")
+	get_tree().quit(0 if ok else 1)
+
+func _feast_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _feast_selftest()
+	print("FEAST OK" if ok else "FEAST FAIL")
+	get_tree().quit(0 if ok else 1)
+
+func _works_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _works_selftest()
+	print("WORKS OK" if ok else "WORKS FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+func _tour_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _tour_selftest()
+	print("TOUR OK" if ok else "TOUR FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+func _acts_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _acts_selftest()
+	print("ACTS OK" if ok else "ACTS FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+func _sick_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _sick_selftest()
+	print("SICK OK" if ok else "SICK FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+func _hunt_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _hunt_selftest()
+	print("HUNT OK" if ok else "HUNT FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+## королевская охота (court_hunt.gd): лес без охоты, псарня, свита и гончие, свой лук и прицел ловчего, сулицы, кровь
+## и стрелы в туше, добыча, ловчий уходит с гончими, сбит с ног, отбой и итоги
+func _hunt_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = await c.hnt.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## больные при дворе (court_sick.gd): лекарь, больной в постели, у постели, лечение, обход, завеса, разговор с лекарем,
+## король занемог, постель и дни болезни, выздоровевший встаёт
+func _sick_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.sck.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## простые дела двора (court_acts.gd): кучки золота и мешки по казне и амбару, колыбель, постель и сон (часы бегут,
+## весть будит), чучело и Меч короля, фонтан, лавка купца, амбар, кухня, колодец, кузня
+func _acts_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.acts.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## турнир на ристалище и раны короля (court_tour.gd, court_hurt.gd): трибуны, зрители и герольд, поединки, выход короля
+## к барьеру, награда, конец турнира; носилки, постель и дни лечения
+func _tour_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.trn.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## стол зодчего (court_works.gd): окно, заложить и свернуть, клетки под стройкой, мастера и пиво, леса по ходу работ,
+## готовый розарий, звездочётная и труба
+func _works_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.wrk.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## пир в пиршественном зале (court_feast.gd): гости и места, король во главе стола, три дела, гость и менестрель, конец пира
+func _feast_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.fst.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
+
+## часовня, книги и темница (court_chapel.gd): молитва, чтение, воскресная обедня, узники и тюремщик
+func _chapel_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.chp.selftest()
+	print("selftest: часовня, книги и темница — ", "OK" if ok else "FAIL")
+	remove_child(c)
+	c.queue_free()
+	return ok
 
 func _council_only() -> void:
 	Game.sim_run = false
@@ -317,6 +660,75 @@ func _council_selftest() -> bool:
 	ok = ok and pok
 	remove_child(c)
 	c.queue_free()
+	return ok
+
+## сохранение и загрузка без экрана (saveGame / loadGame): записать королевство и часы; загрузить — то же королевство до знака
+## (отпечаток как у записанного), те же часы; день после загрузки идёт одинаково, сколько раз ни загружай (счёт вне G сброшен);
+## двор после загрузки — из загруженного королевства; король в поле — после загрузки снова в поле
+func _save_selftest() -> bool:
+	if Sim.G.is_empty() and not SimPlayer.ensure_sim():
+		return false
+	Game.save_path = "user://selftest.sav"
+	Game.day = int(Sim.G.day)
+	Game.frac = 0.4375
+	Game.speed = 2
+	Game.steps = 10
+	Game.step_at = Sim.G.day + 10.0 / Game.STEPS
+	var c0 := Game.clocks()
+	var day0 := int(Sim.G.day)
+	# товара на рынке почти нет (в записи — 0) и нет вовсе (в запись не попадёт, после загрузки initEcon добавит 0) — как в HTML
+	for S: Dictionary in Sim.G.setts:
+		if S.get("mk") is Dictionary and (S.mk as Dictionary).size() > 2:
+			S.mk[S.mk.keys()[0]] = 0.02
+			S.mk[S.mk.keys()[1]] = 0.0
+			break
+	var sv := Game.save_game()
+	var ms_save := Game.save_ms
+	var kb := Game.save_kb
+	var fdig := SimSave.file_digest(Game.save_path)
+	var digs: Array = []
+	var days: Array = []
+	var ms_load := 0
+	for k in 2:
+		Game.set_clocks({})
+		if k == 1:
+			# вторая загрузка — как «Продолжить правление» сразу после запуска: таблиц игры и цен клеток ещё нет
+			Sim.T = {}
+			SimArmy.cls_w = null
+		var t0 := Time.get_ticks_msec()
+		var e := _load_kingdom()
+		if k == 1:
+			SimArmy.prep()
+		ms_load = Time.get_ticks_msec() - t0
+		digs.append(SimSave.digest(SimSave.save_data(true)) if e == "" else "error: " + e)
+		SimDay.budget_us = 0
+		for i in Game.STEPS:
+			await SimArmy.substep(1.0 / Game.STEPS)
+		await SimDay.dailyTick(0)
+		days.append(SimSave.digest(SimSave.save_data()))
+	_load_kingdom()
+	var cok: bool = Game.clocks() == c0
+	# двор из загруженного королевства
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var st: Dictionary = c.state()
+	var court_ok: bool = st.npcs >= 30 and st.seats >= 3
+	remove_child(c)
+	c.queue_free()
+	# король в поле: выезд, сохранение, загрузка — снова в поле, с тем же войском
+	var pa: Dictionary = SimPlayer.leaveCourt(SimPlayer.capitalArmy())
+	var men := Sim.armyMen(pa)
+	var sv2 := Game.save_game()
+	_load_kingdom()
+	var pb: Variant = Sim.playerArmy()
+	var fok: bool = sv2 and pb != null and String(pb.kind) == "player" and not JS.t(Sim.G.get("atCourt")) and absf(Sim.armyMen(pb) - men) < 0.01
+	SimPlayer.enterCourt()
+	SimSave.remove(Game.save_path)
+	Game.save_path = Game.SAVE
+	var ok: bool = sv and fdig != "" and digs[0] == fdig and digs[1] == fdig and days[0] == days[1] and cok and court_ok and fok and kb > 50
+	print("selftest: сохранение дня %d — %.0f мс, %d КБ; загрузка %d мс, отпечаток %s (записано %s), день после загрузки %s/%s, часы %s, двор %d чел. (%d в совете), в поле %s — %s" % [day0,
+		ms_save, kb, ms_load, str(digs), fdig, str(days[0]), str(days[1]), str(cok), st.npcs, st.seats, str(fok), "OK" if ok else "FAIL"])
 	return ok
 
 ## звук без экрана (Snd): записи на месте (пьесы — OGG своей длины, звуки, шумы ровно по 2 с), музыка по месту, часу и экрану
@@ -347,14 +759,32 @@ func _snd_selftest() -> bool:
 	# пьеса двора начинается (через 0,05 с), голоса и шумы двора днём, звуки из очереди симуляции и окон
 	c.cmd(PackedStringArray(["spot", "throne_front"]))
 	Game.set_hour(12.0)
+	# пьеса прошлой проверки (охота кончилась во дворе — там та же «war») могла уже играть: тогда новая не начнётся — начать с тишины
+	var was := "%s «%s»%s" % [Snd.family(), Snd.mood(), " ждёт" if Snd.cur.has("at") else ""] if not Snd.cur.is_empty() else "тишина"
+	if not Snd.cur.is_empty():
+		Snd._fade(Snd.cur)
+		Snd.cur = {}
+	var dlg0: bool = c.hud.dlg != null          # открытое окно — реплика встала бы в очередь без шелеста бумаги: закрыть
+	var kq := 0
+	while c.hud.dlg != null and kq < 8:
+		c.hud.close_dlg()
+		kq += 1
 	Snd.music("auto")
 	var n0 := Snd.n_pieces
 	var s0 := Snd.n_sfx
+	Snd.last_play.clear()      # шелест итога охоты (прошлая проверка) мог быть < 60 мс назад — тот же звук так часто не повторяется
 	Sim.sfx("coin")
 	c.hud.say(null, "Проверка звука.")
 	await get_tree().create_timer(0.9).timeout
 	var st := Snd.state()
-	var mok: bool = Snd.n_pieces > n0 and Snd.fam_list(Snd.family()).has(Snd.mood()) and Snd.n_sfx >= s0 + 2 and "coin" in st.last and "paper" in st.last
+	var mf := func(s: Dictionary) -> bool: return Snd.n_pieces > n0 and Snd.fam_list(Snd.family()).has(Snd.mood()) and Snd.n_sfx >= s0 + 2 and "coin" in s.last and "paper" in s.last
+	var tw := 0
+	while not mf.call(st) and tw < 30:           # на медленной машине (CI) пьеса может начаться позже — ждать до 3 с
+		await get_tree().create_timer(0.1).timeout
+		st = Snd.state()
+		tw += 1
+	var mok: bool = mf.call(st)
+	var mdiag := "было %s, окно %s, пьес +%d, звуков +%d, ждали %.1f с" % [was, str(dlg0), Snd.n_pieces - n0, Snd.n_sfx - s0, 0.9 + tw * 0.1]
 	var pl0 := "%s «%s»" % [Snd.family(), Snd.mood()]
 	c.hud.close_dlg()
 	c.go_loc("yard")
@@ -383,8 +813,8 @@ func _snd_selftest() -> bool:
 	Game.set_hour(h0)
 	await get_tree().create_timer(0.3).timeout     # звук отпускает записи
 	var all := ok and rok and mok and bok and fok and sok
-	print("selftest: звук — пьес %d (%s), звуков %d, голосов %d, шумов %d; музыка: %s, карта %s, бой %s/%s; играет %s, звуки %s, шумы во дворе %s, земля «%s» — %s" % [I.music.size(),
-		String(I.enc), I.sfx.size(), I.amb.size(), I.bed.size(), str(R), rm, rb, rs, pl0, str(st.last), str(beds0), sf,
+	print("selftest: звук — пьес %d (%s), звуков %d, голосов %d, шумов %d; музыка: %s, карта %s, бой %s/%s; играет %s (%s), звуки %s, шумы во дворе %s, земля «%s» — %s" % [I.music.size(),
+		String(I.enc), I.sfx.size(), I.amb.size(), I.bed.size(), str(R), rm, rb, rs, pl0, mdiag, str(st.last), str(beds0), sf,
 		"OK" if all else "FAIL (%s)" % str([ok, rok, mok, bok, fok, sok])])
 	return all
 

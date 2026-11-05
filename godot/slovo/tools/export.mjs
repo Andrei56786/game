@@ -26,9 +26,30 @@ function pageExport() {
   const r1 = v => Math.round(v * 1000) / 1000;
   const day0 = G.day, frac0 = G.frac;
   // сезоны: вид наружного места по дню года (seaVarOf: оттепель, цветение, лето, три осени, снег) — как в HTML
+  // 0.9: предмет по условию (o.show) — пир ('feast': блюда на столах), постройка стола зодчего ('proj:k', '!proj:k': гобелены,
+  // витражи…) — выгружается всегда, показывает его двор; прочие условия — как на миг выгрузки
+  // стройка идёт ('cur:k': ящики, вывеска, мольберт, леса) — какая, узнаём пробой: на миг «закладываем» каждую из PROJ
+  const curOf = o => { const C = G.court; if (!C || (C.proj && C.proj.cur)) return null; const had = !!C.proj; if (!had) C.proj = { done: {}, cur: null };
+    let k = null; try { for (const d of PROJ) { C.proj.cur = { k: d.k, prog: 0, need: d.days, day: G.day }; let v = false; try { v = !!o.show(); } catch (e) { } if (v) { k = d.k; break; } } }
+    finally { C.proj.cur = null; if (!had) delete C.proj; } return k; };
+  const whenOf = o => { if (!o.show) return ''; if (o.show.pj) return 'proj:' + o.show.pj; const s = String(o.show).replace(/\s+/g, ''); let m;
+    if (s === '()=>feastOn()') return 'feast'; if ((m = s.match(/^\(\)=>(!?)projDone\(['"](\w+)['"]\)$/))) return m[1] + 'proj:' + m[2];
+    // вид двора (courtSyncVisual): колыбель и игрушки — есть ли в семье младенец и дети; кучки золота в казне и мешки в амбаре —
+    // по казне и зерну: порог (show — «больше i») узнаём пробой
+    if (s === '()=>COURT.hasBaby') return 'baby'; if (s === '()=>COURT.hasKids') return 'kids';
+    for (const [key, w, max] of [['goldPiles', 'gold', 10], ['sacks', 'sack', 6]]) if (s.includes('COURT.' + key)) { const v0 = COURT[key]; let t = null;
+      try { for (let k = 0; k <= max && t === null; k++) { COURT[key] = k; if (o.show()) t = k - 1; } } finally { COURT[key] = v0; } if (t !== null && t >= 0) return w + ':' + t; }
+    if (!o.show()) { const k = curOf(o); if (k) return 'cur:' + k; } return null; };
+  // леса стройки (siteTwin, OBJP.site): двор режет готовый предмет по ходу работ и рисует леса сам — нужен готовый предмет
+  // (отдельной картинкой site_N.png: её точки читает двор) и шум кромки по столбцам (floor(hsh(x >> 2, 1, 5) * 3))
+  const siteF = new Map();
   const objOut = (o, deco) => {
-    if (o.show && !o.show()) return null;
+    const w = whenOf(o);
+    if (w === null && !o.show()) return null;
     const e = { f: [], x: o.x, y: o.y, sy: o.sy !== undefined ? o.sy : o.y + (o.h || 0) };
+    if (w) e.when = w;
+    if (o.k === 'site') { const b = objSprite(o.o.bk, o.o.bo, 0); let fn = siteF.get(b); if (!fn) { fn = 'site_' + siteF.size + '.png'; siteF.set(b, fn); files[fn] = png(b); } e.f.push(add(b));
+      e.site = { png: fn, en: Array.from({ length: b.width }, (_, x) => Math.floor(hsh(x >> 2, 1, 5) * 3)).join('') }; return e; }
     if (o.fr) { e.gate = 1; for (let f = 0; f < 2; f++) e.f.push(add(objSprite(o.k, o.o, f))); }
     else for (let f = 0; f < Math.max(1, o.anim || 0); f++) e.f.push(add(objSprite(o.k, o.o, f)));
     if (o.anim > 1) { e.fps = o.fps || 6; e.ph = r1(o.x * (deco ? 0.13 : 0.11)); }
@@ -71,8 +92,11 @@ function pageExport() {
     const fo = L.objs.find(q => q.k === 'bld' && q.o && q.o.kind === 'forge'); if (fo) o.forge = [fo.x + 26, fo.sy - 12];
     o.doors = L.doors.map(d => ({ x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, to: d.to, ax: d.ax, ay: d.ay, dir: d.dir, label: d.label || '' }));
     o.spots = {}; for (const k in L.spots) { const s = L.spots[k], q = { x: s.x, y: s.y, dir: s.dir }; for (const f of ['sit', 'lie', 'away', 'sx', 'sy']) if (s[f] !== undefined && s[f] !== null && typeof s[f] !== 'object' && typeof s[f] !== 'function') q[f] = s[f]; o.spots[k] = q; }
-    o.acts = L.acts.filter(a => !a.show || a.show()).map(a => ({ id: a.id, x: a.x, y: a.y, r: a.r, label: a.label || '', auto: a.auto ? 1 : 0 }));
+    o.acts = L.acts.map(a => { const w = whenOf(a); if (w === null && !a.show()) return null; const q = { id: a.id, x: a.x, y: a.y, r: a.r, label: a.label || '', auto: a.auto ? 1 : 0 };
+      if (w) q.when = w; return q; }).filter(Boolean);
     o.rooms = L.rooms;
+    if (L.clearings) o.clearings = L.clearings;   // поляны леса (huntFauna): [cx, cy, rx, ry]; имена — в rooms
+    if (L.seats) o.seats = L.seats;     // места за столами пиршественного зала (feastSeats), в порядке HTML
     res.locs[id] = o;
   }
   // люди: лист 4 стороны × 4 шага (16×32), портрет 48×48, расписание, реплики
@@ -95,12 +119,35 @@ function pageExport() {
   const stock = (i0, role, fem, age) => [0, 1, 2, 3].map(v => { const c = pseudoChar(i0 + v, role, fem, age(v), ''); return [sheet(c), port(c)]; });
   res.cstock = {}; [['c', 'child', 7], ['a', 'courtier', 30], ['o', 'courtier', 57], ['v', 'courtier', 70]].forEach(([k, role, age], j) => [0, 1].forEach(fem => { res.cstock[k + fem] = stock(100 + j * 8 + fem * 4, role, fem, () => age); }));
   res.pstock = {}; Object.keys(PET_ROLE_N).forEach((role, j) => [0, 1].forEach(fem => { res.pstock[role + fem] = stock(140 + j * 8 + fem * 4, role, fem, v => 24 + v * 9); }));
-  // животные двора
-  const AK = { horse: 1, dog: 1, cat: 1, hen: 1, pigeon: 1 };
-  res.animals = COURT.ani.filter(a => AK[a.kind]).map(a => ({ kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), f: [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))] }));
+  // 0.9: менестрель пира, рыцари и герольд турнира (pseudoChar 861, 840–850, 860)
+  [['minstrel', 31], ['knight', 30], ['steward', 44]].forEach(([role, age], j) => { res.pstock[role + '0'] = stock(180 + j * 4, role, 0, () => age); });
+  // 0.9: лекари двора (docChar: pseudoChar(600 + номер лекаря, 'doc_' + вид), обычай — DOCK.cul): облик по id % 4 — первые четыре лекаря как в HTML
+  Object.keys(DOCK).forEach(kd => { const K = DOCK[kd], age = { barber: 36, monk: 52, salerno: 44, cordoba: 48 }[kd];
+    [...new Set(K.names.map(x => x[1]))].forEach(fem => { res.pstock['doc_' + kd + fem] = [0, 1, 2, 3].map(v => { const c = pseudoChar(600 + (v || 4), 'doc_' + kd, fem, age, ''); if (K.cul) c.cul = K.cul; return [sheet(c), port(c)]; }); }); });
+  // 0.9: стол зодчего — мастера стройки (projNpcs: pseudoChar(70 + i + 2·номер работы)), что они делают (PJPH), их слова
+  res.proj = PROJ.map(d => d.k); res.pjph = PJPH; res.pjlines = STAFF_LINES.builder.slice(); res.pcrew = {};
+  PROJ.forEach((d, j) => (d.crew || []).forEach((w, i) => { const c = pseudoChar(70 + i + j * 2, w[0], w[1], w[2], w[3]); res.pcrew['pjw_' + d.k + i] = [sheet(c), port(c)]; }));
+  // животные двора (fauna.js, fauna2.js: кадры 0–3 — шаг, 4 — стоит, 5 — пасётся, сидит, клюёт, 6–9 — бег или полёт, 10 — лежит;
+  // масть — faCol в порядке COURT.ani; кони — по-старому, два кадра). Дичь леса Godot расселяет сам (huntFauna) — здесь только её листы
+  res.fauna = {}; res.faBox = {};
+  // кадра, которого у зверя нет (лежащий пёс, кот…), HTML не рисует — вместо него стоящий (4)
+  const faAdd = (k, c) => { const key = k + '|' + (c || ''); if (!res.fauna[key]) { const fs = Array.from({ length: FA_N }, (_, f) => { try { return add(animalSprite(k, f, false, c || null)); } catch (e) { return null; } });
+    res.fauna[key] = fs.map(v => v === null ? fs[4] : v); } return key; };
+  res.animals = COURT.ani.filter(a => !(a.loc === 'forest' && a.game === 1)).map(a => { const o = { kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), col: a.col || null };
+    if (FAUNA[a.kind]) { o.c = faCol(a) || null; faAdd(a.kind, o.c); } else o.f = [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))];
+    return o; });
+  for (const p of [6, 8, 10, 12, 14, 16]) { faAdd('deer', 'stag' + p); faAdd('deer', 'wstag' + p); }
+  for (const c of ['doe', 'wdoe', 'hart12', 'hart14', 'hart16']) faAdd('deer', c);
+  for (const k of ['boar', 'bear', 'wolf', 'fox', 'hare', 'pheasant', 'falcon']) faAdd(k, null);
+  faAdd('hare', 'snow'); for (const c of ['drake', 'hen', 'drake_swim', 'hen_swim']) faAdd('duck', c);
+  // рамка зверя (aBox, PICK_EXT): по кадру 0 и a.col, как в HTML
+  for (const [k, c] of [['deer'], ['deer', 'doe'], ['deer', 'hart'], ['boar'], ['bear'], ['wolf'], ['fox'], ['hare'], ['hare', 'snow'], ['pheasant'], ['duck'], ['falcon']]) { const s = animalSprite(k, 0, false, c || null); res.faBox[k + '|' + (c || '')] = [s.width, s.height]; }
   res.anisp = ANISP;
   res.shadow = add(shadowSpr(12));
-  res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9));
+  res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9)); res.shadowMid = add(shadowSpr(14));   // лежащий король (hurt.js)
+  // 0.9: турнир (feast.js: drawRider) — гнедой конь под попоной (кадры шага, морда влево; вправо — зеркально), цвета попон и щитов
+  res.tourHorse = [add(animalSprite('horse', 0, false, 'dwood')), add(animalSprite('horse', 1, false, 'dwood'))];
+  res.ramp = RAMP;
   // значки верхней строки
   const WIC = ['i_star', 'i_sun', 'i_moon', 'i_cloud', 'i_fog', 'i_rain', 'i_snow', 'i_storm', 'i_wind'];
   res.icons = {}; for (const k of ['shield0', 'i_gold', 'i_men', 'i_food', ...WIC, 'i_seal', 'i_scroll', 'i_book', 'i_pause', 'i_play1', 'i_play2', 'i_play3', 'i_crown', 'i_eye', ...Object.keys(ICONS).map(k => 'i_' + k)]) if (SPR[k]) res.icons[k] = [add(SPR[k]), typeof hiIc === 'function' && hiIc(k) ? 1 : 0];

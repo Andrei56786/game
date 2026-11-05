@@ -347,8 +347,7 @@ func key(k: int) -> void:
 			else:
 				set_mode("ter" if mode == "pol" else "pol")
 		KEY_ESCAPE:
-			if pa == null:
-				leave.emit()
+			ui.open_menu()
 		KEY_Q, KEY_MINUS, KEY_KP_SUBTRACT:
 			zoom_at(-1, Vector2(SW / 2.0, SH / 2.0))
 		KEY_E, KEY_EQUAL, KEY_KP_ADD:

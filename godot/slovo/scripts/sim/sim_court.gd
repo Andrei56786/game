@@ -7,8 +7,6 @@ class_name SimCourt
 static var say_hook: Callable
 ## места совета сменились — двор пересаживает людей (courtPopulate)
 static var seats_rev := 0
-## турнир на ристалище замка (feast.js: tourSetup) — его ставит двор
-static var tour_hook: Callable
 
 static func ORD() -> Dictionary:
 	return Sim.T.ORD
@@ -851,8 +849,8 @@ static func ordDone(_sk: String, o: Dictionary, c: Dictionary, e: float) -> Stri
 				a.morale = minf(100.0, a.morale + 5)
 			var r := "Турнир удался (" + effWord(e) + ")! Знать рукоплещет, о короле говорят повсюду."
 			# feast.js: с трибунами у ристалища — поединки в замке (tourSetup), иначе — в поле у стен
-			if SimDyn.projDone("stands") and not JS.t(G.get("visit")) and tour_hook.is_valid():
-				tour_hook.call()
+			if SimDyn.projDone("stands") and not JS.t(G.get("visit")):
+				tourSetup()
 				return r + " Сегодня с 10:00 — поединки на ристалище!"
 			return r + " Бились в поле у стен замка: чтобы смотреть поединки с трибун и выйти на ристалище самому, постройте трибуны (стол зодчего)."
 		"alms":
@@ -1510,3 +1508,38 @@ static func secretsDaily() -> void:
 				SimPlayer.houseLoy(H0, -8)
 				H0.defiant = G.day + 40
 				Sim.glog("Дом " + String(H0.name) + " перестал платить подати короне.", "bad")
+
+
+# ---------- турнир на ристалище замка (feast.js: tourEntrants, tourSetup) ----------
+## G.court.tour = {day, ent: [{id, n, mar, h, ps, col}], res: [{a, b, sa, sb, un, w}], champ, prize, king, done} — турнир дня;
+## поединки, награда и выход короля — при дворе (court_tour.gd)
+const TOUR_FOREIGN := ["Сэр Годфри Заморский", "Чёрный рыцарь", "Сэр Бран из Холмов", "Сэр Ульрих Странник", "Рыцарь Белой Розы", "Сэр Лионель Южный", "Сэр Мордред Хромой", "Рыцарь Зелёного Щита"]
+
+## восемь участников: шестеро лучших рыцарей и лордов королевства (кроме семьи короля), остальные — заезжие рыцари
+static func tourEntrants() -> Array:
+	var G := Sim.G
+	var R: JS.Rng = Sim.R
+	var k: Dictionary = SimPlayer.kingC()
+	var fam := {}
+	for c in SimDyn.royalFamily():
+		fam[c.id] = true
+	fam[k.id] = true
+	var E0: Array = G.chars.filter(func(c): return _tourCan(c, fam))
+	E0 = JS.sort(E0, func(a, b): return b.mar - a.mar).slice(0, 6)
+	var E: Array = []
+	for c in E0:
+		E.append({"id": c.id, "n": Sim.charName(c), "mar": c.mar, "h": c.house if JS.n(c.get("house", -1)) >= 0 else -1.0})
+	var F: Array = R.shuffle(TOUR_FOREIGN.duplicate())
+	var i := 0
+	while E.size() < 8:
+		E.append({"id": -1.0 - i, "n": F[i], "mar": R.i(8, 16), "h": -1.0, "ps": 840.0 + i, "col": float(i)})
+		i += 1
+	return R.shuffle(E)
+
+static func _tourCan(c: Dictionary, fam: Dictionary) -> bool:
+	return (JS.t(c.alive) and c.realm == 0.0 and c.prison < 0 and not JS.t(c.get("pseudo")) and not JS.t(c.get("fem"))
+		and ["knight", "lord", "general"].has(c.role) and c.age >= 17 and c.age <= 52 and not JS.t(c.get("withKing"))
+		and not JS.t(c.get("away")) and SimPlayer.armyOfGen(c.id) == null and not fam.has(c.id))
+
+static func tourSetup() -> void:
+	Sim.G.court.tour = {"day": Sim.G.day, "ent": tourEntrants(), "res": [], "champ": -1.0, "prize": 0.0, "king": null, "done": 0.0}

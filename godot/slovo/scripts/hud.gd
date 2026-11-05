@@ -90,9 +90,10 @@ func _hi(k: String, use: String, X: float, Y: float, a: float = 1.0) -> bool:
 	return true
 
 # ---------- разговор (dialog.js: DLG.say) ----------
-## o — {choices: [{t, fx: Callable, tip, ok: Callable, why, keep}], name, esc: номер выбора по Esc, on_end: Callable};
-## выбор — на последней странице. Как DLG.say: если разговор уже идёт — этот ждёт в очереди (dlg_q)
-func say(who, text: String, o: Dictionary = {}) -> void:
+## text — строка или список строк (каждая — с новой страницы); o — {choices: [{t, fx: Callable, tip, ok: Callable, why, keep}],
+## name, sub, esc: номер выбора по Esc, on_end: Callable}; выбор — на последней странице. Как DLG.say: если разговор
+## уже идёт — этот ждёт в очереди (dlg_q)
+func say(who, text: Variant, o: Dictionary = {}) -> void:
 	var d := _mk_dlg(who, text, o)
 	if dlg != null:
 		dlg_q.append(d)
@@ -106,13 +107,14 @@ func say_seq(L: Array) -> void:
 	for e in L:
 		say(e.get("who"), String(e.text), e.get("o", {}))
 
-func _mk_dlg(who, text: String, o: Dictionary) -> Dictionary:
+func _mk_dlg(who, text: Variant, o: Dictionary) -> Dictionary:
 	var has_p: bool = who != null and int(who.get("port", -1)) >= 0
 	var tw0 := W - 32 - 124 if has_p else W - 32 - 24
 	var pages: Array = []
-	var lines := wrap_text(text, tw0)
-	for i in range(0, lines.size(), 6):
-		pages.append(lines.slice(i, i + 6))
+	for t in (text if text is Array else [text]):
+		var lines := wrap_text(String(t), tw0)
+		for i in range(0, lines.size(), 6):
+			pages.append(lines.slice(i, i + 6))
 	if pages.is_empty():
 		pages = [PackedStringArray([""])]
 	var ch: Array = o.get("choices", [])
@@ -123,7 +125,8 @@ func _mk_dlg(who, text: String, o: Dictionary) -> Dictionary:
 			pages[-1] = last.slice(0, room)
 			pages.append(last.slice(room))
 	var nm: String = o.get("name", "") if o.get("name", "") != "" else ("" if who == null else String(who["name"]))
-	return {"c": who, "name": nm, "sub": "" if who == null else String(who.get("sub", "")), "port": int(who.get("port", -1)) if who != null else -1, "pages": pages, "page": 0, "shown": 0.0, "full": false,
+	var sub: String = String(o.sub) if String(o.get("sub", "")) != "" else ("" if who == null else String(who.get("sub", "")))
+	return {"c": who, "name": nm, "sub": sub, "port": int(who.get("port", -1)) if who != null else -1, "pages": pages, "page": 0, "shown": 0.0, "full": false,
 		"choices": ch, "sel": 0, "esc": int(o.get("esc", -1)), "on_end": o.get("on_end")}
 
 ## на последней странице, текст показан целиком, есть выбор
@@ -258,6 +261,10 @@ func court_layer() -> void:
 	if C.fade > 0.0:
 		var a: float = C.fade if C.fade < 1.0 else 2.0 - C.fade
 		box(0, 0, W, H, Color8(8, 6, 10, int(255 * clampf(a, 0.0, 1.0))))
+	C.acts.draw_hud(self)     # король спит: тьма, часы, «Z z z» (drawSleep)
+	if C.heal.on:             # лечение (hurt.js): вместо строки двора — полосы кино, подпись, дни в постели
+		C.heal.draw_hud(self)
+		return
 	_top()
 	if C.room != "" and now - C.room_t < 3.2:
 		var a := clampf(minf((now - C.room_t) * 3.0, (3.2 - (now - C.room_t)) * 2.0), 0.0, 1.0)
@@ -270,10 +277,12 @@ func court_layer() -> void:
 	if dlg == null and not C.blocked():
 		var tg: Dictionary = C.nearest_target()
 		var s := ""
-		if tg.has("n"):
+		if tg.has("e"):
+			s = String(tg.e.label)
+		elif tg.has("n"):
 			s = "Поговорить: " + String(tg["n"]["name"])
 		elif tg.has("a"):
-			s = tg["a"]["label"]
+			s = C.act_label(tg["a"])
 			if tg["a"]["id"] == "council" and C.king["sit"] != null and C.king["sit"] == C.spots.get("seat_king"):
 				s = "Совет: ждать или начать" if C.meet.meeting_open() else "Совет: созвать или раздать дела"
 		elif C.king["sit"] != null:
@@ -289,13 +298,17 @@ func court_layer() -> void:
 			txt(s, x + 20, y + 5, Color8(244, 236, 216))
 			prompt_r = Rect2(x, y, w, 16)
 			prompt_tg = tg
+	C.trn.draw_hud(self)      # HUD_EXT: панель турнира и прицел
+	C.hnt.draw_hud(self)      # HUD_EXT: прицел ловчего, панель охоты, нижняя строка, стрелка к ловчему
+	C.heal.badge(self)        # значок раны (healBadge)
+	C.sck.badge(self)         # значок болезни (sickBadge)
 	if Game.speed == 0 and dlg == null:
 		pause_mark(now)
 	if help_auto and now > 40.0:
 		help = false
 		help_auto = false
-	if help and not C.blocked():
-		var hs := "WASD или мышь — идти · E — говорить · K — совет · L — письма · Z — масштаб · Пробел — пауза · 1–3 — скорость · Tab — карта · H — подсказка · Esc — выход"
+	if help and not C.blocked() and not (C.hnt.HU != null and C.loc_id == "forest"):   # в лесу на охоте — своя строка
+		var hs := "WASD или мышь — идти · E — говорить · K — совет · L — письма · Z — масштаб · Пробел — пауза · 1–3 — скорость · Tab — карта · H — подсказка · Esc — меню"
 		var w := tw(hs, "s") + 10.0
 		box(8, H - 14, w, 11, Color8(20, 14, 12, 204))
 		txt(hs, 13, H - 11, Color8(200, 216, 232), "s")
@@ -422,8 +435,8 @@ func _bubble(s: String, sx: float, sy: float, col: Color, occ: Array) -> void:
 	var h := ls.size() * 8.0 + 5.0
 	var x := clampf(sx - w / 2.0, 2.0, W - w - 2.0)
 	var y := sy - h - 6.0
-	for r in occ:
-		if x < r.x + r.size.x + 2 and r.x < x + w + 2 and y < r.y + r.size.y + 2 and r.y < y + h + 2:
+	for r: Rect2 in occ:
+		if x < r.position.x + r.size.x + 2 and r.position.x < x + w + 2 and y < r.position.y + r.size.y + 2 and r.position.y < y + h + 2:
 			return
 	occ.append(Rect2(x, y, w, h))
 	box(x, y, w, h, PO)

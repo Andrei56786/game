@@ -37,6 +37,10 @@ func toggle_win(k: String) -> void:
 		open_council()
 	elif k == "letters":
 		open_letters()
+	elif k == "menu":
+		open_menu()
+	elif k == "sound":
+		win = {"k": "sound"}
 
 func unread() -> int:
 	if Sim.G.is_empty() or not Sim.G.has("court"):
@@ -57,8 +61,18 @@ func click(c: Dictionary) -> void:
 func _court_ok() -> bool:
 	return court != null and is_instance_valid(court)
 
-## окна и вести двора: true — нарисовано
+## окна и вести двора: true — нарисовано; меню, звук и управление — и без королевства
 func _court_win(w: Dictionary) -> bool:
+	match String(w.k):
+		"menu":
+			_menu_win()
+			return true
+		"sound":
+			snd_panel(func(): win = null)
+			return true
+		"help":
+			_help_win()
+			return true
 	if Sim.G.is_empty() or not Sim.G.has("court"):
 		return false
 	match String(w.k):
@@ -81,6 +95,82 @@ func _court_modal(m: Dictionary) -> bool:
 		_:
 			return false
 	return true
+
+
+# ---------- меню (drawMenuWin), управление (drawHelp3 при дворе, drawHelp на карте) ----------
+const HELP_COURT := [["WASD / стрелки", "ходить по замку; Shift — тихим шагом"], ["ЛКМ", "идти туда; по человеку — подойти и заговорить"],
+	["E / Enter", "говорить, действовать (трон, стол, кровать…)"], ["Пробел · 1–3", "пауза · скорость времени"], ["Tab", "стол карт: королевство (и обратно)"],
+	["K · L", "совет · письма"], ["Z / колесо", "приблизить / отдалить"], ["H", "подсказка внизу экрана"], ["M", "без звука"], ["F11 / Alt+Enter", "во весь экран и обратно"], ["Esc", "меню"]]
+const HELP_MAP := [["ЛКМ по карте", "идти туда (покажет путь и дни)"], ["ЛКМ по поселению", "идти туда; на месте — осада и сведения"],
+	["ЛКМ по врагу", "преследовать; при встрече — бой"], ["ПКМ", "остановиться / сведения о поселении"], ["Перетаскивание", "двигать карту (или WASD, стрелки)"],
+	["Колесо / Q E", "масштаб"], ["Пробел", "пауза; 1, 2, 3 — скорость"], ["Tab", "ко двору; в поле — державы или местность"], ["C", "к войску"],
+	["V · K · L", "войска короны · совет · письма"], ["F · H", "фуражировка / подсказка"], ["Esc · F11", "закрыть окно / меню · во весь экран"],
+	["В бою", "ЛКМ — отряд, 2×ЛКМ или 1–5 — полк, ПКМ — приказ"], ["В бою", "Tab — карта, Пробел — пауза, H — рог, G — сплотить"]]
+
+## меню (Esc): окно поверх двора или карты, время стоит
+func open_menu() -> void:
+	win = {"k": "menu"}
+	Snd.sfx("click")
+
+func _menu_win() -> void:
+	var ok := Game.save_ok()
+	var L: Array = [["m_cont", "Продолжить", func(_c): win = null, {}],
+		["m_save", "Сохранить", func(_c): _m_save(), {}],
+		["m_load", "Загрузить", func(_c): _m_load(), {"disabled": not ok, "tip": SimSave.OLDSAVE_TIP if Game.has_save() and not ok else null}],
+		["m_snd", "Звук…", func(_c): win = {"k": "sound"}, {}],
+		["m_font", "Шрифт: " + ("пиксельный" if Art.pixfont else "книжный"), func(_c): Art.set_pixfont(not Art.pixfont),
+			{"tip": ["Шрифт", "Книжный — гладкий и чёткий, легче читать. Пиксельный — как в старых играх. Заголовки окон всегда пиксельные."]}],
+		["m_ap", "Автопауза: " + ("вкл" if Art.autopause else "выкл"), func(_c): Art.set_autopause(not Art.autopause),
+			{"tip": ["Автопауза", "Время само встаёт на паузу, когда войско короля дошло до цели или остановилось, когда вы выходите из города, выезжаете из замка и после битвы.", {"t": "Пробел — снять паузу.", "c": DIM}]}],
+		["m_fs", "Во весь экран: " + ("вкл" if Art.is_fullscreen() else "выкл"), func(_c): Art.set_fullscreen(not Art.is_fullscreen()),
+			{"tip": ["Во весь экран", "Игра на весь монитор, без рамки окна. То же — F11 или Alt+Enter."]}],
+		["m_help", "Управление", func(_c): win = {"k": "help"}, {}],
+		["m_exit", "Выйти в главное меню", func(_c): _m_exit(), {}]]
+	if OS.has_feature("web"):
+		L = L.filter(func(e): return e[0] != "m_fs")   # в вебе полный экран — клавишами браузера
+	var X := W / 2.0 - 90.0
+	var Y := 40.0
+	var WW := 180.0
+	win_frame(X, Y, WW, 34.0 + L.size() * 20.0, "Меню", false)
+	var y := Y + 26.0
+	for e: Array in L:
+		var o: Dictionary = (e[3] as Dictionary).duplicate()
+		o.label = e[1]
+		o.on = e[2]
+		btn(e[0], X + 20, y, WW - 40, 16, o)
+		y += 20.0
+
+## «Сохранить»: королевство (если ещё не начато — начнётся) и часы; день или шаг, если считаются, сперва досчитаются
+func _m_save() -> void:
+	win = null
+	var ok := SimPlayer.ensure_sim()
+	if ok:
+		ok = await Game.save_safe()
+	toast("Сохранено." if ok else "Не удалось сохранить.")
+
+func _m_load() -> void:
+	win = null
+	menu_act.emit("load")
+
+## «Выйти в главное меню»: сохранить и на заставку
+func _m_exit() -> void:
+	win = null
+	modals.clear()
+	if not Sim.G.is_empty():
+		await Game.save_safe()
+	menu_act.emit("exit")
+
+func _help_win() -> void:
+	var at_court: bool = mv == null
+	var L: Array = HELP_COURT if at_court else HELP_MAP
+	var p := dlg_box(460.0 if at_court else 440.0, 268.0, "Управление при дворе" if at_court else "Управление")
+	var vx := 150.0 if at_court else 140.0
+	for i in L.size():
+		tx(L[i][0], p.x + 16, p.y + 26 + i * 15, "#6a3a1a")
+		tx(L[i][1], p.x + vx, p.y + 26 + i * 15, INK)
+	if at_court:
+		tx("Малый совет — по четвергам в 9:30 (можно созвать и срочно) · приём у трона — с 9 до 12.", p.x + 16, p.y + 26 + L.size() * 15 + 4, INK2, "s")
+	btn("hp_ok", p.x + vx, p.y + 244, 160, 16, {"label": "Понятно", "on": func(_c): win = null})
 
 
 # ---------- приборы ----------
