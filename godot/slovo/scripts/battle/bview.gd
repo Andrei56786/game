@@ -23,7 +23,7 @@ var figd: Array = []       # кадры фигурок по сторонам: р
 var sdark: Array = []      # тёмные цвета сторон — для следов павших
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)   # и размер — на весь экран (иначе 0×0 и щелчки мимо)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	focus_mode = Control.FOCUS_ALL
 

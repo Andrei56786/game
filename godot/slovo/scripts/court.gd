@@ -147,7 +147,7 @@ func _ready() -> void:
 	add_child(ui)
 	vig = TextureRect.new()
 	vig.texture = _vignette()
-	vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vig.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)   # ночная виньетка — на весь экран
 	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vig.modulate.a = 0.0
 	ui.add_child(vig)
@@ -281,6 +281,7 @@ func go_loc(id: String) -> void:
 	add_child(layer)
 	move_child(layer, 0)
 	var back := ColorRect.new()
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE   # фон места — не окно: иначе он забирает щелчки и мышь при дворе не работает
 	back.color = Color8(26, 36, 24) if L["out"] else Color8(12, 10, 16)
 	back.position = Vector2(-1000, -1000)
 	back.size = Vector2(int(L["w"]) * CT + 2000, int(L["h"]) * CT + 2000)

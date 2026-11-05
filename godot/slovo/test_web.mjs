@@ -46,6 +46,11 @@ try {
   if (ready) {
     await wait(1500); await shot('title');
     await cmd('help'); await wait(400); await shot('title_help'); await cmd('help');
+    // мышь по-настоящему (как в .exe): щелчок по «Новая игра» на заставке, Esc — назад
+    { const tst = async () => { const n = logs.length; await cmd('state'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('STATE ')); return l ? JSON.parse(l.slice(6)) : null; };
+      const t0 = await tst(), i0 = t0 && t0.keys ? t0.keys.indexOf('t_new') : -1;
+      await page.mouse.click(950, 318 + 46 * i0); await wait(600); const t1 = await tst(); await page.keyboard.press('Escape'); await wait(400); const t2 = await tst();
+      check(i0 >= 0 && t1 && t1.scr === 'newgame' && t2 && t2.scr === 'title', 'мышь на заставке: щелчок «Новая игра» — ' + (t1 && t1.scr) + ', Esc — ' + (t2 && t2.scr)); }
     await cmd('court'); await wait(2500); await cmd('time 12', 'speed 1', 'spot throne_front'); await wait(1500); await shot('keep_day');
     let s = await state();
     check(s && s.loc === 'keep' && s.npcs >= 30 && s.here >= 4, 'тронный зал днём: ' + JSON.stringify(s));
@@ -80,6 +85,11 @@ try {
     await cmd('walk -1 0 0.5'); await wait(300);
     s = await state();
     check(s && s.king[0] < x0 - 10, 'король идёт влево');
+    // мышь по-настоящему: щелчок по двору — король идёт (или «Туда не пройти»); Esc — меню, щелчок «Продолжить» — закрыто
+    { const k0 = String(s.king); await page.mouse.click(720, 400); await wait(1500); const sm = await state(); await cmd('close'); await wait(200);
+      await page.keyboard.press('Escape'); await wait(500); const s1 = await state(); await page.mouse.click(640, 148); await wait(500); const s2 = await state();
+      check(sm && (String(sm.king) !== k0 || /не пройти/.test(sm.toast)) && s1 && s1.win === 'menu' && s2 && s2.win === '',
+        'мышь при дворе: щелчок — король ' + k0 + ' → ' + (sm && sm.king) + ' «' + (sm && sm.toast) + '», меню «' + (s1 && s1.win) + '» → щелчок «Продолжить» — «' + (s2 && s2.win) + '»'); }
     await cmd('zoom 1'); await wait(800); await shot('yard_zoom1'); await cmd('zoom 2');
     // карта королевства (Tab во дворе): вся карта, державы, куски полной детализации, вид года
     await cmd('day 0', 'speed 0', 'map');
@@ -372,6 +382,11 @@ try {
         + ', выстрел — стрел ' + (hl1 && hl1.arrows) + ', в полёте ' + (hl1 && hl1.ar));
       n1 = logs.length; await cmd('hunt kill'); const hk1 = hj(await after(n1, /^HUNT kill /, 5000)); await wait(500); await shot('forest_hunt_kill');
       check(hk1 && hk1.nbag >= 1 && hk1.bag !== '', 'сражён — в добыче: ' + JSON.stringify(hk1 && { bag: hk1.bag, nbag: hk1.nbag }));
+      // мышь по-настоящему: зажать ЛКМ над лесом — натяг, отпустить — выстрел
+      { await cmd('close'); await wait(200); const s0 = await state(), a0 = s0 && s0.hunt ? s0.hunt.arrows : -1;
+        await page.mouse.move(840, 400); await page.mouse.down(); await wait(1200); const sd = await state(); await page.mouse.up(); await wait(400); const su = await state();
+        check(sd && sd.hunt && sd.hunt.draw && su && su.hunt && !su.hunt.draw && su.hunt.arrows === a0 - 1,
+          'мышь в лесу: ЛКМ зажата — натяг (' + (sd && sd.hunt && sd.hunt.draw) + '), отпущена — стрел ' + a0 + ' → ' + (su && su.hunt && su.hunt.arrows)); }
       await cmd('hunt fall'); await wait(300); s = await state(); await shot('forest_hunt_fall'); const hdown = s && s.hide;
       await wait(5000); s = await state();
       check(hdown && s && !s.hide && s.loc === 'forest' && s.hunt && s.hunt.on, 'сбит с ног — лежит (' + hdown + '), встал (' + (s && !s.hide) + ')');

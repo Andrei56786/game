@@ -15,7 +15,7 @@ var ld = null                             # экран загрузки: {steps:
 var keys: Array = []                      # кнопки по порядку (для ↑↓ и Enter): [id, Callable]
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)   # и размер — на весь экран (иначе 0×0 и щелчки мимо)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	help = false
 
@@ -41,6 +41,7 @@ func _key_list() -> Array:
 		L.append(["t_snd", func(_c): scr = "sound"])
 		L.append(["t_font", func(_c): Art.set_pixfont(not Art.pixfont)])
 		if not OS.has_feature("web"):
+			L.append(["t_fs", func(_c): Art.set_fullscreen(not Art.is_fullscreen())])
 			L.append(["t_quit", func(_c): get_tree().quit()])
 	elif scr == "newgame":
 		L.append(["ng_go", func(_c): act.emit("new", newg.duplicate())])
@@ -163,6 +164,7 @@ func _buttons() -> void:
 	L.append(["t_snd", "Звук…", {}])
 	L.append(["t_font", "Шрифт: " + ("пиксельный" if Art.pixfont else "книжный"), {"tip": ["Шрифт", "Книжный — гладкий и чёткий, легче читать. Пиксельный — как в старых играх."]}])
 	if not OS.has_feature("web"):
+		L.append(["t_fs", "Во весь экран: " + ("вкл" if Art.is_fullscreen() else "выкл"), {"tip": ["Во весь экран", "Игра на весь монитор, без рамки окна. То же — F11 или Alt+Enter."]}])
 		L.append(["t_quit", "Выход", {}])
 	var ids: Array = keys.map(func(k): return k[0])
 	for e: Array in L:
@@ -227,13 +229,13 @@ func _help() -> void:
 	blocker()
 	draw_rect(Rect2(0, 0, W, H), Color(0.04, 0.03, 0.05, 0.5))
 	var w := 340.0
-	var h := 158.0
+	var h := 172.0
 	var x := floorf((W - w) / 2.0)
 	var y := floorf((H - h) / 2.0)
 	Art.panel_wood(self, x, y, w, h)
 	Art.txt(self, "Управление", x + w / 2.0, y + 8, Art.pal("y"), "m", "c", Art.pal("o"))
 	var rows := [["WASD, стрелки", "идти; Shift — тихим шагом"], ["Мышь", "щелчок — идти туда или к человеку"], ["E, Enter", "говорить, сесть, сделать"],
-		["Z, колесо", "масштаб: крупно или весь двор"], ["Пробел", "пауза"], ["1, 2, 3", "скорость времени"], ["Tab", "карта королевства"], ["Esc", "меню: сохранить, загрузить, звук"]]
+		["Z, колесо", "масштаб: крупно или весь двор"], ["Пробел", "пауза"], ["1, 2, 3", "скорость времени"], ["Tab", "карта королевства"], ["F11, Alt+Enter", "во весь экран и обратно"], ["Esc", "меню: сохранить, загрузить, звук"]]
 	var yy := y + 26.0
 	for r in rows:
 		Art.txt(self, r[0], x + 16, yy, Art.pal("y"))
