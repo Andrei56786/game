@@ -263,7 +263,7 @@ try {
       check(p4 && p4.cur === '' && p4.sites === 0 && p4.solid === undefined && s.crew === 0, 'стройка свёрнута: ' + JSON.stringify(p4) + ', мастеров ' + (s && s.crew));
       // 0.9: простые дела — чучело (раз в день шаг к Мечу короля), фонтан (монета — казна −1); постель: ночью три выбора,
       // «Лечь спать до утра» — король лежит, тьма, часы бегут (королевство догоняет); утром — «Доброе утро, государь.», встал
-      n1 = logs.length; await cmd('close', 'pos 664 352', 'act dummy'); const dm = await after(n1, /^DUMMY /, 5000); await wait(400); s = await state(); await shot('yard_dummy');
+      n1 = logs.length; await cmd('close', 'ill k none', 'pos 664 352', 'act dummy'); const dm = await after(n1, /^DUMMY /, 5000); await wait(400); s = await state(); await shot('yard_dummy');
       check(!!dm && s && ['Упражнение с мечом. Солдаты одобрительно гудят.', 'Рука крепнет: Меч короля +1'].includes(s.toast) && s.dir === 'up', 'чучело: ' + dm + ', «' + (s && s.toast) + '»');
       const fg0 = await ks(); await cmd('pos 696 212', 'act fountain'); await wait(400); s = await state(); const fch = s && s.ch;
       await cmd('choose 1'); await wait(400); const fg1 = await ks(); s = await state(); await shot('yard_fountain');
@@ -291,14 +291,14 @@ try {
         check(h2 && h2.sh === 'bed' && l2 === 'keep' && h3 && h3.sh === 'days' && !!he && h4 && !h4.on && h4.wound >= 1 && q.loc === 'keep' && !q.hide,
           what + ': постель (' + (h2 && h2.sh) + ', ' + l2 + ') — дни (' + (h3 && h3.sh) + ') — ' + he + ', ' + JSON.stringify(h4) + ', скрыт ' + (q && q.hide));
       };
-      await cmd('speed 0', 'close', 'spot lists_s', 'pos 990 404', 'time 9.5', 'tour'); await wait(800); s = await state(); const tl = s && s.label;
+      await cmd('speed 0', 'close', 'ill k none', 'spot lists_s', 'pos 990 404', 'time 9.5', 'tour'); await wait(800); s = await state(); const tl = s && s.label;
       n1 = logs.length; await cmd('time 9.97', 'speed 1'); const tb = await after(n1, /^TOUR BEGIN \d+/, 60000);
       await cmd('time 10.25'); await wait(2500); s = await state(); await shot('yard_tour'); const t1 = s && s.tour;
       check(tl === 'Ристалище: турнир начнётся в 10:00' && !!tb && t1 && t1.on && t1.b && t1.guests >= 2 && t1.stands >= 3 && s.xn >= 2 && s.mus === 'tourney',
         'турнир: «' + tl + '», ' + tb + ', ' + JSON.stringify(t1 && { b: t1.b, guests: t1.guests, stands: t1.stands }) + ', щитов ' + (s && s.xn) + ', музыка «' + (s && s.mus) + '»');
       const tb1 = await after(n1, /^BOUT 1 /, 120000); await wait(300);
-      await cmd('act lists'); await wait(600); await cmd('dlgall'); await wait(300); s = await state(); await shot('yard_lists');
-      check(!!tb1 && s && s.dlg === 'Турнир' && s.ch && s.ch.length === 4 && String(s.ch[0]).startsWith('Выйти на ристалище'), 'поединок на виду: ' + tb1 + ', ристалище — ' + (s && s.dlg) + ' ' + JSON.stringify(s && s.ch));
+      const nl = logs.length; await cmd('act lists'); await wait(600); await cmd('dlgall'); await wait(300); s = await state(); await shot('yard_lists'); const lsw = await after(nl, /^LISTS /, 2000);
+      check(!!tb1 && s && s.dlg === 'Турнир' && s.ch && s.ch.length === 4 && String(s.ch[0]).startsWith('Выйти на ристалище'), 'поединок на виду: ' + tb1 + ', ристалище — ' + (s && s.dlg) + ' ' + JSON.stringify(s && s.ch) + ', ' + lsw);
       n1 = logs.length; const nk = n1; await cmd('choose 1', 'close'); const kjs = await after(n1, /^JOUST /, 120000); await wait(1200); s = await state(); await shot('yard_joust');
       const kh = s && s.tour && s.tour.kj && s.hide;
       let aimed = false;
@@ -307,7 +307,7 @@ try {
         await wait(150); }
       const kje = await after(n1, /^JOUST END/, 60000); await wait(1500); s = await state(); await shot('yard_joust_end');
       check(!!kjs && kh && aimed && !!kje && s && s.dlg === 'Поединок' && !s.hide && ['win', 'lose', 'fall'].includes(s.tour.king),
-        'король у барьера: ' + kjs + ', прицел ' + aimed + ', ' + kje + ' — «' + (s && s.dlg) + '», ' + (s && s.tour.king));
+        'король у барьера: ' + kjs + ', прицел ' + aimed + ', ' + kje + ' — «' + (s && s.dlg) + '», ' + (s && s.tour.king) + ' (' + lsw + '; болезнь «' + (s && s.sick && s.sick.ill) + '», «' + (s && s.toast) + '»)');
       await cmd('close'); await wait(1500); s = await state(); let healed = false;
       if (s && s.heal && (s.heal.on || s.heal.q)) {
         // выбит из седла и ранен — сразу носилки; турнир тем временем окончен — новый, только награда

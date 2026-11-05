@@ -1631,7 +1631,7 @@ func cmd(p: PackedStringArray) -> void:
 				heal.skip()
 		"ill":
 			# занемочь (для проверок): ill k fever — король, ill adv fever — советник с постелью, ill <ключ двора> fever — придворный;
-			# ill nodeath — без смертей от болезней (ill nodeath 0 — снова как обычно)
+			# ill nodeath — без смертей от болезней (ill nodeath 0 — снова как обычно); ill k none — король здоров
 			if p.size() > 1 and p[1] == "nodeath":
 				SimSick.no_death = p.size() < 3 or p[2] != "0"
 			elif p.size() > 1 and SimPlayer.ensure_sim():
@@ -1646,7 +1646,10 @@ func cmd(p: PackedStringArray) -> void:
 				if ch != null:
 					var k2 := p[2] if p.size() > 2 else "fever"
 					ch.ill = null
-					SimSick.sickStart(ch, k2, "")
+					if k2 == "none":
+						ch.erase("sickConv")   # ill k none — здоров и не слаб после болезни (случайная простуда не мешает проверкам)
+					else:
+						SimSick.sickStart(ch, k2, "")
 					print("ILL ", key, " ", k2, " bed=", JS.t(ch.ill.get("bed")) if JS.t(ch.get("ill")) else false)
 		"throne":
 			# сесть на трон — приём прошений
