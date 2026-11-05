@@ -3,7 +3,8 @@
 // на скорости 3 дни идут, казна меняется, весна в летописи, пауза; 0.6: войска идут по часам, походы ИИ, чужое войско вблизи;
 // 0.7: король выезжает в поле, встреча с врагом, автобой и итог, бой на поле (расстановка, бой, итог) и снова карта.
 // 0.8: двор на данных королевства — окна совета (K) и писем (L), срочный сбор: советники сходятся, король во главе стола, доклады;
-// люди двора из королевства, приём прошений у трона. 0.9: меню (Esc) и окно «Звук»; сохранение из меню и по команде, страница
+// люди двора из королевства, приём прошений у трона. 0.9: жизнь замка — молитва и обедня в часовне, темница, пир в зале, стол
+// зодчего и стройка, турнир на ристалище (поединок короля), рана и лечение; меню (Esc) и окно «Звук»; сохранение из меню и по команде, страница
 // заново — «Продолжить правление»: то же королевство до знака (отпечаток), тот же день и казна; выход в главное меню; новая игра
 // (тяжёлая, без тумана войны) — двор у трона; автосохранение на седьмой день.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
@@ -215,13 +216,100 @@ try {
       const mb = await after(n1, /^MASS BEGIN \d/, 60000); const ma = await after(n1, /^MASS ATTENDED/, 90000); await wait(800); s = await state(); await shot('chapel_mass');
       check(!!mb && !!ma && s && s.mass && s.loc === 'chapel' && s.pews >= 4, 'воскресная обедня (день ' + sun + '): ' + mb + ' → ' + ma + ', на скамьях ' + (s && s.pews) + ', «' + (s && s.label) + '»');
       await cmd('speed 0', 'close'); await wait(300); const pn = s ? s.pris : 0;
-      n1 = logs.length; await cmd('time 14', 'goto srv_jailer'); await wait(1200); await cmd('talk'); await wait(600); s = await state();
+      // в полдень тюремщик сидит за своим столом (в 14 — бродит по темнице и может отойти от короля)
+      // сначала время, потом подойти: после перевода часов тюремщик садится за стол не сразу
+      await cmd('time 12'); await wait(1500); n1 = logs.length; await cmd('goto srv_jailer'); await wait(1200); await cmd('talk'); await wait(600); s = await state();
       const jl = logs.slice(n1).find(x => x.startsWith('JAILER ')); await shot('dungeon_jailer');
       if (pn > 0) {
         await cmd('choose 1'); const pz = await after(n1, /^PRISONER /, 5000); await wait(600); await shot('dungeon_prisoner');
         check(!!jl && !!pz, 'темница: тюремщик — ' + jl + ', узник — ' + pz);
       } else check(s && s.loc === 'dungeon' && s.talk && !jl, 'темница: тюремщик, камеры пусты (' + (s && s.dlg) + ')');
       await cmd('close', 'close'); await wait(200);
+      // 0.9: пир (поручение сенешаля исполнено — сегодня пир): с 17:00 гости за столами, менестрель и ноты, блюда, музыка пира;
+      // король во главе стола — три дела за пир; в 23:30 гости расходятся
+      n1 = logs.length; await cmd('feast', 'time 16.97', 'spot throne_front', 'speed 1');
+      const fb = await after(n1, /^FEAST BEGIN \d+/, 60000); await cmd('speed 0'); await wait(300);
+      await cmd('spot hall_mid', 'pos 352 118'); await wait(1500); s = await state(); await shot('hall_feast');
+      check(!!fb && s && s.feast && s.loc === 'hall' && s.guests >= 10 && s.minstrel && s.at_table >= 12 && s.conds >= 5 && String(s.label).startsWith('Пир:'),
+        'пир начался: ' + fb + ', гостей ' + (s && s.guests) + ', за столами ' + (s && s.at_table) + ', блюд ' + (s && s.conds) + ', «' + (s && s.label) + '»');
+      n1 = logs.length; await cmd('act'); const fm = await after(n1, /^FEAST MENU \d+/, 5000); await wait(300); await cmd('dlgall'); await wait(300); s = await state();
+      await shot('hall_feast_menu');
+      const ti = s && s.ch ? s.ch.findIndex(t => t.startsWith('Поднять кубок')) : -1;
+      check(!!fm && s && s.sit && s.dlg === 'Пир' && ti >= 0 && s.ch.length === 7, 'король во главе стола: ' + fm + ', ' + JSON.stringify(s && s.ch));
+      n1 = logs.length; await cmd('choose ' + (ti + 1)); await wait(500); s = await state();
+      check(s && s.dlg === 'Пир' && s.talk, 'кубок за верную знать: ' + (s && s.dlg));
+      await cmd('close', 'speed 1'); await wait(2500); s = await state(); await shot('hall_feast_notes');
+      check(s && s.feast && s.notes > 0 && s.snd && s.snd.want === 'feast', 'пир идёт: ноты над менестрелем ' + (s && s.notes) + ', музыка «' + (s && s.snd && s.snd.want) + '»');
+      n1 = logs.length; await cmd('time 23.48'); const fe = await after(n1, /^FEAST END/, 60000);
+      // гости идут к двери зала (у дальних столов — с десяток секунд игры; при малом числе кадров в Chromium — дольше)
+      for (let i = 0; i < 150 && s && s.guests > 0; i++) { await wait(500); s = await state(); }
+      await cmd('speed 0'); await wait(200);
+      check(!!fe && s && !s.feast && s.guests === 0 && s.conds === 0, 'пир окончен, гости ушли: ' + fe + ', гостей ' + (s && s.guests) + ', блюд ' + (s && s.conds));
+      // 0.9: стол зодчего — окно «Замыслы и стройки»; заложить трибуны: мастера у стройки, леса и вывеска, клетки под трибунами
+      // заняты; леса растут по ходу работ; мастер — дать на пиво; свернуть — всё как было
+      await cmd('speed 0', 'close', 'time 9.5', 'gold 1500', 'spot architect'); await wait(800); s = await state(); const wl = s && s.label;
+      n1 = logs.length; await cmd('act'); const wo = await after(n1, /^WORKS OPEN/, 5000); await wait(500); s = await state(); await shot('yard_works');
+      check(!!wo && s && s.win === 'proj' && wl === 'Стол зодчего: замыслы и стройки', 'стол зодчего: «' + wl + '», окно «' + (s && s.win) + '»');
+      await cmd('close', 'proj stands'); await wait(1000); s = await state(); const p1 = s && s.proj;
+      check(p1 && p1.cur === 'stands' && p1.solid === true && p1.sites === 1 && s.crew === 2, 'заложены трибуны: ' + JSON.stringify(p1) + ', мастеров ' + (s && s.crew));
+      await cmd('proj prog 0.5', 'pos 952 300'); await wait(1000); s = await state(); await shot('yard_site'); const p2 = s && s.proj;
+      check(p2 && p2.prog === 0.5 && p1 && p2.drawn > p1.drawn, 'леса по ходу работ: ' + JSON.stringify(p2));
+      await cmd('goto pjw0', 'talk'); await wait(600); await cmd('dlgall'); await wait(300); s = await state(); const cw = s && s.ch; await shot('yard_crew');
+      await cmd('choose 1'); await wait(400); s = await state(); const p3 = s && s.proj;
+      check(cw && cw.length === 2 && String(cw[0]).startsWith('Дать мастерам на пиво') && p2 && p3 && p3.prog > p2.prog, 'мастер стройки: ' + JSON.stringify(cw) + ', ход ' + (p2 && p2.prog) + ' → ' + (p3 && p3.prog));
+      await cmd('close', 'close', 'proj stop'); await wait(1000); s = await state(); const p4 = s && s.proj;
+      check(p4 && p4.cur === '' && p4.sites === 0 && p4.solid === undefined && s.crew === 0, 'стройка свёрнута: ' + JSON.stringify(p4) + ', мастеров ' + (s && s.crew));
+      // 0.9: турнир (трибуны готовы, сенешаль созвал рыцарей): с 10:00 — зрители на трибунах, герольд, музыка турнира, поединок
+      // на виду; король выходит к барьеру сам — прицел, удар копьём; к 15:30 досчитаны все круги — награда победителю; в 16:00 —
+      // конец, гости уходят. Рана короля: носилки, постель (лекарь), дни в постели, «рана затянулась» — король ходит медленнее
+      const healFlow = async (n0, what) => {
+        const hs = await after(n0, /^HEAL START tourney/, 30000); await wait(1500); let q = await state(); await shot('yard_litter');
+        const h1 = q && q.heal;
+        check(!!hs && h1 && h1.on && h1.sh === 'litter' && q.loc === 'yard' && q.hide && q.snd && q.snd.want === 'lament',
+          what + ': носилки — ' + hs + ', ' + JSON.stringify(h1) + ', ' + (q && q.loc) + ', музыка «' + (q && q.snd && q.snd.want) + '»');
+        await cmd('heal skip'); await wait(1500); q = await state(); await shot('keep_bed'); const h2 = q && q.heal, l2 = q && q.loc;
+        await cmd('heal skip'); await wait(2500); q = await state(); await shot('keep_days'); const h3 = q && q.heal;
+        const n2 = logs.length; await cmd('heal skip'); const he = await after(n2, /^HEAL END/, 120000); await wait(1000); q = await state(); await shot('keep_wound');
+        const h4 = q && q.heal;
+        check(h2 && h2.sh === 'bed' && l2 === 'keep' && h3 && h3.sh === 'days' && !!he && h4 && !h4.on && h4.wound >= 1 && q.loc === 'keep' && !q.hide,
+          what + ': постель (' + (h2 && h2.sh) + ', ' + l2 + ') — дни (' + (h3 && h3.sh) + ') — ' + he + ', ' + JSON.stringify(h4) + ', скрыт ' + (q && q.hide));
+      };
+      await cmd('speed 0', 'close', 'spot lists_s', 'pos 990 404', 'time 9.5', 'tour'); await wait(800); s = await state(); const tl = s && s.label;
+      n1 = logs.length; await cmd('time 9.97', 'speed 1'); const tb = await after(n1, /^TOUR BEGIN \d+/, 60000);
+      await cmd('time 10.25'); await wait(2500); s = await state(); await shot('yard_tour'); const t1 = s && s.tour;
+      check(tl === 'Ристалище: турнир начнётся в 10:00' && !!tb && t1 && t1.on && t1.b && t1.guests >= 2 && t1.stands >= 3 && s.xn >= 2 && s.mus === 'tourney',
+        'турнир: «' + tl + '», ' + tb + ', ' + JSON.stringify(t1 && { b: t1.b, guests: t1.guests, stands: t1.stands }) + ', щитов ' + (s && s.xn) + ', музыка «' + (s && s.mus) + '»');
+      const tb1 = await after(n1, /^BOUT 1 /, 120000); await wait(300);
+      await cmd('act lists'); await wait(600); await cmd('dlgall'); await wait(300); s = await state(); await shot('yard_lists');
+      check(!!tb1 && s && s.dlg === 'Турнир' && s.ch && s.ch.length === 4 && String(s.ch[0]).startsWith('Выйти на ристалище'), 'поединок на виду: ' + tb1 + ', ристалище — ' + (s && s.dlg) + ' ' + JSON.stringify(s && s.ch));
+      n1 = logs.length; const nk = n1; await cmd('choose 1', 'close'); const kjs = await after(n1, /^JOUST /, 120000); await wait(1200); s = await state(); await shot('yard_joust');
+      const kh = s && s.tour && s.tour.kj && s.hide;
+      let aimed = false;
+      for (let i = 0; i < 600; i++) { s = await state(); if (!s || !s.tour || !s.tour.kj) break;
+        if (s.tour.ph === 'run' && !s.tour.lock) { if (!aimed) { await shot('yard_joust_aim'); aimed = true; } await cmd('kj lock 1'); }
+        await wait(150); }
+      const kje = await after(n1, /^JOUST END/, 60000); await wait(1500); s = await state(); await shot('yard_joust_end');
+      check(!!kjs && kh && aimed && !!kje && s && s.dlg === 'Поединок' && !s.hide && ['win', 'lose', 'fall'].includes(s.tour.king),
+        'король у барьера: ' + kjs + ', прицел ' + aimed + ', ' + kje + ' — «' + (s && s.dlg) + '», ' + (s && s.tour.king));
+      await cmd('close'); await wait(1500); s = await state(); let healed = false;
+      if (s && s.heal && (s.heal.on || s.heal.q)) {
+        // выбит из седла и ранен — сразу носилки; турнир тем временем окончен — новый, только награда
+        await healFlow(nk, 'рана на ристалище'); healed = true;
+        await cmd('speed 0', 'spot lists_s', 'pos 990 404', 'time 9.5', 'tour', 'speed 1'); await wait(800);
+      }
+      // к 15:30 — вне двора: поединок на виду (если начался) не досматривают, все круги досчитаны сразу; в 16:00 — конец
+      n1 = logs.length; await cmd('spot throne_front', 'time 15.6'); const b7 = await after(n1, /^BOUT 7 /, 60000);
+      await cmd('speed 0', 'spot lists_s', 'pos 990 404'); await wait(1000); s = await state(); const t7 = s && s.tour;
+      n1 = logs.length; await cmd('act lists'); const pa = await after(n1, /^PRIZE ASK/, 5000); await wait(400); await shot('yard_prize');
+      await cmd('choose 2'); const pz = await after(n1, /^PRIZE 0/, 5000); await wait(500); await shot('yard_prize_done');
+      check(!!b7 && t7 && t7.on && t7.champ >= 0 && t7.label === 'Турнир: вручить награду победителю' && !!pa && !!pz,
+        'к 15:30 все круги досчитаны: ' + b7 + ', «' + (t7 && t7.label) + '», ' + pa + ' → ' + pz);
+      await cmd('close'); await wait(300);
+      n1 = logs.length; await cmd('time 16.02', 'speed 1'); const te0 = await after(n1, /^TOUR END/, 60000); await wait(800); s = await state(); const t8 = s && s.tour;
+      check(te0 === 'TOUR END true' && t8 && !t8.on && t8.done && t8.prize && t8.guests === 0 && t8.stands === 0 && s.mus !== 'tourney',
+        'турнир окончен: ' + te0 + ', ' + JSON.stringify(t8 && { done: t8.done, prize: t8.prize, guests: t8.guests, stands: t8.stands }) + ', музыка «' + (s && s.mus) + '»');
+      if (!healed) { n1 = logs.length; await cmd('wound 2'); await healFlow(n1, 'рана (wound 2)'); }
+      await cmd('speed 0', 'close'); await wait(300);
       // 0.9: меню и звук; сохранение — страница заново — «Продолжить правление»
       const ks = async () => { const n = logs.length; await cmd('kstate'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('KSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
       await cmd('speed 0', 'close'); await wait(400); await cmd('menu'); await wait(700); s = await state(); await shot('court_menu');
