@@ -759,6 +759,16 @@ func _snd_selftest() -> bool:
 	# пьеса двора начинается (через 0,05 с), голоса и шумы двора днём, звуки из очереди симуляции и окон
 	c.cmd(PackedStringArray(["spot", "throne_front"]))
 	Game.set_hour(12.0)
+	# пьеса прошлой проверки (охота кончилась во дворе — там та же «war») могла уже играть: тогда новая не начнётся — начать с тишины
+	var was := "%s «%s»%s" % [Snd.family(), Snd.mood(), " ждёт" if Snd.cur.has("at") else ""] if not Snd.cur.is_empty() else "тишина"
+	if not Snd.cur.is_empty():
+		Snd._fade(Snd.cur)
+		Snd.cur = {}
+	var dlg0: bool = c.hud.dlg != null          # открытое окно — реплика встала бы в очередь без шелеста бумаги: закрыть
+	var kq := 0
+	while c.hud.dlg != null and kq < 8:
+		c.hud.close_dlg()
+		kq += 1
 	Snd.music("auto")
 	var n0 := Snd.n_pieces
 	var s0 := Snd.n_sfx
@@ -766,7 +776,14 @@ func _snd_selftest() -> bool:
 	c.hud.say(null, "Проверка звука.")
 	await get_tree().create_timer(0.9).timeout
 	var st := Snd.state()
-	var mok: bool = Snd.n_pieces > n0 and Snd.fam_list(Snd.family()).has(Snd.mood()) and Snd.n_sfx >= s0 + 2 and "coin" in st.last and "paper" in st.last
+	var mf := func(s: Dictionary) -> bool: return Snd.n_pieces > n0 and Snd.fam_list(Snd.family()).has(Snd.mood()) and Snd.n_sfx >= s0 + 2 and "coin" in s.last and "paper" in s.last
+	var tw := 0
+	while not mf.call(st) and tw < 30:           # на медленной машине (CI) пьеса может начаться позже — ждать до 3 с
+		await get_tree().create_timer(0.1).timeout
+		st = Snd.state()
+		tw += 1
+	var mok: bool = mf.call(st)
+	var mdiag := "было %s, окно %s, пьес +%d, звуков +%d, ждали %.1f с" % [was, str(dlg0), Snd.n_pieces - n0, Snd.n_sfx - s0, 0.9 + tw * 0.1]
 	var pl0 := "%s «%s»" % [Snd.family(), Snd.mood()]
 	c.hud.close_dlg()
 	c.go_loc("yard")
@@ -795,8 +812,8 @@ func _snd_selftest() -> bool:
 	Game.set_hour(h0)
 	await get_tree().create_timer(0.3).timeout     # звук отпускает записи
 	var all := ok and rok and mok and bok and fok and sok
-	print("selftest: звук — пьес %d (%s), звуков %d, голосов %d, шумов %d; музыка: %s, карта %s, бой %s/%s; играет %s, звуки %s, шумы во дворе %s, земля «%s» — %s" % [I.music.size(),
-		String(I.enc), I.sfx.size(), I.amb.size(), I.bed.size(), str(R), rm, rb, rs, pl0, str(st.last), str(beds0), sf,
+	print("selftest: звук — пьес %d (%s), звуков %d, голосов %d, шумов %d; музыка: %s, карта %s, бой %s/%s; играет %s (%s), звуки %s, шумы во дворе %s, земля «%s» — %s" % [I.music.size(),
+		String(I.enc), I.sfx.size(), I.amb.size(), I.bed.size(), str(R), rm, rb, rs, pl0, mdiag, str(st.last), str(beds0), sf,
 		"OK" if all else "FAIL (%s)" % str([ok, rok, mok, bok, fok, sok])])
 	return all
 
