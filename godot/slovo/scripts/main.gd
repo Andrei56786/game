@@ -772,6 +772,7 @@ func _snd_selftest() -> bool:
 	Snd.music("auto")
 	var n0 := Snd.n_pieces
 	var s0 := Snd.n_sfx
+	Snd.last_play.clear()      # шелест итога охоты (прошлая проверка) мог быть < 60 мс назад — тот же звук так часто не повторяется
 	Sim.sfx("coin")
 	c.hud.say(null, "Проверка звука.")
 	await get_tree().create_timer(0.9).timeout
