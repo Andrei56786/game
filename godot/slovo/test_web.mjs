@@ -217,7 +217,7 @@ try {
       n1 = logs.length; await cmd('day ' + sun, 'time 8.6'); await wait(2500); await cmd('spot pew_k', 'act', 'speed 1');
       const mb = await after(n1, /^MASS BEGIN \d/, 60000); const ma = await after(n1, /^MASS ATTENDED/, 90000); await wait(800); s = await state(); await shot('chapel_mass');
       check(!!mb && !!ma && s && s.mass && s.loc === 'chapel' && s.pews >= 4, 'воскресная обедня (день ' + sun + '): ' + mb + ' → ' + ma + ', на скамьях ' + (s && s.pews) + ', «' + (s && s.label) + '»');
-      await cmd('speed 0', 'close'); await wait(300); const pn = s ? s.pris : 0;
+      await cmd('speed 1', 'close'); await wait(300); const pn = s ? s.pris : 0;
       // в полдень тюремщик сидит за своим столом (в 14 — бродит по темнице и может отойти от короля)
       // сначала время, потом подойти: после перевода часов тюремщик садится за стол не сразу
       await cmd('time 12'); await wait(1500); n1 = logs.length; await cmd('goto srv_jailer'); await wait(1200); await cmd('talk'); await wait(600); s = await state();
@@ -230,7 +230,7 @@ try {
       // 0.9: пир (поручение сенешаля исполнено — сегодня пир): с 17:00 гости за столами, менестрель и ноты, блюда, музыка пира;
       // король во главе стола — три дела за пир; в 23:30 гости расходятся
       n1 = logs.length; await cmd('feast', 'time 16.97', 'spot throne_front', 'speed 1');
-      const fb = await after(n1, /^FEAST BEGIN \d+/, 60000); await cmd('speed 0'); await wait(300);
+      const fb = await after(n1, /^FEAST BEGIN \d+/, 60000); await wait(300);   // часы идут: на паузе двор замирает — семья и совет не дошли бы до мест
       await cmd('spot hall_mid', 'pos 352 118'); await wait(1500); s = await state(); await shot('hall_feast');
       check(!!fb && s && s.feast && s.loc === 'hall' && s.guests >= 10 && s.minstrel && s.at_table >= 12 && s.conds >= 5 && String(s.label).startsWith('Пир:'),
         'пир начался: ' + fb + ', гостей ' + (s && s.guests) + ', за столами ' + (s && s.at_table) + ', блюд ' + (s && s.conds) + ', «' + (s && s.label) + '»');
@@ -327,6 +327,35 @@ try {
         'турнир окончен: ' + te0 + ', ' + JSON.stringify(t8 && { done: t8.done, prize: t8.prize, guests: t8.guests, stands: t8.stands }) + ', музыка «' + (s && s.mus) + '»');
       if (!healed) { n1 = logs.length; await cmd('wound 2'); await healFlow(n1, 'рана (wound 2)'); }
       await cmd('speed 0', 'close'); await wait(300);
+      // 0.9: больные при дворе (sick2.js): советник занемог лихорадкой — в постели, «болен: лихорадка»; у постели — четыре дела,
+      // «Прислать лекаря» — лечение; лекарь — доклад и дела; король занемог — лекарь велит лечь, постель (щупает пульс), дни болезни,
+      // встаёт — значок болезни или слабости. Без смертей от болезней (ill nodeath) — исход не зависит от случая
+      await cmd('ill nodeath', 'time 12'); await wait(300);
+      n1 = logs.length; await cmd('ill adv fever'); const il = await after(n1, /^ILL seat_\w+ fever bed=true/, 5000);
+      const ak = il ? il.split(' ')[1] : '';
+      await cmd('time 13.5', 'speed 1'); await wait(1500); await cmd('speed 0'); s = await state(); const lie0 = s && s.sick && s.sick.lie;
+      n1 = logs.length; await cmd('goto ' + ak, 'talk'); const sv0 = await after(n1, /^SICKVISIT /, 5000); await wait(600); await cmd('dlgall'); await wait(300); s = await state();
+      await shot('upper_sick_visit'); const vch = s && s.ch;
+      n1 = logs.length; await cmd('choose 2'); const dp = await after(n1, /^DOCPATIENT fever /, 5000); await wait(500); s = await state(); await shot('upper_doc_patient');
+      check(!!il && lie0 && lie0.includes(ak) && sv0 === 'SICKVISIT ' + ak && vch && vch.length === 4 && vch[0] === 'Пожелать скорейшего выздоровления' && !!dp && s && s.ch && s.ch.length >= 5
+        && s.sick && s.sick.dspot === 'room_' + ak.slice(5), 'больной советник: ' + il + ', в постели ' + JSON.stringify(lie0) + ', ' + sv0 + ' ' + JSON.stringify(vch) + ' → ' + dp + ', лекарь к ' + (s && s.sick && s.sick.dspot));
+      await cmd('close'); await wait(300);
+      n1 = logs.length; await cmd('goto srv_doc', 'talk'); const dt0 = await after(n1, /^DOCTALK \d/, 5000); await wait(600); await cmd('dlgall'); await wait(300); s = await state(); await shot('court_doctor');
+      check(!!dt0 && s && s.ch && s.ch[0] === 'Как лечишь больных?' && s.ch[s.ch.length - 1] === 'Ступай' && s.sick && s.sick.dn && s.sick.doc !== '',
+        'лекарь двора ' + (s && s.sick && s.sick.doc) + ': ' + dt0 + ' ' + JSON.stringify(s && s.ch));
+      await cmd('close'); await wait(300);
+      n1 = logs.length; await cmd('ill k fever', 'speed 1'); const ip = await after(n1, /^ILL PROMPT fever [12]/, 15000); await wait(800); await cmd('dlgall'); await wait(300); s = await state(); await shot('court_ill_prompt');
+      check(!!ip && s && s.ch && s.ch[0] === 'Лечь в постель' && s.sick && s.sick.ill === 'fever' && s.sick.bed && s.sick.asked,
+        'король занемог: ' + ip + ' ' + JSON.stringify(s && s.ch) + ', ' + JSON.stringify(s && s.sick && { ill: s.sick.ill, bed: s.sick.bed, badge: s.sick.badge }));
+      n1 = logs.length; await cmd('choose 1'); const hs2 = await after(n1, /^HEAL START ill /, 5000); await wait(2500); s = await state(); await shot('keep_sickbed');
+      const hb = s && s.heal;
+      check(!!hs2 && hb && hb.on && hb.sh === 'bed' && hb.from === 'ill' && /щупает пульс: «Лихорадка, государь\. Лежать дней \d+»\.$/.test(hb.cap) && s.sick.dhid && s.mus === 'sick',
+        'король в постели: ' + hs2 + ', ' + JSON.stringify(hb) + ', лекарь с глаз ' + (s && s.sick && s.sick.dhid) + ', музыка «' + (s && s.mus) + '»');
+      n1 = logs.length; await cmd('heal skip'); await wait(2500); s = await state(); await shot('keep_sickdays'); const hd = s && s.heal;
+      await cmd('heal skip'); const he2 = await after(n1, /^HEAL END false/, 180000); await wait(1500); s = await state(); await shot('keep_sick_up');
+      check(hd && hd.sh === 'days' && !!he2 && s && s.heal && !s.heal.on && s.sick && !s.sick.dhid && /^(Слабость|Лихорадка) · \d+ дн\.$/.test(s.sick.badge)
+        && /^Король встаёт/.test(s.toast), 'дни болезни (' + (hd && hd.sh) + ') — ' + he2 + ', «' + (s && s.toast) + '», значок «' + (s && s.sick && s.sick.badge) + '»');
+      await cmd('speed 0', 'close', 'ill nodeath 0'); await wait(300);
       // 0.9: меню и звук; сохранение — страница заново — «Продолжить правление»
       await cmd('speed 0', 'close'); await wait(400); await cmd('menu'); await wait(700); s = await state(); await shot('court_menu');
       check(s && s.win === 'menu', 'меню (Esc): ' + (s && s.win));

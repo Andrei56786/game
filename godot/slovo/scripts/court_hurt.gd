@@ -2,7 +2,7 @@ extends RefCounted
 ## Раны короля и лечение (hurt.js): ушиб, рана, тяжёлая рана (k.woundK — 1…3, k.wound — день, когда заживёт, k.woundP — где,
 ## k.woundBy — чем); носилки через двор к донжону, лекарь у постели, дни в постели (часы бегут), жар при тяжёлой ране;
 ## значок раны в верхней строке. Раненый король ходит медленнее, без турнира. Случайности — не из зерна королевства.
-## Беды охоты (бросок кабана, медведь) — с охотой.
+## Беды охоты (бросок кабана, медведь) — с охотой. Болезнь короля (sick2.js): та же сцена с o.from = ill — сразу в покои, дни — по болезни.
 const Aud = preload("res://scripts/court_audience.gd")
 const CT := 16
 const WOUNDS := {1: {"n": "ушиб", "d": [1, 2], "bed": 0.0}, 2: {"n": "рана", "d": [8, 12], "bed": 0.6}, 3: {"n": "тяжёлая рана", "d": [18, 26], "bed": 0.62}}
@@ -32,6 +32,7 @@ var pf := 0.0                # шаг носилок (P.f)
 
 func _init(court: Node2D) -> void:
 	c = court
+	SimSick.heal_ill = false
 
 static func _k() -> Dictionary:
 	return SimPlayer.kingC()
@@ -142,6 +143,61 @@ func start(o_: Dictionary) -> void:
 	print("HEAL START ", String(o.get("from", "")), " ", bed, " ", tot)
 	litter()
 
+## король ложится в постель с болезнью (sickBedStart, sick2.js): без носилок — сразу в покои; дней — сколько осталось болезни
+func start_ill() -> void:
+	var k: Dictionary = _k()
+	var I: Variant = k.get("ill")
+	if not JS.t(I) or on:
+		return
+	var nd := maxi(1, int(JS.n(I.end) - _day()))
+	I.up = 0.0
+	I.asked = 1.0
+	o = {"from": "ill"}
+	on = true
+	SimSick.heal_ill = true
+	king_id = k.id
+	tot = nd
+	bed = nd
+	fast = false
+	sh = ""
+	t0 = c.t
+	cap = ""
+	vis = []
+	fever = null
+	men = []
+	c.hud.win = null
+	while c.hud.dlg_open():
+		c.hud.close_dlg()
+	c.path = []
+	c.on_arrive = Callable()
+	if Game.speed > 0:
+		Game.last_speed = Game.speed
+	Snd.music("sick")
+	print("HEAL START ill ", bed, " ", tot)
+	bed_()
+
+## «Лежать дней N» (sickBedCap): что говорит лекарь у постели больного короля
+func sick_bed_cap() -> String:
+	var I: Variant = _k().get("ill")
+	var nd := maxi(1, int(JS.n(I.end) - _day())) if JS.t(I) else 1
+	var who := String(vis[0].c.name) if not vis.is_empty() else "Лекарь"
+	return who + " щупает пульс: «" + (SimSick.sCap(String(SimSick.DIS[I.k].n)) if JS.t(I) else "Хворь") + ", государь. Лежать дней " + str(nd) + "»."
+
+## заголовок дней в постели (sickTitle): болезнь — или «Выздоровление», когда она уже прошла
+static func sick_title() -> String:
+	var I: Variant = _k().get("ill")
+	return SimSick.sCap(String(SimSick.DIS[I.k].n)) if JS.t(I) else "Выздоровление"
+
+## король встаёт (sickUp): болезнь ещё не прошла — он на ногах (тяжелее), прошла — пара дней слабости
+func sick_up() -> void:
+	var I: Variant = _k().get("ill")
+	if JS.t(I):
+		I.up = 1.0
+		c.hud.toast("Король встаёт, хоть болезнь ещё не ушла.")
+		return
+	c.hud.toast("Король встаёт с постели. Пару дней — слабость: без охоты и меча.")
+	Sim.glog("Король поднялся с постели после болезни.", "info")
+
 func _man(i: int, role: String, age: int, nm: String) -> Dictionary:
 	var ch := Aud.pseudo(90 + i, role, 0, age, nm)
 	return {"sheet": c.people.look(c.D, ch)[0], "x": 0.0, "y": 0.0, "dir": "down", "f": 0.0}
@@ -210,7 +266,7 @@ func bed_() -> void:
 			vis.append({"c": s2, "sheet": c.people.look(c.D, s2)[0], "x": float(sp.get("sx", sp.x)) + 2.0, "y": float(sp.get("sy", sp.y)) + 46.0, "dir": "up"})
 		sh = "bed"
 		t0 = c.t
-		cap = String(dch.name) + " промывает рану вином и зашивает. «Лежать, государь, — дней " + str(bed) + "»."
+		cap = sick_bed_cap() if o.get("from") == "ill" else String(dch.name) + " промывает рану вином и зашивает. «Лежать, государь, — дней " + str(bed) + "»."
 		Snd.sfx("door"))
 
 func days() -> void:
@@ -231,6 +287,7 @@ func end_(dead: bool) -> void:
 	var k: Dictionary = _k()
 	var P: Dictionary = c.king
 	on = false
+	SimSick.heal_ill = false
 	sh = ""
 	vis = []
 	men = []
@@ -242,6 +299,9 @@ func end_(dead: bool) -> void:
 	c.people.snap(false)
 	c.last_ha = Game.day * 24.0 + Game.hour_abs()
 	Snd.music("auto")
+	if o.get("from") == "ill":
+		sick_up()
+		return
 	var rest := maxi(1, int(JS.rnd(tot * 0.4)))
 	k.wound = _day() + rest
 	c.hud.toast("Король встаёт на ноги. Ещё " + SimExt.dn(rest) + " беречься: ходить медленно, без меча и охоты.")
@@ -322,13 +382,15 @@ func update(dt: float) -> void:
 					return
 				cap = "Жар спал. Лекарь крестится: «Обошлось, государь»."
 			if Game.day + Game.frac >= end_t - 1.0:
-				cap = "Рана затянулась. Лекарь разрешает встать."
+				cap = "Жар отступил. Лекарь разрешает встать." if o.get("from") == "ill" else "Рана затянулась. Лекарь разрешает встать."
 		if not c.hud.is_open():
 			var n := 9 if fast else 3
 			for i in n:
 				if Game.day + Game.frac >= end_t:
 					break
 				Game.advance_days(minf(0.004, end_t - Game.day - Game.frac + 1e-6))
+				if not on:            # король умер от болезни в постели (sickDie → конец сцены)
+					return
 		if Game.day + Game.frac >= end_t - 1e-6:
 			end_(false)
 
@@ -413,7 +475,7 @@ func draw_hud(u: Variant) -> void:
 		var ext: int = int(fever.ext) if fever != null and int(fever.st) > 0 else 0
 		var d := clampi(Game.day - d0 + 1, 1, bed + ext)
 		var nT := int(JS.rnd(end_t - d0))
-		var hn := wound_name()
+		var hn := sick_title() if o.get("from") == "ill" else wound_name()
 		var hs := hn.substr(0, 1).to_upper() + hn.substr(1) + " · день " + str(d) + " из " + str(nT)
 		var hw: float = u.tw(hs)
 		var cs := Game.clock_text()
@@ -448,4 +510,5 @@ func badge(u: Variant) -> void:
 
 func state() -> Dictionary:
 	var k: Variant = SimPlayer.kingC() if not Sim.G.is_empty() else null
-	return {"on": on, "sh": sh, "bed": bed, "wound": JS.n(k.get("wound")) - _day() if k != null else 0.0, "wk": JS.n(k.get("woundK")) if k != null else 0.0, "q": q != null, "cap": cap}
+	return {"on": on, "sh": sh, "bed": bed, "wound": JS.n(k.get("wound")) - _day() if k != null else 0.0, "wk": JS.n(k.get("woundK")) if k != null else 0.0, "q": q != null, "cap": cap,
+		"from": String(o.get("from", ""))}

@@ -42,6 +42,10 @@ func place(n: Dictionary, sp: Dictionary) -> void:
 	n["path"] = null
 
 func sched_target(n: Dictionary) -> String:
+	# лежачий больной (sick2.js) — в своей постели, а нет её — у себя (кроме гостей и стоящих на посту)
+	var ch: Variant = real(n)
+	if ch != null and ch.get("ill") is Dictionary and JS.t(ch.ill.get("bed")) and not n.get("visitor", false) and not n.has("post"):
+		return String(n.bed) if n.has("bed") and not spot_of(n.bed).is_empty() else (String(n.home) if String(n.get("home", "")) != "" else "stairs")
 	if not n.has("sched"):
 		return ""
 	var S: Array = n["sched"]
@@ -59,6 +63,8 @@ func sched_target(n: Dictionary) -> String:
 	return cur[1]
 
 func sched_tick(n: Dictionary) -> void:
+	if JS.t(n.get("hold")):
+		return
 	var tg := sched_target(n)
 	if tg == "" or tg == n["cur"]:
 		return
@@ -181,7 +187,7 @@ func arrive(n: Dictionary) -> void:
 	_then(g, n)
 
 func update(n: Dictionary, dt: float) -> void:
-	if n["away"]:
+	if n["away"] or JS.t(n.get("hold")):
 		return
 	if n["bub"] != "" and n["bub_t"] < c.t:
 		n["bub"] = ""
@@ -236,6 +242,7 @@ func snap(only_fresh: bool) -> void:
 		if n.get("visitor", false):    # гости (просители) идут своим путём
 			continue
 		n["cur"] = ""
+		n.erase("hold")
 		sched_tick(n)
 		var g = n["goal"]
 		if g == null:
@@ -260,6 +267,12 @@ func snap(only_fresh: bool) -> void:
 				n["idle"] = 0.3
 			_then(g, n)
 
+## человек королевства за записью двора (n.c в HTML; не pseudoChar — не проситель, не мастер, не лекарь) или null
+static func real(n: Dictionary) -> Variant:
+	if not n.has("cid") or n.has("pseudo"):
+		return null
+	return Sim.charOf(n.cid)
+
 func say(n: Dictionary, s: String, dur: float) -> void:
 	n["bub"] = s
 	n["bub_t"] = c.t + dur
@@ -267,15 +280,16 @@ func say(n: Dictionary, s: String, dur: float) -> void:
 # ---------- кто живёт при дворе (courtPopulate, src/court.js) ----------
 # Семья, воспитанники и Малый совет — из королевства (G), слуги и стража — из выгрузки, узники короны — в темнице.
 # Прежние записи людей сохраняются по ключу (где стоят, куда идут); заселение заново — когда сменились места совета
-# (SimCourt.seats_rev) или люди (SimDyn.pop_rev: рождения, смерти, годы, браки, воспитанники).
+# (SimCourt.seats_rev) или люди (SimDyn.pop_rev: рождения, смерти, годы, браки, воспитанники), стройка (SimExt.proj_rev) или лекарь
+# (SimSick.doc_rev).
 var pop_g = null           # Sim.G при последнем заселении
-var revs := [-1, -1, -1]
+var revs := [-1, -1, -1, -1]
 
 ## заселить заново, если королевство есть и места или люди сменились
 func pop_check() -> bool:
 	if Sim.G.is_empty() or not Sim.G.has("court"):
 		return false
-	if pop_g != null and is_same(pop_g, Sim.G) and revs[0] == SimCourt.seats_rev and revs[1] == SimDyn.pop_rev and revs[2] == SimExt.proj_rev:
+	if pop_g != null and is_same(pop_g, Sim.G) and revs[0] == SimCourt.seats_rev and revs[1] == SimDyn.pop_rev and revs[2] == SimExt.proj_rev and revs[3] == SimSick.doc_rev:
 		return false
 	populate()
 	return true
@@ -339,6 +353,10 @@ func mk(out: Array, old: Dictionary, key: String, ch: Dictionary, o: Dictionary)
 		n[k] = o[k]
 	var lk := look(c.D, ch)
 	n.cid = ch.id
+	if JS.t(ch.get("pseudo")):
+		n.pseudo = 1
+	else:
+		n.erase("pseudo")
 	n.sheet = lk[0]
 	n.port = lk[1]
 	n.role = String(ch.get("role", ""))
@@ -390,10 +408,10 @@ func populate() -> void:
 		if ch == null or not JS.t(ch.alive) or JS.t(ch.get("away")):
 			continue
 		mk(out, old, "seat_" + String(s.k), ch, {"sched": S[s.k], "home": "barracks1" if s.k == "marshal" else "stairs", "seat": String(s.k)})
-	# слуги, стража, лекарь — из выгрузки
+	# слуги и стража — из выгрузки (лекарь — из королевства, ниже)
 	for p: Dictionary in c.D.people:
 		var k := String(p.key)
-		if k.begins_with("srv_") or k.begins_with("grd_"):
+		if (k.begins_with("srv_") or k.begins_with("grd_")) and k != "srv_doc":
 			out.append(old[k] if old.has(k) else make(p))
 	# узники короны — по камерам (homeExtras)
 	var P: Array = G.chars.filter(func(x): return JS.t(x.alive) and float(x.get("prison", -1)) == 0.0 and x.id != G.player.char).slice(0, 12)
@@ -402,6 +420,7 @@ func populate() -> void:
 		var n := mk(out, old, "pris" + JS.s(P[i].id), P[i], {"pris": 1, "post": sp, "sub0": "Узник короны", "talkR": 52.0})
 		n.lines = [prisoner_line(P[i])]
 	c.wrk.crew(out, old)      # мастера стройки (projNpcs)
+	c.sck.pop(out, old)       # лекарь двора (POP_EXT, sick2.js)
 	assign_beds(out)
 	# гости (просители) — как были; ушедших — с экрана
 	for n in c.npcs:
@@ -413,7 +432,7 @@ func populate() -> void:
 			n.node = null
 	c.npcs = out
 	pop_g = G
-	revs = [SimCourt.seats_rev, SimDyn.pop_rev, SimExt.proj_rev]
+	revs = [SimCourt.seats_rev, SimDyn.pop_rev, SimExt.proj_rev, SimSick.doc_rev]
 	snap(true)
 
 ## постели (assignBeds, src/castle2.js): советникам — свои, королеве — своя, детям и воспитанникам — детские (старшему — гостевая)

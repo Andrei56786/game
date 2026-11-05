@@ -89,12 +89,17 @@ const TRT := {
 }
 ## экран двора виден (SCREEN === 'court' && !G.visit): только тогда всплывают строки и придворные отзываются
 static var court_vis := false
-## король лежит в покоях (HEAL.on с o.from === 'ill', hurt.js) — пока постели нет, всегда false
+## король лежит в покоях (HEAL.on с o.from === 'ill', hurt.js): двор ставит, пока идёт сцена лечения болезни
 static var heal_ill := false
 ## без смертей от болезней (SICK.noDeath — для проверок)
 static var no_death := false
 ## придворный поправился при виде короля (sickRecover): двор скажет реплику (тратит генератор, как в HTML)
 static var recover_hook: Callable
+## придворный занемог при виде короля (sickStart): двор отправит его к постели (curT, hold, wander — заново)
+static var start_hook: Callable
+## король в постели: подпись сцены лечения (sickCap) и её конец, если король умер (sickDie → healEnd(true))
+static var cap_hook: Callable
+static var die_hook: Callable
 ## при дворе меняется лекарь (courtPopulate) — двору пересобрать людей
 static var doc_rev := 0
 
@@ -293,6 +298,8 @@ static func sickStart(c: Variant, k: String, why := "") -> Variant:
 		if not JS.t(C.get("sickHint")) and vis:
 			C.sickHint = 1.0
 			SimPlayer.toast("Лекарь двора обходит больных; днём он в библиотеке или у грядок с травами. С ним можно выбрать лечение.")
+	if vis and start_hook.is_valid():
+		start_hook.call(c)
 	return I
 
 static func sickProgress(c: Dictionary) -> void:
@@ -306,6 +313,8 @@ static func sickProgress(c: Dictionary) -> void:
 		c.ill = null
 		sickStart(c, "chest", "простуда спустилась в грудь")
 		return
+	if inBed and JS.t(I.cr) and I.cr == G.day + 1:
+		sickCap("Жар растёт. " + docName() + " не отходит от постели, капеллан молится у изголовья.")
 	if JS.t(I.cr) and G.day >= I.cr:
 		I.cr = 0.0
 		var p := float(D.m[cls]) * mortK(c, I)
@@ -314,10 +323,22 @@ static func sickProgress(c: Dictionary) -> void:
 			return
 		if I.k == "stroke":
 			strokeMark(c)
-		if not inBed and c.id != k.id and JS.t(I.bed) and float(D.m[cls]) >= 0.03:
+		if inBed:
+			sickCap("Кризис миновал. " + docName() + ": «Теперь — на поправку, государь».")
+		elif c.id != k.id and JS.t(I.bed) and float(D.m[cls]) >= 0.03:
 			Sim.glog(sCap(whoName(c)) + ": кризис миновал.", "info")
 	if G.day >= I.end:
 		sickRecover(c)
+
+## подпись у постели короля (sickCap): двор покажет её и запомнит на этот день сцены
+static func sickCap(t: String) -> void:
+	if cap_hook.is_valid():
+		cap_hook.call(t)
+
+## кто лечит короля (docName): лекарь двора, если он рядом, иначе — просто «Лекарь»
+static func docName() -> String:
+	var d: Variant = Sim.G.court.get("doc")
+	return String(d.name) if JS.t(d) and docFor(SimPlayer.kingC()) != null else "Лекарь"
 
 static func strokeMark(c: Dictionary) -> void:
 	var st: String = Sim.R.pick(["mar", "dip", "lrn"])
@@ -332,6 +353,8 @@ static func sickDie(c: Dictionary) -> void:
 	var k: Dictionary = SimPlayer.kingC()
 	var fam := isFam(c) or SimCourt.seatOf(c) != null
 	docXp(c)
+	if c.id == k.id and heal_ill and die_hook.is_valid():
+		die_hook.call()
 	c.ill = null
 	if fam and court_vis and c.id != k.id:
 		SimPlayer.toast("✝ " + sCap(whoName(c)) + " скончал" + ("ась" if JS.t(c.get("fem")) else "ся") + " от " + String(D.g) + ".")

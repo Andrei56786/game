@@ -120,6 +120,9 @@ function pageExport() {
   res.pstock = {}; Object.keys(PET_ROLE_N).forEach((role, j) => [0, 1].forEach(fem => { res.pstock[role + fem] = stock(140 + j * 8 + fem * 4, role, fem, v => 24 + v * 9); }));
   // 0.9: менестрель пира, рыцари и герольд турнира (pseudoChar 861, 840–850, 860)
   [['minstrel', 31], ['knight', 30], ['steward', 44]].forEach(([role, age], j) => { res.pstock[role + '0'] = stock(180 + j * 4, role, 0, () => age); });
+  // 0.9: лекари двора (docChar: pseudoChar(600 + номер лекаря, 'doc_' + вид), обычай — DOCK.cul): облик по id % 4 — первые четыре лекаря как в HTML
+  Object.keys(DOCK).forEach(kd => { const K = DOCK[kd], age = { barber: 36, monk: 52, salerno: 44, cordoba: 48 }[kd];
+    [...new Set(K.names.map(x => x[1]))].forEach(fem => { res.pstock['doc_' + kd + fem] = [0, 1, 2, 3].map(v => { const c = pseudoChar(600 + (v || 4), 'doc_' + kd, fem, age, ''); if (K.cul) c.cul = K.cul; return [sheet(c), port(c)]; }); }); });
   // 0.9: стол зодчего — мастера стройки (projNpcs: pseudoChar(70 + i + 2·номер работы)), что они делают (PJPH), их слова
   res.proj = PROJ.map(d => d.k); res.pjph = PJPH; res.pjlines = STAFF_LINES.builder.slice(); res.pcrew = {};
   PROJ.forEach((d, j) => (d.crew || []).forEach((w, i) => { const c = pseudoChar(70 + i + j * 2, w[0], w[1], w[2], w[3]); res.pcrew['pjw_' + d.k + i] = [sheet(c), port(c)]; }));

@@ -300,6 +300,7 @@ func court_layer() -> void:
 			prompt_tg = tg
 	C.trn.draw_hud(self)      # HUD_EXT: панель турнира и прицел
 	C.heal.badge(self)        # значок раны (healBadge)
+	C.sck.badge(self)         # значок болезни (sickBadge)
 	if Game.speed == 0 and dlg == null:
 		pause_mark(now)
 	if help_auto and now > 40.0:

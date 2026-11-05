@@ -20,6 +20,7 @@ const Works = preload("res://scripts/court_works.gd")
 const Tour = preload("res://scripts/court_tour.gd")
 const Hurt = preload("res://scripts/court_hurt.gd")
 const Acts = preload("res://scripts/court_acts.gd")
+const Sick = preload("res://scripts/court_sick.gd")
 
 var D: Dictionary
 var Z := 2
@@ -57,6 +58,7 @@ var wrk: RefCounted           # стол зодчего: стройки, лес�
 var trn: RefCounted           # турнир на ристалище: зрители, герольд, поединки, выход короля к барьеру (court_tour.gd)
 var heal: RefCounted          # раны короля: носилки, постель, дни лечения; значок раны (court_hurt.gd)
 var acts: RefCounted          # простые дела: постель и сон, колыбель, амбар, лавка, чучело, фонтан; вид двора (court_acts.gd)
+var sck: RefCounted           # больные при дворе: лекарь, обход, у постели, король занемог; значок болезни (court_sick.gd)
 var xn := {}                  # узлы рисунка среди людей (SPR_EXT): ключ → Node2D (xnode)
 var conds: Array = []         # предметы по условию: [спрайт, условие] — блюда пира, постройки стола зодчего
 var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
@@ -108,6 +110,7 @@ func _ready() -> void:
 	trn = Tour.new(self)
 	heal = Hurt.new(self)
 	acts = Acts.new(self)
+	sck = Sick.new(self)
 	var K: Dictionary = D["king"]
 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
 	var sp0: Dictionary = spots["throne_front"]
@@ -507,10 +510,17 @@ func xnode_drop(prefix: String) -> void:
 				nd.queue_free()
 			xn.erase(k)
 
-## снова на экране — от стола карт (backToCourt): вид двора заново (courtSyncVisual)
+## во двор — или снова на экране от стола карт (courtEnter, backToCourt): жизнь двора идёт сама — пауза снята;
+## вид двора заново (courtSyncVisual)
 func _enter_tree() -> void:
+	SimSick.court_vis = true       # экран двора виден (SCREEN === 'court'): придворные отзываются на болезни
+	if Game.speed == 0:
+		Game.set_speed(Game.last_speed if Game.last_speed > 0 else 1)
 	if acts != null:
 		acts.sync_visual()
+
+func _exit_tree() -> void:
+	SimSick.court_vis = false
 
 # ---------- ход времени ----------
 func blocked() -> bool:
@@ -526,7 +536,7 @@ func _tick(dt: float) -> void:
 	people.pop_check()
 	hud.tick()
 	acts.update()             # вид двора по дням; король спит — часы бегут (drawSleep)
-	var run: bool = not hud.is_open() and fade == 0.0
+	var run: bool = not hud.is_open() and fade == 0.0 and Game.speed > 0   # пауза — двор замирает (UI.paused в HTML)
 	if run:
 		var s0 := sea_key
 		Game.advance(dt * minf(meet.time_k(), minf(trn.time_k(), heal.time_k())))
@@ -552,6 +562,7 @@ func _tick(dt: float) -> void:
 		fst.update(dt)
 		trn.update(dt)
 		heal.update(dt)
+		sck.update(dt)
 		if trn.kj != null or heal.on:
 			king["moving"] = false   # на ристалище и на носилках королём правит сцена (courtBlocked)
 		else:
@@ -1065,9 +1076,14 @@ func interact(tg: Dictionary) -> void:
 	elif tg.has("a"):
 		do_act(tg["a"])
 
-## разговор (talkTo): проситель — приём у трона, советник — его доклад и поручения, семья и воспитанники — свои
-## разговоры с выбором, остальные — своими словами
+## разговор (talkTo): хворый в постели — навестить (court_sick.gd); проситель — приём у трона, советник — его доклад
+## и поручения, семья и воспитанники — свои разговоры с выбором, остальные — своими словами
 func talk_to(n: Dictionary) -> void:
+	if sck.talk(n, talk_to0):
+		return
+	talk_to0(n)
+
+func talk_to0(n: Dictionary) -> void:
 	if king["sit"] != null and n.get("seat", "") == "" and not n.has("petition"):
 		stand_up()
 	if n.get("sit") == null and n.get("path") == null:
@@ -1076,6 +1092,10 @@ func talk_to(n: Dictionary) -> void:
 	# свои разговоры (n.talk в HTML): выпущенный узник, узник в камере, тюремщик, капеллан
 	if n.has("talk_line"):
 		hud.say(n, String(n.talk_line))
+		print("TALK ", n["name"])
+		return
+	if n.key == "srv_doc" and SimPlayer.ensure_sim():
+		sck.doc_talk(n)
 		print("TALK ", n["name"])
 		return
 	if (n.has("pris") or n.key == "srv_jailer" or n.key == "srv_chaplain") and SimPlayer.ensure_sim():
@@ -1342,12 +1362,14 @@ func cmd(p: PackedStringArray) -> void:
 			if n["away"]:
 				n["away"] = false
 			stand_up()
-			for o in [Vector2(0, 14), Vector2(14, 0), Vector2(-14, 0), Vector2(0, -14)]:
-				var q: Vector2 = Vector2(n["x"], n["y"]) + o
-				if can_stand(q.x, q.y):
-					king["x"] = q.x
-					king["y"] = q.y
-					break
+			var placed := false
+			for r in [14.0, 20.0, 26.0]:          # лежачий в постели — стать у постели (сама постель — твёрдая)
+				for o in [Vector2(0, r), Vector2(r, 0), Vector2(-r, 0), Vector2(0, -r)]:
+					var q: Vector2 = Vector2(n["x"], n["y"]) + o
+					if not placed and can_stand(q.x, q.y):
+						king["x"] = q.x
+						king["y"] = q.y
+						placed = true
 			var v := Vector2(n["x"], n["y"]) - Vector2(king["x"], king["y"])
 			king["dir"] = ("right" if v.x > 0 else "left") if absf(v.x) > absf(v.y) else ("down" if v.y > 0 else "up")
 			snap_cam()
@@ -1460,6 +1482,25 @@ func cmd(p: PackedStringArray) -> void:
 		"heal":
 			if p.size() > 1 and p[1] == "skip":
 				heal.skip()
+		"ill":
+			# занемочь (для проверок): ill k fever — король, ill adv fever — советник с постелью, ill <ключ двора> fever — придворный;
+			# ill nodeath — без смертей от болезней (ill nodeath 0 — снова как обычно)
+			if p.size() > 1 and p[1] == "nodeath":
+				SimSick.no_death = p.size() < 3 or p[2] != "0"
+			elif p.size() > 1 and SimPlayer.ensure_sim():
+				var key := p[1]
+				if key == "adv":
+					for n in npcs:
+						var b := String(n.get("bed", ""))
+						if b.begins_with("bed_") and Sick.ADV_ROOMS.has(b.substr(4)) and People.real(n) != null:
+							key = String(n.key)
+							break
+				var ch: Variant = SimPlayer.kingC() if key == "k" else People.real(npc_by(key))
+				if ch != null:
+					var k2 := p[2] if p.size() > 2 else "fever"
+					ch.ill = null
+					SimSick.sickStart(ch, k2, "")
+					print("ILL ", key, " ", k2, " bed=", JS.t(ch.ill.get("bed")) if JS.t(ch.get("ill")) else false)
 		"throne":
 			# сесть на трон — приём прошений
 			cmd(PackedStringArray(["spot", "throne_front"]))
@@ -1510,7 +1551,7 @@ func state() -> Dictionary:
 		"conds": conds.filter(func(p): return (p[0] as Sprite2D).visible).size(),
 		"proj": wrk.state(), "crew": npcs.filter(func(n): return n.has("pjk")).size(),
 		"dlg": String(hud.dlg.name) if hud.dlg != null else "", "ch": (hud.dlg.choices as Array).map(func(x): return String(x.get("t", ""))) if hud.dlg != null else [],
-		"tour": trn.state(), "heal": heal.state(), "acts": acts.state(), "hide": JS.t(king.get("hide")), "xn": xn.size(), "mus": Snd.resolve(),
+		"tour": trn.state(), "heal": heal.state(), "acts": acts.state(), "sick": sck.state(), "hide": JS.t(king.get("hide")), "xn": xn.size(), "mus": Snd.resolve(),
 		"toast": hud.toast_s if hud.toast_t > t else ""}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается

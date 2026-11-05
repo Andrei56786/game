@@ -48,6 +48,9 @@ func _ready() -> void:
 	if "--acts" in OS.get_cmdline_user_args():      # только простые дела двора и сон (быстро): -- --acts
 		_acts_only.call_deferred()
 		return
+	if "--sick" in OS.get_cmdline_user_args():      # только больные при дворе и лекарь (быстро): -- --sick
+		_sick_only.call_deferred()
+		return
 	_hooks()
 	show_title()
 	if OS.has_feature("web"):
@@ -485,6 +488,8 @@ func _selftest() -> void:
 	ok = tok and ok
 	var aok: bool = await _acts_selftest()
 	ok = aok and ok
+	var iok: bool = await _sick_selftest()
+	ok = iok and ok
 	var nok: bool = await _snd_selftest()
 	ok = nok and ok
 	var vok: bool = await _save_selftest()
@@ -539,6 +544,25 @@ func _acts_only() -> void:
 	Snd.stop_all()
 	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
 	get_tree().quit(0 if ok else 1)
+
+func _sick_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _sick_selftest()
+	print("SICK OK" if ok else "SICK FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+## больные при дворе (court_sick.gd): лекарь, больной в постели, у постели, лечение, обход, завеса, разговор с лекарем,
+## король занемог, постель и дни болезни, выздоровевший встаёт
+func _sick_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.sck.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
 
 ## простые дела двора (court_acts.gd): кучки золота и мешки по казне и амбару, колыбель, постель и сон (часы бегут,
 ## весть будит), чучело и Меч короля, фонтан, лавка купца, амбар, кухня, колодец, кузня
