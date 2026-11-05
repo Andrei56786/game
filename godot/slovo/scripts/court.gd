@@ -19,6 +19,7 @@ const Feast = preload("res://scripts/court_feast.gd")
 const Works = preload("res://scripts/court_works.gd")
 const Tour = preload("res://scripts/court_tour.gd")
 const Hurt = preload("res://scripts/court_hurt.gd")
+const Acts = preload("res://scripts/court_acts.gd")
 
 var D: Dictionary
 var Z := 2
@@ -44,7 +45,6 @@ var cam_tl := Vector2.ZERO
 var sneak := false
 var path: Array = []            # путь короля по щелчку мыши
 var on_arrive: Callable
-var practice_t := -10.0
 var trees: Array = []
 var forge := Vector2.ZERO
 var people: RefCounted
@@ -56,6 +56,7 @@ var fst: RefCounted           # пир в пиршественном зале: �
 var wrk: RefCounted           # стол зодчего: стройки, леса, мастера, клетки под постройками (court_works.gd)
 var trn: RefCounted           # турнир на ристалище: зрители, герольд, поединки, выход короля к барьеру (court_tour.gd)
 var heal: RefCounted          # раны короля: носилки, постель, дни лечения; значок раны (court_hurt.gd)
+var acts: RefCounted          # простые дела: постель и сон, колыбель, амбар, лавка, чучело, фонтан; вид двора (court_acts.gd)
 var xn := {}                  # узлы рисунка среди людей (SPR_EXT): ключ → Node2D (xnode)
 var conds: Array = []         # предметы по условию: [спрайт, условие] — блюда пира, постройки стола зодчего
 var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
@@ -106,6 +107,7 @@ func _ready() -> void:
 	wrk = Works.new(self)
 	trn = Tour.new(self)
 	heal = Hurt.new(self)
+	acts = Acts.new(self)
 	var K: Dictionary = D["king"]
 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
 	var sp0: Dictionary = spots["throne_front"]
@@ -152,6 +154,7 @@ func _ready() -> void:
 	people.pop_check()        # королевство уже есть — семья, совет и узники из него (courtPopulate)
 	people.snap(true)
 	wrk.apply()               # клетки под стройками (projApply)
+	acts.sync_visual()        # золото в казне, мешки в амбаре, колыбель (courtSyncVisual)
 	last_ha = Game.day * 24.0 + Game.hour_abs()
 	go_loc(king["loc"])
 	snap_cam()
@@ -504,6 +507,11 @@ func xnode_drop(prefix: String) -> void:
 				nd.queue_free()
 			xn.erase(k)
 
+## снова на экране — от стола карт (backToCourt): вид двора заново (courtSyncVisual)
+func _enter_tree() -> void:
+	if acts != null:
+		acts.sync_visual()
+
 # ---------- ход времени ----------
 func blocked() -> bool:
 	return hud.is_open() or fade > 0.0 or heal.on
@@ -517,6 +525,7 @@ func _tick(dt: float) -> void:
 		wrk.apply()           # заложили, свернули, достроили (proj_rev) — клетки; люди — pop_check
 	people.pop_check()
 	hud.tick()
+	acts.update()             # вид двора по дням; король спит — часы бегут (drawSleep)
 	var run: bool = not hud.is_open() and fade == 0.0
 	if run:
 		var s0 := sea_key
@@ -1012,7 +1021,7 @@ func cond_ok(w: String) -> bool:
 		return Feast.ok() and SimDyn.projDone(w.substr(5))
 	if w.begins_with("cur:"):
 		return Feast.ok() and SimExt.projCur(w.substr(4)) != null
-	return true
+	return acts.cond_ok(w)
 
 ## подпись действия «E — …» (act.label в HTML: у высокого стола, алтаря, скамьи и книг — по дню и часу)
 func act_label(a: Dictionary) -> String:
@@ -1111,8 +1120,6 @@ func talk_to(n: Dictionary) -> void:
 	hud.say(n, line)
 	print("TALK ", n["name"])
 
-const KITCHEN := ["Из кухни тянет луком, дымом и свежим хлебом. Повариха гремит котлами.", "На кухне ощипывают кур. Кто-то напевает старую песню о походе на север.", "Поварята при виде короля роняют половник."]
-const WELL := ["Глубокий колодец. Ведро скрипит на вороте.", "Вода в колодце сладкая — замок выдержит долгую осаду."]
 func do_act(a: Dictionary) -> void:
 	match a["id"]:
 		"throne":
@@ -1154,34 +1161,13 @@ func do_act(a: Dictionary) -> void:
 		"barracks":
 			if SimPlayer.ensure_sim():
 				meet.barracks()
-		"bed":
-			var h := Game.hour_abs()
-			if h >= 18.5 or h < 6.0:
-				hud.toast("Король ложится спать…")
-				sleep_until(6.5 + (24.0 if h >= 6.0 else 0.0))
-			else:
-				sleep_until(h + 2.0)
-				hud.toast("Король отдыхает пару часов.")
-		"kitchen":
-			hud.say(null, KITCHEN[randi() % KITCHEN.size()])
-		"well":
-			hud.say(null, WELL[randi() % WELL.size()])
-		"smithy":
-			hud.say(null, "Кузнец бьёт молотом по раскалённой полосе. Наконечники копий, подковы, гвозди — кузня работает на войско.")
-		"fountain":
-			hud.say(null, "Вода в фонтане холодная и прозрачная. На дне блестят монеты — придворные бросают их на счастье.")
-		"dummy":
-			if t - practice_t > 1.2:
-				practice_t = t
-				king["dir"] = "up"
-				parts.append({"k": "puff", "x": float(a["x"]), "y": float(a["y"]) - 10.0, "vx": 0.0, "vy": -6.0, "t": 0.0, "life": 0.6})
-				hud.toast("Упражнение с мечом. Солдаты одобрительно гудят.")
 		"gate":
 			gate_act()
 		"stable":
 			gate_act("Конюх выводит осёдланного гнедого. «Куда поедем, государь?» В стойлах фыркают кони свиты.")
 		_:
-			hud.toast(String(a["label"]) + " — пока только в полной игре (HTML).")
+			if not acts.act(a):
+				hud.toast(String(a["label"]) + " — пока только в полной игре (HTML).")
 
 ## ворота замка (gateAct): выехать со свитой, во главе войска у столицы — или остаться. Королевство (Sim.G), если карту
 ## ещё не открывали, начинается здесь.
@@ -1214,14 +1200,16 @@ func advance_hours(h: float) -> void:
 	people.snap(false)
 	last_ha = Game.day * 24.0 + Game.hour_abs()
 
-func sleep_until(ha: float) -> void:
-	fade_to(func() -> void:
-		if ha >= 29.0:
-			Game.day += 1
-			ha -= 24.0
-		Game.frac = clampf((ha - 5.0) / 24.0, 0.0, 0.9999)
-		people.snap(false)
-		last_ha = Game.day * 24.0 + Game.hour_abs())
+## через t секунд (setTimeout): таймер — в узле двора; двор закрыли — не сработает
+func later(sec: float, f: Callable) -> void:
+	var tm := Timer.new()
+	tm.one_shot = true
+	tm.wait_time = sec
+	tm.timeout.connect(func():
+		f.call()
+		tm.queue_free())
+	add_child(tm)
+	tm.start()
 
 # щелчок мышью: идти туда; по человеку или предмету — подойти и заговорить/сделать
 func click(sp: Vector2) -> void:
@@ -1522,7 +1510,8 @@ func state() -> Dictionary:
 		"conds": conds.filter(func(p): return (p[0] as Sprite2D).visible).size(),
 		"proj": wrk.state(), "crew": npcs.filter(func(n): return n.has("pjk")).size(),
 		"dlg": String(hud.dlg.name) if hud.dlg != null else "", "ch": (hud.dlg.choices as Array).map(func(x): return String(x.get("t", ""))) if hud.dlg != null else [],
-		"tour": trn.state(), "heal": heal.state(), "hide": JS.t(king.get("hide")), "xn": xn.size(), "mus": Snd.resolve()}
+		"tour": trn.state(), "heal": heal.state(), "acts": acts.state(), "hide": JS.t(king.get("hide")), "xn": xn.size(), "mus": Snd.resolve(),
+		"toast": hud.toast_s if hud.toast_t > t else ""}
 
 # самопроверка без экрана: сутки двора, люди ходят между местами, король ходит, стены держат, двери ведут, разговор открывается
 func selftest() -> bool:

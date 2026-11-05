@@ -34,6 +34,11 @@ function pageExport() {
     finally { C.proj.cur = null; if (!had) delete C.proj; } return k; };
   const whenOf = o => { if (!o.show) return ''; if (o.show.pj) return 'proj:' + o.show.pj; const s = String(o.show).replace(/\s+/g, ''); let m;
     if (s === '()=>feastOn()') return 'feast'; if ((m = s.match(/^\(\)=>(!?)projDone\(['"](\w+)['"]\)$/))) return m[1] + 'proj:' + m[2];
+    // вид двора (courtSyncVisual): колыбель и игрушки — есть ли в семье младенец и дети; кучки золота в казне и мешки в амбаре —
+    // по казне и зерну: порог (show — «больше i») узнаём пробой
+    if (s === '()=>COURT.hasBaby') return 'baby'; if (s === '()=>COURT.hasKids') return 'kids';
+    for (const [key, w, max] of [['goldPiles', 'gold', 10], ['sacks', 'sack', 6]]) if (s.includes('COURT.' + key)) { const v0 = COURT[key]; let t = null;
+      try { for (let k = 0; k <= max && t === null; k++) { COURT[key] = k; if (o.show()) t = k - 1; } } finally { COURT[key] = v0; } if (t !== null && t >= 0) return w + ':' + t; }
     if (!o.show()) { const k = curOf(o); if (k) return 'cur:' + k; } return null; };
   // леса стройки (siteTwin, OBJP.site): двор режет готовый предмет по ходу работ и рисует леса сам — нужен готовый предмет
   // (отдельной картинкой site_N.png: её точки читает двор) и шум кромки по столбцам (floor(hsh(x >> 2, 1, 5) * 3))

@@ -45,6 +45,9 @@ func _ready() -> void:
 	if "--tour" in OS.get_cmdline_user_args():      # только турнир и раны (быстро): -- --tour
 		_tour_only.call_deferred()
 		return
+	if "--acts" in OS.get_cmdline_user_args():      # только простые дела двора и сон (быстро): -- --acts
+		_acts_only.call_deferred()
+		return
 	_hooks()
 	show_title()
 	if OS.has_feature("web"):
@@ -480,6 +483,8 @@ func _selftest() -> void:
 	ok = wok and ok
 	var tok: bool = await _tour_selftest()
 	ok = tok and ok
+	var aok: bool = await _acts_selftest()
+	ok = aok and ok
 	var nok: bool = await _snd_selftest()
 	ok = nok and ok
 	var vok: bool = await _save_selftest()
@@ -515,15 +520,36 @@ func _works_only() -> void:
 	Game.sim_run = false
 	var ok := SimPlayer.ensure_sim() and await _works_selftest()
 	print("WORKS OK" if ok else "WORKS FAIL")
-	await get_tree().create_timer(1.0).timeout   # звуки окна и монет доиграют — без «утечек» при выходе
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
 	get_tree().quit(0 if ok else 1)
 
 func _tour_only() -> void:
 	Game.sim_run = false
 	var ok := SimPlayer.ensure_sim() and await _tour_selftest()
 	print("TOUR OK" if ok else "TOUR FAIL")
-	await get_tree().create_timer(1.0).timeout   # фанфары и крики трибун доиграют — без «утечек» при выходе
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
 	get_tree().quit(0 if ok else 1)
+
+func _acts_only() -> void:
+	Game.sim_run = false
+	var ok := SimPlayer.ensure_sim() and await _acts_selftest()
+	print("ACTS OK" if ok else "ACTS FAIL")
+	Snd.stop_all()
+	await get_tree().create_timer(0.3).timeout   # звук отпускает записи — без «утечек» при выходе
+	get_tree().quit(0 if ok else 1)
+
+## простые дела двора (court_acts.gd): кучки золота и мешки по казне и амбару, колыбель, постель и сон (часы бегут,
+## весть будит), чучело и Меч короля, фонтан, лавка купца, амбар, кухня, колодец, кузня
+func _acts_selftest() -> bool:
+	var c: Node = Court.new()
+	add_child(c)
+	await get_tree().process_frame
+	var ok: bool = c.acts.selftest()
+	remove_child(c)
+	c.queue_free()
+	return ok
 
 ## турнир на ристалище и раны короля (court_tour.gd, court_hurt.gd): трибуны, зрители и герольд, поединки, выход короля
 ## к барьеру, награда, конец турнира; носилки, постель и дни лечения

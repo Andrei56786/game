@@ -254,6 +254,8 @@ static var birth_hook: Callable
 static var say_hook: Callable
 ## двор пересаживает людей (courtPopulate): смерть, рождение, новый год, воспитанник
 static var pop_rev := 0
+## родилось дитя короля: двор заново считает свой вид — колыбель, игрушки (courtSyncVisual в mk)
+static var birth_rev := 0
 ## окно эпилога правления (UI.alert('reign')): летопись ушедшего короля и наследник
 static var reign_hook: Callable
 
@@ -807,6 +809,7 @@ static func _birth(king: Dictionary, sp: Dictionary, mom: Dictionary) -> void:
 		Sim.glog("Родил" + ("ась принцесса " if fem != 0.0 else "ся принц ") + name + "! Колокола звонят по всему королевству.", "good")
 		Sim.sfx("fanfare_small")
 		pop_rev += 1
+		birth_rev += 1
 		return c
 	if birth_hook.is_valid():
 		var f := fem != 0.0

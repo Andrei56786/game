@@ -4,7 +4,8 @@
 // 0.7: король выезжает в поле, встреча с врагом, автобой и итог, бой на поле (расстановка, бой, итог) и снова карта.
 // 0.8: двор на данных королевства — окна совета (K) и писем (L), срочный сбор: советники сходятся, король во главе стола, доклады;
 // люди двора из королевства, приём прошений у трона. 0.9: жизнь замка — молитва и обедня в часовне, темница, пир в зале, стол
-// зодчего и стройка, турнир на ристалище (поединок короля), рана и лечение; меню (Esc) и окно «Звук»; сохранение из меню и по команде, страница
+// зодчего и стройка, чучело и фонтан, сон в королевской постели (часы бегут до утра), турнир на ристалище (поединок короля),
+// рана и лечение; меню (Esc) и окно «Звук»; сохранение из меню и по команде, страница
 // заново — «Продолжить правление»: то же королевство до знака (отпечаток), тот же день и казна; выход в главное меню; новая игра
 // (тяжёлая, без тумана войны) — двор у трона; автосохранение на седьмой день.
 // Любая ошибка в консоли — провал. Снимки — в build/shots. Запуск: node godot/slovo/test_web.mjs (после sh godot/slovo/build.sh)
@@ -37,6 +38,7 @@ const until = async (re, ms = 60000) => { const t = Date.now(); while (Date.now(
 const cmd = (...c) => page.evaluate(c => c.forEach(x => window.slovo(x)), c);
 const state = async () => { const n = logs.length; await cmd('state'); await wait(100); const l = logs.slice(n).find(x => x.startsWith('STATE ')); return l ? JSON.parse(l.slice(6)) : null; };
 const shot = n => page.screenshot({ path: path.join(out, n + '.png') });
+const ks = async () => { const n = logs.length; await cmd('kstate'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('KSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
 try {
   await page.goto(`http://localhost:${port}/index.html`);
   const ready = await until(/^READY /);
@@ -259,6 +261,21 @@ try {
       check(cw && cw.length === 2 && String(cw[0]).startsWith('Дать мастерам на пиво') && p2 && p3 && p3.prog > p2.prog, 'мастер стройки: ' + JSON.stringify(cw) + ', ход ' + (p2 && p2.prog) + ' → ' + (p3 && p3.prog));
       await cmd('close', 'close', 'proj stop'); await wait(1000); s = await state(); const p4 = s && s.proj;
       check(p4 && p4.cur === '' && p4.sites === 0 && p4.solid === undefined && s.crew === 0, 'стройка свёрнута: ' + JSON.stringify(p4) + ', мастеров ' + (s && s.crew));
+      // 0.9: простые дела — чучело (раз в день шаг к Мечу короля), фонтан (монета — казна −1); постель: ночью три выбора,
+      // «Лечь спать до утра» — король лежит, тьма, часы бегут (королевство догоняет); утром — «Доброе утро, государь.», встал
+      n1 = logs.length; await cmd('close', 'pos 664 352', 'act dummy'); const dm = await after(n1, /^DUMMY /, 5000); await wait(400); s = await state(); await shot('yard_dummy');
+      check(!!dm && s && ['Упражнение с мечом. Солдаты одобрительно гудят.', 'Рука крепнет: Меч короля +1'].includes(s.toast) && s.dir === 'up', 'чучело: ' + dm + ', «' + (s && s.toast) + '»');
+      const fg0 = await ks(); await cmd('pos 696 212', 'act fountain'); await wait(400); s = await state(); const fch = s && s.ch;
+      await cmd('choose 1'); await wait(400); const fg1 = await ks(); s = await state(); await shot('yard_fountain');
+      check(fch && fch.length === 2 && fch[0] === 'Бросить монету (1 зол.)' && fg0 && fg1 && fg1.gold === fg0.gold - 1 && s && /^(Монета|Кто-то из служанок)/.test(s.toast),
+        'фонтан: ' + JSON.stringify(fch) + ', казна ' + (fg0 && fg0.gold) + ' → ' + (fg1 && fg1.gold) + ', «' + (s && s.toast) + '»');
+      await cmd('spot bed_king', 'time 22', 'speed 1'); await wait(800);
+      n1 = logs.length; await cmd('act bed'); const bed1 = await after(n1, /^BED \d/, 5000); await wait(300); s = await state(); const bch = s && s.ch;
+      n1 = logs.length; await cmd('choose 1'); const sl = await after(n1, /^SLEEP /, 5000); await wait(1500); s = await state(); await shot('keep_sleep');
+      const sa = s && s.acts, ssit = s && s.sit;
+      const wk = await after(n1, /^WOKE /, 120000); await wait(600); s = await state(); await shot('keep_morning');
+      check(bed1 === 'BED 3' && bch && bch[0] === 'Лечь спать до утра' && !!sl && sa && sa.sleep && ssit && !!wk && (/^WOKE false \d+ 06:[234]0$/.test(wk) || /^WOKE true /.test(wk))
+        && s && s.acts && !s.acts.sleep && !s.sit, 'сон до утра: ' + bed1 + ' ' + JSON.stringify(bch) + ', ' + sl + ', спит ' + (sa && sa.sleep) + ' → ' + wk + ', «' + (s && s.toast) + '»');
       // 0.9: турнир (трибуны готовы, сенешаль созвал рыцарей): с 10:00 — зрители на трибунах, герольд, музыка турнира, поединок
       // на виду; король выходит к барьеру сам — прицел, удар копьём; к 15:30 досчитаны все круги — награда победителю; в 16:00 —
       // конец, гости уходят. Рана короля: носилки, постель (лекарь), дни в постели, «рана затянулась» — король ходит медленнее
@@ -311,7 +328,6 @@ try {
       if (!healed) { n1 = logs.length; await cmd('wound 2'); await healFlow(n1, 'рана (wound 2)'); }
       await cmd('speed 0', 'close'); await wait(300);
       // 0.9: меню и звук; сохранение — страница заново — «Продолжить правление»
-      const ks = async () => { const n = logs.length; await cmd('kstate'); await wait(150); const l = logs.slice(n).find(x => x.startsWith('KSTATE ')); return l ? JSON.parse(l.slice(7)) : null; };
       await cmd('speed 0', 'close'); await wait(400); await cmd('menu'); await wait(700); s = await state(); await shot('court_menu');
       check(s && s.win === 'menu', 'меню (Esc): ' + (s && s.win));
       await cmd('win sound'); await wait(700); s = await state(); await shot('court_sound');

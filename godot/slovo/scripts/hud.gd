@@ -261,6 +261,7 @@ func court_layer() -> void:
 	if C.fade > 0.0:
 		var a: float = C.fade if C.fade < 1.0 else 2.0 - C.fade
 		box(0, 0, W, H, Color8(8, 6, 10, int(255 * clampf(a, 0.0, 1.0))))
+	C.acts.draw_hud(self)     # король спит: тьма, часы, «Z z z» (drawSleep)
 	if C.heal.on:             # лечение (hurt.js): вместо строки двора — полосы кино, подпись, дни в постели
 		C.heal.draw_hud(self)
 		return
