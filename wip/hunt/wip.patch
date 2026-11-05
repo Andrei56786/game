@@ -1,0 +1,293 @@
+diff --git a/godot/slovo/scripts/court.gd b/godot/slovo/scripts/court.gd
+index 1ca0508..c8cdd5a 100644
+--- a/godot/slovo/scripts/court.gd
++++ b/godot/slovo/scripts/court.gd
+@@ -8,7 +8,6 @@ signal ride_out(a)        # король выезжает из замка: a —
+ const CT := 16
+ const DIRS := ["down", "left", "right", "up"]
+ const NPC_SPDK := [1.0, 1.0, 1.4, 2.2]
+-const ANISP := {"horse": 12.0, "dog": 44.0, "cat": 20.0, "hen": 11.0, "pigeon": 9.0}
+ const Hud = preload("res://scripts/court_ui.gd")
+ const People = preload("res://scripts/people.gd")
+ const Council = preload("res://scripts/court_council.gd")
+@@ -21,6 +20,7 @@ const Tour = preload("res://scripts/court_tour.gd")
+ const Hurt = preload("res://scripts/court_hurt.gd")
+ const Acts = preload("res://scripts/court_acts.gd")
+ const Sick = preload("res://scripts/court_sick.gd")
++const HuntM = preload("res://scripts/court_hunt.gd")
+ 
+ var D: Dictionary
+ var Z := 2
+@@ -59,6 +59,7 @@ var trn: RefCounted           # турнир на ристалище: зрите
+ var heal: RefCounted          # раны короля: носилки, постель, дни лечения; значок раны (court_hurt.gd)
+ var acts: RefCounted          # простые дела: постель и сон, колыбель, амбар, лавка, чучело, фонтан; вид двора (court_acts.gd)
+ var sck: RefCounted           # больные при дворе: лекарь, обход, у постели, король занемог; значок болезни (court_sick.gd)
++var hnt: RefCounted           # королевская охота и дичь леса (court_hunt.gd)
+ var xn := {}                  # узлы рисунка среди людей (SPR_EXT): ключ → Node2D (xnode)
+ var conds: Array = []         # предметы по условию: [спрайт, условие] — блюда пира, постройки стола зодчего
+ var last_hh := -1             # половина часа (courtHalfHour): с прошлого кадра
+@@ -111,6 +112,7 @@ func _ready() -> void:
+ 	heal = Hurt.new(self)
+ 	acts = Acts.new(self)
+ 	sck = Sick.new(self)
++	hnt = HuntM.new(self)
+ 	var K: Dictionary = D["king"]
+ 	king = {"key": "king", "name": K["name"], "sub": "", "sheet": K["sheet"], "port": K["port"], "loc": "keep", "x": 0.0, "y": 0.0, "dir": "up", "f": 0.0, "moving": false, "sit": null, "lie": false, "node": null}
+ 	var sp0: Dictionary = spots["throne_front"]
+@@ -121,8 +123,11 @@ func _ready() -> void:
+ 	for p in D["people"]:
+ 		npcs.append(people.make(p))
+ 	for a in D["animals"]:
+-		var r: Array = a["r"]
+-		ani.append({"kind": a["kind"], "loc": a["loc"], "r": r, "x": float(a["x"]), "y": float(a["y"]), "f": a["f"], "tx": 0.0, "ty": 0.0, "t": randf() * 3.0, "flip": randf() < 0.5, "moving": false, "run": false, "fly": 0.0, "h": 0.0, "vx": 0.0, "vy": 0.0, "fc": 0.0, "peck": false, "node": null})
++		var e := mk_ani(String(a["kind"]), String(a["loc"]), a["r"], float(a["x"]), float(a["y"]), "" if a.get("col") == null else String(a["col"]))
++		e["c"] = "" if a.get("c") == null else String(a["c"])
++		e["fr"] = a.get("f", [])
++		ani.append(e)
++	hnt.fauna("")             # дичь леса — тихий набор (homeAnimals → huntFauna(''))
+ 	cam.anchor_mode = Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT
+ 	add_child(cam)
+ 	cam.make_current()
+@@ -435,33 +440,144 @@ func _update_walker(n: Dictionary) -> void:
+ 	body.modulate.a = 0.75 if (n == king and sneak and moving) else 1.0
+ 	nd.visible = not JS.t(n.get("hide"))
+ 
++## зверь (запись COURT.ani): kind, loc, r — где бродит, col — масть по замыслу (doe, hart, snow, гончие), c — масть в мире (faCol),
++## f — счётчик шага, game: 0 — двор, 1 — дичь леса, 2 — гончая на охоте; st — что делает дичь (graze, alert, flee, bay, charge, fly, lie, dead)
++func mk_ani(kind: String, loc: String, r: Array, x: float, y: float, col: String) -> Dictionary:
++	return {"kind": kind, "loc": loc, "r": r, "x": x, "y": y, "tx": 0.0, "ty": 0.0, "t": randf() * 3.0, "flip": randf() < 0.5, "col": col, "c": col, "fr": [],
++		"f": 0.0, "moving": false, "run": false, "fly": 0.0, "h": 0.0, "vx": 0.0, "vy": 0.0, "peck": false, "game": 0, "st": "", "node": null}
++
++# ---------- как звери выглядят (fauna2.js: faCol, faFrame, faDraw); кони — по-старому, два кадра ----------
++const FA_DEAD := 10
++const FA_STEP := {"deer": 4.0, "boar": 3.0, "wolf": 4.0, "fox": 3.0, "bear": 4.0, "dog": 3.0, "hound": 3.5, "cat": 2.5, "hare": 3.0, "rat": 2.0, "hen": 2.5, "pigeon": 2.0, "duck": 2.5, "pheasant": 3.0, "falcon": 3.0}
++const FA_RUNV := {"deer": 60.0, "boar": 50.0, "wolf": 60.0, "fox": 50.0, "bear": 45.0, "dog": 60.0, "hound": 90.0, "cat": 35.0, "hare": 50.0, "rat": 30.0}
++const FA_BIRD := ["hen", "pigeon", "duck", "pheasant", "falcon"]
++const FA_SIT := ["dog", "hound", "cat"]
++
++## отростки на рогах оленя (faPts): чаще 8–12, королевский — 14, императорский — 16
++func fa_pts(a: Dictionary) -> int:
++	if not a.has("pts"):
++		var r := randf()
++		a["pts"] = 6 if r < 0.12 else 8 if r < 0.36 else 10 if r < 0.62 else 12 if r < 0.84 else 14 if r < 0.96 else 16
++	return int(a["pts"])
++
++func ter_at(id: String, tx: int, ty: int) -> int:
++	var Ld: Dictionary = D["locs"][id]
++	var w: int = Ld["w"]
++	var s: String = Ld.get("ter", "")
++	var i := ty * w + tx
++	if tx < 0 or ty < 0 or tx >= w or ty >= int(Ld["h"]) or i >= s.length():
++		return 0
++	return ("0x" + s[i]).hex_to_int()
++
++func fa_col(a: Dictionary) -> String:
++	var k: String = a["kind"]
++	if k == "deer":
++		if a["col"] == "hart":
++			return "hart" + str(fa_pts(a))
++		var w := "w" if Game.season() == 3 else ""
++		return w + "doe" if a["col"] == "doe" else w + "stag" + str(fa_pts(a))
++	if k == "duck":
++		var c0: String = a["c"]
++		if not (float(a["h"]) > 0.0) and a["st"] != "dead" and ter_at(a["loc"], floori(float(a["x"]) / CT), floori(float(a["y"]) / CT)) == 7:
++			return c0 + "_swim"
++		return c0
++	return a["c"]
++
++func fa_frame(a: Dictionary) -> int:
++	var k: String = a["kind"]
++	if a["st"] == "dead":
++		return FA_DEAD
++	var dt0: float = t - float(a.get("_t", t))
++	var mv := 0.0 if not a.has("_x") else Vector2(float(a["x"]) - float(a["_x"]), float(a["y"]) - float(a["_y"])).length()
++	if dt0 > 0.0 and dt0 < 0.5:
++		a["_v"] = float(a.get("_v", 0.0)) * 0.75 + (mv / dt0) * 0.25
++	elif dt0 >= 0.5:
++		a["_v"] = 0.0
++	a["_x"] = a["x"]
++	a["_y"] = a["y"]
++	a["_t"] = t
++	if not a.has("vs"):
++		a["vs"] = randf() * 20.0
++	var v: float = a.get("_v", 0.0)
++	var f: float = a["f"]
++	if k in FA_BIRD:
++		if float(a["fly"]) > 0.0 or float(a["h"]) > 0.0 or a["st"] == "fly":
++			return 6 + int(floorf(f / 3.0)) % 4
++		if a["moving"]:
++			return int(floorf(f / float(FA_STEP[k]))) % 4
++		return 5 if a["peck"] else 4
++	if a["st"] == "lie":
++		return FA_DEAD
++	if a["moving"] or v > 6.0:
++		var run: bool = v > float(FA_RUNV.get(k, 50.0)) or a["st"] == "flee" or a["st"] == "charge"
++		return (6 if run else 0) + int(floorf(f / (float(FA_STEP.get(k, 3.0)) * (1.7 if run else 1.0)))) % 4
++	if a["st"] in ["alert", "bay", "charge", "heel"]:
++		return 4
++	if k in FA_SIT:
++		return 5 if sin(t * 0.21 + float(a["vs"])) > -0.3 else 4
++	if k == "rat":
++		return 5 if sin(t * 1.3 + float(a["vs"])) > 0.6 else 4
++	return 5 if sin(t * 0.45 + float(a["vs"])) > -0.2 else 4
++
++## лист кадров зверя (fauna) или null — кони и прочие по-старому
++func fa_sheet(a: Dictionary) -> Variant:
++	return D["fauna"].get(String(a["kind"]) + "|" + fa_col(a)) if D.has("fauna") else null
++
++## рамка зверя по кадру 0 и замыслу масти (animalSprite(kind, 0, flip, col)): [ширина, высота]
++func fa_box(a: Dictionary) -> Vector2:
++	var b: Variant = D["faBox"].get(String(a["kind"]) + "|" + String(a["col"]), D["faBox"].get(String(a["kind"]) + "|")) if D.has("faBox") else null
++	if b == null:
++		var sh: Variant = fa_sheet(a)
++		return Art.size(sh[0]) if sh != null else Vector2(16, 12)
++	return Vector2(float(b[0]), float(b[1]))
++
+ func _animal(a: Dictionary) -> void:
+ 	var nd := Node2D.new()
+-	var big := Art.size(a["f"][0]).x > 20.0
+-	var sh := Art.sprite(D["shadowBig"] if big else D["shadowSmall"])
+-	sh.position = Vector2(-11.0 if big else -4.5, -2.0)
++	var sh := Art.sprite(D["shadowSmall"])
+ 	nd.add_child(sh)
+-	var body := Art.sprite(a["f"][0])
++	var blood := Node2D.new()      # мёртвый зверь на земле — кровь вместо тени (faDraw)
++	blood.draw.connect(func() -> void:
++		blood.draw_rect(Rect2(-5, -1, 10, 2), Color8(90, 16, 16, 140))
++		blood.draw_rect(Rect2(-3, 1, 6, 1), Color8(90, 16, 16, 140)))
++	nd.add_child(blood)
++	var body := Art.sprite(D["shadowSmall"])
+ 	nd.add_child(body)
+ 	world.add_child(nd)
+ 	a["node"] = nd
+ 	a["body"] = body
++	a["shs"] = sh
++	a["blood"] = blood
+ 
+ func _update_animal(a: Dictionary) -> void:
+ 	var nd: Node2D = a["node"]
+ 	var body: Sprite2D = a["body"]
+-	var moving: bool = a["moving"] or a["fly"] > 0.0 or a["h"] > 0.0
+-	var fr := 0
+-	if moving:
+-		fr = int(a["fc"] / (3.0 if a["kind"] == "pigeon" else 5.0)) % 2
+-	elif a["peck"]:
+-		fr = 1
+-	var i: int = a["f"][fr]
++	var sh: Sprite2D = a["shs"]
++	var sheet: Variant = fa_sheet(a)
++	var i := 0
++	var dead_f := false
++	if sheet != null:
++		var fi := fa_frame(a)
++		i = sheet[fi]
++		dead_f = fi == FA_DEAD and a["st"] == "dead"
++	else:
++		var moving: bool = a["moving"] or float(a["fly"]) > 0.0 or float(a["h"]) > 0.0
++		var fr := 0
++		if moving:
++			fr = int(float(a["f"]) / (3.0 if a["kind"] == "pigeon" else 5.0)) % 2
++		elif a["peck"]:
++			fr = 1
++		i = a["fr"][fr]
+ 	Art.set_frame(body, i)
+ 	var sz := Art.size(i)
++	var big := sz.x > 20.0
+ 	body.flip_h = a["flip"]
+ 	nd.position = Vector2(roundf(a["x"]), roundf(a["y"]))
+-	body.position = Vector2(-floorf(sz.x / 2.0), -sz.y - roundf(a["h"]))
++	body.position = Vector2(roundf(float(a["x"]) - sz.x / 2.0) - nd.position.x, roundf(float(a["y"]) - sz.y - float(a["h"])) - nd.position.y)
++	sh.visible = not dead_f
++	(a["blood"] as Node2D).visible = dead_f and float(a["h"]) == 0.0
++	if sh.visible:
++		Art.set_frame(sh, D["shadowBig"] if big else D["shadowSmall"])
++		sh.position = Vector2(roundf(float(a["x"]) - (11.0 if big else 4.5)) - nd.position.x, -2.0)
+ 
+ func _sync_nodes() -> void:
+ 	for n in npcs:
+@@ -481,6 +597,9 @@ func _sync_nodes() -> void:
+ 			if a["node"] == null:
+ 				_animal(a)
+ 			_update_animal(a)
++		elif a["node"] != null:       # гончие ушли в лес или вернулись, дичь расселили заново
++			(a["node"] as Node).queue_free()
++			a["node"] = null
+ 
+ ## узел рисунка среди людей (SPR_EXT): k — ключ, y — глубина (по ней — за людьми или перед ними), f(nd) — рисунок
+ ## в координатах мира; z = 1 — поверх всех (CRENDER2). Каждый кадр — заново
+@@ -855,7 +974,7 @@ func _line_free(x0: float, y0: float, x1: float, y1: float) -> bool:
+ func _ani_update(dt: float) -> void:
+ 	var P := king
+ 	for a in ani:
+-		if a["loc"] != loc_id:
++		if a["loc"] != loc_id or int(a["game"]) != 0:
+ 			continue
+ 		var pd := Vector2(float(P["x"]) - a["x"], float(P["y"]) - a["y"]).length()
+ 		var r: Array = a["r"]
+@@ -865,11 +984,11 @@ func _ani_update(dt: float) -> void:
+ 				a["x"] += a["vx"] * dt
+ 				a["y"] += a["vy"] * dt
+ 				a["h"] = minf(34.0, a["h"] + 46.0 * dt)
+-				a["fc"] += dt * 40.0
++				a["f"] += dt * 40.0
+ 				continue
+ 			if a["h"] > 0.0:
+ 				a["h"] = maxf(0.0, a["h"] - 24.0 * dt)
+-				a["fc"] += dt * 40.0
++				a["f"] += dt * 40.0
+ 				a["x"] = clampf(a["x"], r[0] * CT, (r[2] + 1) * CT)
+ 				a["y"] = clampf(a["y"], r[1] * CT, (r[3] + 1) * CT)
+ 				if a["h"] > 0.0:
+@@ -885,7 +1004,7 @@ func _ani_update(dt: float) -> void:
+ 				continue
+ 		if a["moving"]:
+ 			var dxy := Vector2(a["tx"] - a["x"], a["ty"] - a["y"])
+-			var sp: float = ANISP[a["kind"]] * (2.3 if a["run"] else 1.0) * dt
++			var sp: float = float(D["anisp"].get(a["kind"], 20.0)) * (2.3 if a["run"] else 1.0) * dt
+ 			if dxy.length() <= sp:
+ 				a["x"] = a["tx"]
+ 				a["y"] = a["ty"]
+@@ -897,7 +1016,7 @@ func _ani_update(dt: float) -> void:
+ 				a["y"] += dxy.y / dxy.length() * sp
+ 				if absf(dxy.x) > 0.5:
+ 					a["flip"] = dxy.x > 0.0
+-				a["fc"] += sp
++				a["f"] += sp
+ 			continue
+ 		a["t"] -= dt
+ 		a["peck"] = (a["kind"] == "hen" or a["kind"] == "pigeon") and sin(t * 6.0 + a["x"] * 0.7) > 0.7
+diff --git a/godot/slovo/tools/export.mjs b/godot/slovo/tools/export.mjs
+index 8af5f13..6d357f7 100644
+--- a/godot/slovo/tools/export.mjs
++++ b/godot/slovo/tools/export.mjs
+@@ -95,6 +95,7 @@ function pageExport() {
+     o.acts = L.acts.map(a => { const w = whenOf(a); if (w === null && !a.show()) return null; const q = { id: a.id, x: a.x, y: a.y, r: a.r, label: a.label || '', auto: a.auto ? 1 : 0 };
+       if (w) q.when = w; return q; }).filter(Boolean);
+     o.rooms = L.rooms;
++    if (L.clearings) o.clearings = L.clearings;   // поляны леса (huntFauna): [cx, cy, rx, ry]; имена — в rooms
+     if (L.seats) o.seats = L.seats;     // места за столами пиршественного зала (feastSeats), в порядке HTML
+     res.locs[id] = o;
+   }
+@@ -126,9 +127,19 @@ function pageExport() {
+   // 0.9: стол зодчего — мастера стройки (projNpcs: pseudoChar(70 + i + 2·номер работы)), что они делают (PJPH), их слова
+   res.proj = PROJ.map(d => d.k); res.pjph = PJPH; res.pjlines = STAFF_LINES.builder.slice(); res.pcrew = {};
+   PROJ.forEach((d, j) => (d.crew || []).forEach((w, i) => { const c = pseudoChar(70 + i + j * 2, w[0], w[1], w[2], w[3]); res.pcrew['pjw_' + d.k + i] = [sheet(c), port(c)]; }));
+-  // животные двора
+-  const AK = { horse: 1, dog: 1, cat: 1, hen: 1, pigeon: 1 };
+-  res.animals = COURT.ani.filter(a => AK[a.kind]).map(a => ({ kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), f: [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))] }));
++  // животные двора (fauna.js, fauna2.js: кадры 0–3 — шаг, 4 — стоит, 5 — пасётся, сидит, клюёт, 6–9 — бег или полёт, 10 — лежит;
++  // масть — faCol в порядке COURT.ani; кони — по-старому, два кадра). Дичь леса Godot расселяет сам (huntFauna) — здесь только её листы
++  res.fauna = {}; res.faBox = {};
++  const faAdd = (k, c) => { const key = k + '|' + (c || ''); if (!res.fauna[key]) res.fauna[key] = Array.from({ length: FA_N }, (_, f) => add(animalSprite(k, f, false, c || null))); return key; };
++  res.animals = COURT.ani.filter(a => !(a.loc === 'forest' && a.game === 1)).map(a => { const o = { kind: a.kind, loc: a.loc, r: a.r, x: Math.round(a.x), y: Math.round(a.y), col: a.col || null };
++    if (FAUNA[a.kind]) { o.c = faCol(a) || null; faAdd(a.kind, o.c); } else o.f = [add(animalSprite(a.kind, 0, false, a.col || null)), add(animalSprite(a.kind, 1, false, a.col || null))];
++    return o; });
++  for (const p of [6, 8, 10, 12, 14, 16]) { faAdd('deer', 'stag' + p); faAdd('deer', 'wstag' + p); }
++  for (const c of ['doe', 'wdoe', 'hart12', 'hart14', 'hart16']) faAdd('deer', c);
++  for (const k of ['boar', 'bear', 'wolf', 'fox', 'hare', 'pheasant', 'falcon']) faAdd(k, null);
++  faAdd('hare', 'snow'); for (const c of ['drake', 'hen', 'drake_swim', 'hen_swim']) faAdd('duck', c);
++  // рамка зверя (aBox, PICK_EXT): по кадру 0 и a.col, как в HTML
++  for (const [k, c] of [['deer'], ['deer', 'doe'], ['deer', 'hart'], ['boar'], ['bear'], ['wolf'], ['fox'], ['hare'], ['hare', 'snow'], ['pheasant'], ['duck'], ['falcon']]) { const s = animalSprite(k, 0, false, c || null); res.faBox[k + '|' + (c || '')] = [s.width, s.height]; }
+   res.anisp = ANISP;
+   res.shadow = add(shadowSpr(12));
+   res.shadowBig = add(shadowSpr(22)); res.shadowSmall = add(shadowSpr(9));
