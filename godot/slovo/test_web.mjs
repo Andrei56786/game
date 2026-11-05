@@ -365,8 +365,9 @@ try {
       const h1 = s && s.hunt;
       check(!!hu0 && s && s.loc === 'forest' && h1 && h1.on && h1.kind === 'deer' && h1.hounds >= 1 && h1.follow >= 1 && h1.arrows === 15 && s.mus === 'hunt',
         'выезд на охоту: ' + hu0 + ', ' + JSON.stringify(h1) + ', музыка «' + (s && s.mus) + '»');
-      n1 = logs.length; await cmd('hunt near doe', 'hunt draw doe'); const hd1 = hj(await after(n1, /^HUNT draw /, 5000)); await wait(800); await shot('forest_hunt_draw');
-      n1 = logs.length; await cmd('hunt loose'); const hl1 = hj(await after(n1, /^HUNT loose /, 5000)); await wait(150); await shot('forest_hunt_arrow');
+      // свой лук — на паузе: двор замер, натяг не собьют ни зверь, ни шальная стрела; выстрел — стрела в полёте
+      n1 = logs.length; await cmd('hunt near doe', 'hunt draw doe', 'speed 0'); const hd1 = hj(await after(n1, /^HUNT draw /, 5000)); await wait(800); await shot('forest_hunt_draw');
+      n1 = logs.length; await cmd('hunt loose'); const hl1 = hj(await after(n1, /^HUNT loose /, 5000)); await wait(150); await shot('forest_hunt_arrow'); await cmd('speed 1');
       check(hd1 && hd1.draw && hl1 && !hl1.draw && hl1.arrows === 14 && hl1.ar >= 1, 'свой лук: натяг ' + JSON.stringify(hd1 && { draw: hd1.draw, wpn: hd1.wpn })
         + ', выстрел — стрел ' + (hl1 && hl1.arrows) + ', в полёте ' + (hl1 && hl1.ar));
       n1 = logs.length; await cmd('hunt kill'); const hk1 = hj(await after(n1, /^HUNT kill /, 5000)); await wait(500); await shot('forest_hunt_kill');
