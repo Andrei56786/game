@@ -16,6 +16,15 @@ func appointed(k: String) -> void:
 	if not n.is_empty():
 		court.people.say(n, "Благодарю, государь! Служу короне.", 4.0)
 
+## окна только двора: «Замыслы и стройки» у стола зодчего (court_works.gd); прочие — общие (court_wins.gd)
+func _court_win(w: Dictionary) -> bool:
+	if String(w.k) == "proj":
+		if Sim.G.is_empty() or not Sim.G.has("court") or court == null:
+			return false
+		court.wrk.draw_win(self, w)
+		return true
+	return super(w)
+
 func _held() -> bool:
 	return Game.speed > 0 and is_open()
 
@@ -37,7 +46,8 @@ func _draw() -> void:
 	begin_hits()
 	n_draw += 1
 	court_layer()
-	_top_hits()
+	if not court.heal.on:
+		_top_hits()
 	if win != null and not _court_win(win):
 		win = null
 	if not modals.is_empty() and not _court_modal(modals[0]):
